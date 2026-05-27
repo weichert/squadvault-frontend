@@ -6,19 +6,37 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "test:governance": "npx tsx scripts/test-governance.ts"
   },
   "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.45.0",
+    "@upstash/ratelimit": "^1.2.0",
+    "@upstash/redis": "^1.31.0",
+    "@vercel/og": "^0.6.3",
+    "clsx": "^2.1.1",
+    "d3": "^7.9.0",
+    "lucide-react": "^0.383.0",
+    "next": "14.2.15",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.15"
+    "sharp": "^0.33.4",
+    "tailwind-merge": "^2.4.0"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@types/d3": "^7.4.3",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "autoprefixer": "^10",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.15",
     "postcss": "^8",
-    "tailwindcss": "^3.4.1"
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.16.2",
+    "typescript": "^5"
   }
 }

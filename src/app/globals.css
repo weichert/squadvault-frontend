@@ -1,0 +1,309 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Outfit:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Custom Properties ─────────────────────────────────────────────── */
+:root {
+  /* Fonts */
+  --font-ceremonial: 'Cormorant Garamond', Georgia, serif;
+  --font-ui: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+
+  /* Colors (mirrors tailwind.config.ts vault palette) */
+  --vault-bg:          #0B0B0E;
+  --vault-s1:          #141418;
+  --vault-s2:          #1D1D23;
+  --vault-s3:          #26262E;
+  --vault-border:      #2C2C34;
+  --vault-rule:        #3A3A44;
+  --vault-text:        #F0EBE1;
+  --vault-text2:       #8A8478;
+  --vault-text3:       #514D47;
+  --vault-gold:        #C9A84C;
+  --vault-gold-dim:    #8B7035;
+  --vault-gold-bright: #E8C76A;
+  --vault-gold-subtle: #1E1A0F;
+  --vault-approved:    #4A7C59;
+  --vault-approved-bg: #0A1A10;
+  --vault-withheld:    #8B3535;
+  --vault-withheld-bg: #1A0A0A;
+  --vault-demo:        #8B6E2A;
+  --vault-demo-bg:     #1A1508;
+  --vault-attested:    #3B7A7A;
+  --vault-attested-bg: #081515;
+}
+
+/* ── League Register Theming ───────────────────────────────────────────── */
+/* Applied via data-league-register attribute on <html> */
+/* Each register provides subtle override of room temperature */
+
+[data-league-register="ball_busting_friends"] {
+  --vault-gold: #D4A647;   /* Warmer gold */
+  --vault-bg:   #0E0B09;   /* Slight warmth in the room */
+}
+
+[data-league-register="competitive_serious"] {
+  --vault-gold: #B8C0C8;   /* Silver-gold — cooler, more clinical */
+  --vault-bg:   #0B0B0E;   /* Pure dark */
+}
+
+[data-league-register="nostalgic_historians"] {
+  --vault-gold: #C4953A;   /* Sepia gold */
+  --vault-bg:   #0F0C09;   /* Warm sepia room */
+}
+
+[data-league-register="casual_social"] {
+  --vault-gold: #C9A84C;   /* Standard gold */
+  --vault-bg:   #0B0B0E;   /* Standard room */
+  /* Slightly more rounded — see components using CSS var for radius */
+  --vault-radius: 6px;
+}
+
+/* ── Base Styles ───────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    background-color: var(--vault-bg);
+    color: var(--vault-text);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100vh;
+    background-color: var(--vault-bg);
+  }
+
+  /* Scrollbar — subtle, matches the room */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--vault-bg);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--vault-border);
+    border-radius: 2px;
+  }
+
+  /* Selection — gold on dark */
+  ::selection {
+    background: rgba(201, 168, 76, 0.25);
+    color: var(--vault-text);
+  }
+
+  /* Focus ring — gold outline for keyboard nav */
+  :focus-visible {
+    outline: 1px solid var(--vault-gold);
+    outline-offset: 2px;
+  }
+
+  /* Headings default to ceremonial font */
+  h1, h2, h3 {
+    font-family: var(--font-ceremonial);
+    font-weight: 300;
+    letter-spacing: 0.04em;
+    color: var(--vault-text);
+  }
+
+  /* Links — no underlines by default in the archive */
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--vault-gold);
+  }
+}
+
+/* ── Component Layer ───────────────────────────────────────────────────── */
+@layer components {
+  /* Card — standard artifact/content card */
+  .vault-card {
+    background-color: var(--vault-s1);
+    border: 1px solid var(--vault-border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  /* Document surface — for approval UX artifact reading view */
+  .vault-document {
+    background-color: var(--vault-s2);
+    border: 1px solid var(--vault-border);
+    border-radius: 6px;
+    padding: 24px;
+  }
+
+  /* The founding plaque — ceremonial, gold-bordered */
+  .vault-plaque {
+    background-color: var(--vault-bg);
+    border: 1px solid var(--vault-gold);
+    border-radius: 4px;
+    padding: 40px 32px;
+    text-align: center;
+    position: relative;
+  }
+  .vault-plaque::before {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 1px solid rgba(139, 112, 53, 0.3);
+    border-radius: 2px;
+    pointer-events: none;
+  }
+
+  /* Status badges */
+  .vault-badge-approved {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    color: var(--vault-approved);
+    background: var(--vault-approved-bg);
+    border: 1px solid rgba(74, 124, 89, 0.4);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .vault-badge-withheld {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    color: var(--vault-withheld);
+    background: var(--vault-withheld-bg);
+    border: 1px solid rgba(139, 53, 53, 0.4);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .vault-badge-demo {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    color: var(--vault-demo);
+    background: var(--vault-demo-bg);
+    border: 1px solid rgba(139, 110, 42, 0.4);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .vault-badge-draft {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    color: var(--vault-text3);
+    background: transparent;
+    border: 1px solid var(--vault-border);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .vault-badge-under-review {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    color: var(--vault-gold);
+    background: var(--vault-gold-subtle);
+    border: 1px solid rgba(139, 112, 53, 0.4);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+
+  /* Navigation active indicator — gold underline rule */
+  .vault-nav-active {
+    border-bottom: 2px solid var(--vault-gold);
+    color: var(--vault-gold);
+  }
+
+  /* Buttons */
+  .vault-btn-approve {
+    background: var(--vault-gold);
+    color: #0B0B0E;
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    letter-spacing: 0.05em;
+    padding: 10px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .vault-btn-approve:hover {
+    background: var(--vault-gold-bright);
+  }
+  .vault-btn-approve:disabled {
+    background: var(--vault-s3);
+    color: var(--vault-text3);
+    cursor: not-allowed;
+  }
+
+  .vault-btn-withhold {
+    background: transparent;
+    color: var(--vault-withheld);
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    padding: 10px 24px;
+    border: 1px solid var(--vault-withheld);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .vault-btn-withhold:hover {
+    background: var(--vault-withheld-bg);
+  }
+
+  .vault-btn-changes {
+    background: transparent;
+    color: var(--vault-gold);
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    padding: 10px 24px;
+    border: 1px solid var(--vault-gold);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .vault-btn-changes:hover {
+    background: var(--vault-gold-subtle);
+  }
+
+  .vault-btn-secondary {
+    background: transparent;
+    color: var(--vault-text3);
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    padding: 10px 24px;
+    border: 1px solid var(--vault-border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .vault-btn-secondary:hover {
+    color: var(--vault-text2);
+    border-color: var(--vault-rule);
+  }
+
+  .vault-btn-distribute {
+    background: var(--vault-approved);
+    color: var(--vault-text);
+    font-family: var(--font-ui);
+    font-weight: 500;
+    font-size: 0.8125rem;
+    padding: 10px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .vault-btn-distribute:hover {
+    background: #5a9c6e;
+  }
+  .vault-btn-distribute:disabled {
+    background: var(--vault-s3);
+    color: var(--vault-text3);
+    cursor: not-allowed;
+  }
+}
