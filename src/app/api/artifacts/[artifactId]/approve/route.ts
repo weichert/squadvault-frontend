@@ -32,7 +32,7 @@ export async function POST(
     };
 
   if (!artifact) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!["DRAFT", "CHANGES_REQUESTED"].includes(artifact.approval_state)) {
+  if (!["DRAFT", "UNDER_REVIEW", "CHANGES_REQUESTED"].includes(artifact.approval_state)) {
     return NextResponse.json({ error: "Cannot approve in current state" }, { status: 400 });
   }
 
@@ -71,7 +71,13 @@ export async function POST(
     ? `DEMO-${year}-${seq}`
     : `SV-${year}-PFL-${seq}`;
 
-  // Approve
+  // Approve: DRAFT → UNDER_REVIEW → APPROVED (trigger enforces each step)
+  if (artifact.approval_state === "DRAFT") {
+    await admin
+      .from("artifacts")
+      .update({ approval_state: "UNDER_REVIEW" })
+      .eq("id", artifactId);
+  }
   await admin
     .from("artifacts")
     .update({

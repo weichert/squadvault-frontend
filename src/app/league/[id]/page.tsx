@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { LockedRoom } from '@/components/ui/locked-room';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -14,7 +15,7 @@ type LeagueRow = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
   const { data } = await supabase
     .from('leagues').select('name, founding_year')
     .eq('canonical_id', id).maybeSingle();
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LeaguePage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
   const { data } = await supabase
     .from('leagues').select('id, name, founding_year, status, canonical_id')
     .eq('canonical_id', id).maybeSingle();

@@ -47,6 +47,12 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  if (artifact.approval_state === "DRAFT") {
+    await admin
+      .from("artifacts")
+      .update({ approval_state: "UNDER_REVIEW" })
+      .eq("id", artifactId);
+  }
   await admin
     .from("artifacts")
     .update({ approval_state: "CHANGES_REQUESTED" })

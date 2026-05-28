@@ -6,6 +6,9 @@
 // A governance test failure is BLOCKING — it does not get merged with a note.
 
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const wsTransport = ws as any;
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -16,8 +19,8 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
   process.exit(1);
 }
 
-const anonClient    = createClient(SUPABASE_URL, ANON_KEY);
-const serviceClient = createClient(SUPABASE_URL, SERVICE_KEY);
+const anonClient    = createClient(SUPABASE_URL, ANON_KEY, { realtime: { transport: wsTransport } });
+const serviceClient = createClient(SUPABASE_URL, SERVICE_KEY, { realtime: { transport: wsTransport } });
 
 const DEMO_LEAGUE_ID = '00000000-0000-0000-0000-000000000001';
 const DEMO_ARTIFACT_ID = '00000000-0000-0002-0000-000000000001';
@@ -138,17 +141,27 @@ async function g4() {
 
   let allRejected = true;
   for (const [from, to] of illegalTransitions) {
-    // Set the artifact to the FROM state
-    await serviceClient
-      .from('artifacts')
-      .update({ approval_state: from })
-      .eq('id', testArtifact.id);
-
-    // Attempt the illegal transition
+    // Set the artifact to the FROM state via REST bypass (skips trigger)
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/rpc/test_force_artifact_state`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey': SERVICE_KEY,
+          'Authorization': `Bearer ${SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          artifact_id: (testArtifact as { id: string }).id,
+          new_state: from,
+        }),
+      }
+    );
+    // Attempt the illegal transition (bypass OFF — trigger must fire)
     const { error } = await serviceClient
       .from('artifacts')
       .update({ approval_state: to })
-      .eq('id', testArtifact.id);
+      .eq('id', (testArtifact as { id: string }).id);
 
     if (error && error.message.includes('Invalid approval state transition')) {
       pass(`G4: ${from} → ${to} correctly rejected`);
@@ -159,7 +172,7 @@ async function g4() {
   }
 
   // Clean up
-  await serviceClient.from('artifacts').delete().eq('id', testArtifact.id);
+  await serviceClient.from('artifacts').delete().eq('id', (testArtifact as { id: string }).id);
 }
 
 // ── G6: Anon cannot read private league artifacts ──────────────────────
