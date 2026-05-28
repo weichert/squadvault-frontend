@@ -43,9 +43,22 @@ export function ArtifactReview({
   const [showChangesNote, setShowChangesNote] = useState(false);
   const [changesNote, setChangesNote] = useState("");
   const [stamped, setStamped] = useState(false);
+  const [firstApproval, setFirstApproval] = useState(false);
+  const [showRecordOpen, setShowRecordOpen] = useState(false);
+  const [pageFlash, setPageFlash] = useState(false);
   const [trustBarCertified, setTrustBarCertified] = useState(false);
   const [docketId, setDocketId] = useState<string | null>(null);
   const articleRef = useRef<HTMLDivElement>(null);
+
+  // Auto-unlock if content fits without scrolling
+  useEffect(() => {
+    const el = articleRef.current;
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight + 8) {
+      setScrolled(true);
+      setScrollProgress(100);
+    }
+  }, []);
 
   // Scroll tracking
   const handleScroll = useCallback(() => {
@@ -81,13 +94,21 @@ export function ArtifactReview({
     const data = await res.json();
 
     if (res.ok) {
+      const isFirst = data.first_approval === true;
+      setFirstApproval(isFirst);
       setStamped(true);
       if (navigator.vibrate) navigator.vibrate([80]);
+      const delay = isFirst ? 700 : 500;
       setTimeout(() => {
         setTrustBarCertified(true);
         if (data.docket_id) setDocketId(data.docket_id);
         if (navigator.vibrate) navigator.vibrate([30]);
-      }, 300);
+      }, delay);
+      if (isFirst) {
+        setPageFlash(true);
+        setTimeout(() => setPageFlash(false), 400);
+        setTimeout(() => setShowRecordOpen(true), delay + 200);
+      }
       setAction("approved");
     } else {
       setAction("idle");
@@ -125,7 +146,7 @@ export function ArtifactReview({
     : artifactType.replace(/_/g, " ");
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-12">
+    <div className="max-w-6xl mx-auto px-8 py-14">
       {/* Breadcrumb */}
       <div className="mb-8">
         <a
@@ -156,7 +177,7 @@ export function ArtifactReview({
                 Version {version}
               </span>
             </div>
-            <h1 className="font-ui font-medium text-vault-text" style={{ fontSize: "1.4rem" }}>
+            <h1 className="font-ceremonial font-light text-vault-text" style={{ fontSize: "2rem", letterSpacing: "0.02em" }}>
               {label}
             </h1>
           </div>
@@ -169,8 +190,8 @@ export function ArtifactReview({
             style={{
               background: "#1D1D23",
               border: "1px solid var(--vault-border)",
-              maxHeight: "60vh",
-              padding: "2rem",
+              maxHeight: "72vh",
+              padding: "2.5rem",
               opacity: stamped ? 0.4 : 1,
               transition: "opacity 0.4s ease",
             }}
@@ -181,8 +202,9 @@ export function ArtifactReview({
                 className="absolute inset-0 flex items-center justify-center pointer-events-none"
                 style={{ zIndex: 10 }}
               >
-                <div style={{ animation: "stampIn 0.5s cubic-bezier(.34,1.56,.64,1) forwards" }}>
+                <div style={{ animation: `stampIn ${firstApproval ? "0.7s" : "0.5s"} cubic-bezier(.34,1.56,.64,1) forwards` }}>
                   <StampSVG />
+                  {firstApproval && <ParticlesBurst />}
                 </div>
               </div>
             )}
@@ -331,15 +353,23 @@ export function ArtifactReview({
       </div>
 
       {/* Post-approval state */}
-      {action === "approved" && (
+      {action === "approved" && showRecordOpen && (
         <div className="fixed bottom-8 left-0 right-0 flex justify-center pointer-events-none" style={{ zIndex: 50 }}>
           <p
             className="font-ceremonial font-light italic text-vault-text2"
-            style={{ fontSize: "1.1rem", letterSpacing: "0.04em" }}
+            style={{ fontSize: "1.3rem", letterSpacing: "0.04em", animation: "fadeIn 0.6s ease forwards" }}
           >
             The record is open.
           </p>
         </div>
+      )}
+
+      {/* Page flash for first approval */}
+      {pageFlash && (
+        <div
+          className="fixed inset-0 pointer-events-none"
+          style={{ background: "#1A1A1F", animation: "pageFlash 0.4s ease forwards", zIndex: 200 }}
+        />
       )}
 
       {/* Withheld state */}
@@ -404,12 +434,44 @@ export function ArtifactReview({
           from { transform: scale(1.5) rotate(-12deg); opacity: 0; }
           to   { transform: scale(1) rotate(0deg); opacity: 1; }
         }
-        .prose-artifact { color: var(--vault-text); font-family: var(--font-outfit); font-size: 16px; line-height: 1.7; }
+        .prose-artifact { color: var(--vault-text); font-family: var(--font-outfit); font-size: 17px; line-height: 1.85; }
         .prose-artifact h1 { color: var(--vault-text); font-family: var(--font-cormorant); font-size: 2rem; font-weight: 300; margin-bottom: 1.2rem; letter-spacing: 0.02em; }
         .prose-artifact h2 { color: var(--vault-text); font-family: var(--font-cormorant); font-size: 1.4rem; font-weight: 400; margin: 1.5rem 0 0.75rem; }
         .prose-artifact strong { color: var(--vault-text); font-weight: 600; }
         .prose-artifact p { margin-bottom: 1.1rem; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pageFlash { 0% { opacity: 0.6; } 100% { opacity: 0; } }
+        @keyframes particle { 0% { transform: translate(0,0) scale(1); opacity: 1; } 100% { transform: translate(var(--dx),var(--dy)) scale(0); opacity: 0; } }
       `}</style>
+    </div>
+  );
+}
+
+function ParticlesBurst() {
+  const particles = Array.from({ length: 14 }, (_, i) => {
+    const angle = (i / 14) * 360;
+    const dist = 60 + Math.random() * 40;
+    const dx = Math.round(Math.cos((angle * Math.PI) / 180) * dist);
+    const dy = Math.round(Math.sin((angle * Math.PI) / 180) * dist);
+    return { dx, dy, delay: Math.random() * 0.15 };
+  });
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      {particles.map((p, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#C9A84C",
+            ["--dx" as string]: `${p.dx}px`,
+            ["--dy" as string]: `${p.dy}px`,
+            animation: `particle 0.8s ease-out ${p.delay}s forwards`,
+          }}
+        />
+      ))}
     </div>
   );
 }
