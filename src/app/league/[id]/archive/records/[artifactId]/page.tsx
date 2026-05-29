@@ -9,6 +9,12 @@ import { TrustBar } from "@/components/ui/trust-bar";
 import { DocketId } from "@/components/ui/docket-id";
 import type { Metadata } from "next";
 
+// Server Component reading live Supabase state. Skip Next.js route segment
+// caching so synced artifacts surface without a hard reload. See
+// _observations/OBSERVATIONS_2026_05_28_LEAGUE_PAGES_FORCE_DYNAMIC.md in the
+// engine repo for the full rationale.
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: Promise<{ id: string; artifactId: string }>;
 }
