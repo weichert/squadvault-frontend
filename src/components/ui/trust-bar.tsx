@@ -31,6 +31,9 @@ function resolveVariant(
   // Commissioner-attested provenance
   if (provenance === 'COMMISSIONER_ATTESTED') return 'ATTESTED';
   if (provenance === 'DEMO') return 'DEMO';
+  // CANONICAL provenance: trophy_room_entries have no approval_state column;
+  // the provenance IS the state. A CANONICAL entry renders CERTIFIED.
+  if (provenance === 'CANONICAL') return 'CERTIFIED';
   // Approval state mapping
   if (approvalState === 'APPROVED' || approvalState === 'DISTRIBUTED') return 'CERTIFIED';
   // All other states (DRAFT, UNDER_REVIEW, CHANGES_REQUESTED, WITHHELD) show DRAFT variant
