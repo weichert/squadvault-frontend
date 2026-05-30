@@ -7,6 +7,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { TrustBar } from "@/components/ui/trust-bar";
 import { DocketId } from "@/components/ui/docket-id";
+import { extractShareableSegment } from "@/lib/recap-audience";
 import type { Metadata } from "next";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
@@ -87,6 +88,14 @@ export default async function RecapDetailPage({ params }: Props) {
     .maybeSingle() as { data: { content_markdown: string } | null };
   if (!versionData) notFound();
 
+  // Audience-split per engine _observations/OBSERVATIONS_2026_05_29_
+  // AUDIENCE_SPLIT_DECISION_OPTION_B.md. Public surface shows only
+  // the shareable segment; silence-over-fabrication when no delimiter.
+  const shareable = extractShareableSegment(
+    versionData.content_markdown,
+    artifact.artifact_type,
+  );
+
   return (
     <main style={{ background: "var(--vault-bg)", minHeight: "100vh" }}>
       <div className="max-w-3xl mx-auto px-6 py-12">
@@ -141,9 +150,18 @@ export default async function RecapDetailPage({ params }: Props) {
             padding: "2.25rem",
           }}
         >
-          <div className="prose-artifact">
-            <ReactMarkdown>{versionData.content_markdown}</ReactMarkdown>
-          </div>
+          {shareable === null ? (
+            <p
+              className="font-ceremonial italic text-vault-text2 text-center"
+              style={{ fontSize: "1.15rem", lineHeight: 1.7, margin: "1.5rem 0" }}
+            >
+              The record is silent for this week.
+            </p>
+          ) : (
+            <div className="prose-artifact">
+              <ReactMarkdown>{shareable}</ReactMarkdown>
+            </div>
+          )}
         </article>
 
         {/* Footer trust bar — bracketing pattern reinforces the record */}
