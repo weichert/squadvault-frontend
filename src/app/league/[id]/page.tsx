@@ -46,7 +46,7 @@ export default async function LeaguePage({ params }: Props) {
     return <LockedRoom leagueName={league.name} />;
   }
   return (
-    <main style={{ background: 'var(--vault-bg)', minHeight: '100vh' }}>
+    <main style={{ background: 'var(--vault-bg)', minHeight: '100vh', marginTop: 'calc(-1 * var(--nav-height, 0px))', position: 'relative', zIndex: 1 }}>
       <div className="max-w-4xl mx-auto px-6 py-16">
         <div className="vault-plaque mb-16">
           <p className="font-mono text-[9px] tracking-[0.2em] text-vault-text3 mb-4">ESTABLISHED</p>

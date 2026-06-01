@@ -12,7 +12,6 @@
 // for the five-decision scope record.
 import { createAdminClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import type { Metadata } from "next";
 import { TrustBar } from "@/components/ui/trust-bar";
 import type { TrophyProvenance } from "@/lib/supabase/types";
@@ -119,14 +118,8 @@ export default async function TrophyRoomPage({ params }: Props) {
 
         {/* Header - back to community page; Cormorant display title; gold rule */}
         <div className="mb-12">
-          <Link
-            href={`/league/${id}`}
-            className="font-mono text-[9px] tracking-[0.12em] text-vault-text3 hover:text-vault-text2 transition-colors"
-          >
-            {"\u2190"} {league.name}
-          </Link>
           <h1
-            className="font-ceremonial font-light text-vault-text mt-3"
+            className="font-ceremonial font-light text-vault-text"
             style={{ fontSize: "2.2rem", letterSpacing: "0.03em" }}
           >
             Trophy Room

@@ -88,14 +88,8 @@ export default async function OfficePage({ params }: Props) {
 
         {/* Header */}
         <div className="mb-10">
-          <Link
-            href={`/league/${id}`}
-            className="font-mono text-[9px] tracking-[0.12em] text-vault-text3 hover:text-vault-text2 transition-colors"
-          >
-            ← {league.name}
-          </Link>
           <h1
-            className="font-ui font-medium text-vault-text mt-3"
+            className="font-ui font-medium text-vault-text"
             style={{ fontSize: "1.5rem" }}
           >
             Commissioner Office
