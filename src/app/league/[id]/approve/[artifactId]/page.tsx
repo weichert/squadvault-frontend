@@ -1,8 +1,7 @@
 // src/app/league/[id]/approve/[artifactId]/page.tsx
 // Server component: fetch artifact + version, gate to commissioner, render review UI
 import { createAdminClient } from "@/lib/supabase/server";
-import { createServerClient } from "@/lib/supabase/server";
-import { getLeague } from "@/lib/league";
+import { getLeague, getViewer } from "@/lib/league";
 import { notFound, redirect } from "next/navigation";
 import { ArtifactReview } from "@/components/ui/artifact-review";
 import { CommissionerOnly } from "@/components/ui/commissioner-only";
@@ -26,12 +25,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ApprovePage({ params }: Props) {
   const { id, artifactId } = await params;
 
-  // Gate: commissioner session required
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect(`/auth/login?redirect=/league/${id}/approve/${artifactId}`);
+  // Gate: viewer identity. getViewer is React.cache()'d so this lookup
+  // is shared across requests within this render.
+  const viewer = await getViewer(id);
+  if (!viewer.userId) {
+    redirect(`/auth/login?redirect=/league/${id}/approve/${artifactId}`);
+  }
 
-  // Verify commissioner
   const league = await getLeague(id);
   if (!league) notFound();
   const admin = createAdminClient();
@@ -41,7 +41,7 @@ export default async function ApprovePage({ params }: Props) {
   // redirected to login above. The Approve route is a deep link to a
   // specific artifact, so the Forbidden card renders bare without an
   // Office-style room header above it.
-  if (league.commissioner_user_id !== user.id) {
+  if (!viewer.isCommissioner) {
     return (
       <main style={{ background: "var(--vault-bg)", minHeight: "100vh" }}>
         <div className="max-w-4xl mx-auto px-6 py-12">

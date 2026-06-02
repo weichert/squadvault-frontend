@@ -2,16 +2,24 @@
 // Top-level navigation across league surfaces per Design Brief section 5.4.
 // Client Component - active state computed from usePathname().
 //
-// Tab order is fixed: Community, Archive, Trophy Room, Members.
+// Tab order is fixed:
+//   Public:        Community, Archive, Trophy Room, Members
+//   [dim rule]
+//   Commissioner:  Office
+//
 // Active state is a gold underline rule on the tab label (NOT a background
 // highlight, per section 5.4 anti-pattern).
 //
+// Per Design Brief section VIII visibility principle, the Office tab is
+// shown to all viewers regardless of role. Non-commissioners reach a
+// rendered Forbidden state when they click it (see commissioner-only.tsx).
+// Anonymous viewers reach the login flow first, then Forbidden after auth.
+//
 // v1 SCOPE:
-// - Cream league name (gold-on-first-load ceremony deferred to Part VI work)
-// - Desktop-style responsive nav (mobile bottom tab bar deferred until the
-//   section 5.4 vs section VIII slot ambiguity is resolved deliberately)
-// - Public surfaces only (commissioner-rule separator with Office/Approval
-//   tabs deferred until role-aware 403 rendering exists)
+// - Cream league name (gold-on-first-load ceremony deferred to Part VI)
+// - Desktop-style responsive nav (mobile bottom tab bar implementation
+//   pending - composition resolved per the engine repo memo
+//   _observations/OBSERVATIONS_2026_05_31_MOBILE_NAV_SLOT_COMPOSITION.md)
 "use client";
 
 import Link from "next/link";
@@ -28,7 +36,7 @@ type Tab = {
   isActive: (pathname: string, id: string) => boolean;
 };
 
-const TABS: ReadonlyArray<Tab> = [
+const PUBLIC_TABS: ReadonlyArray<Tab> = [
   {
     label: "Community",
     href: (id) => `/league/${id}`,
@@ -50,6 +58,42 @@ const TABS: ReadonlyArray<Tab> = [
     isActive: (pathname, id) => pathname.startsWith(`/league/${id}/members`),
   },
 ];
+
+const COMMISSIONER_TABS: ReadonlyArray<Tab> = [
+  {
+    label: "Office",
+    href: (id) => `/league/${id}/office`,
+    isActive: (pathname, id) => pathname.startsWith(`/league/${id}/office`),
+  },
+];
+
+const TAB_STYLE = {
+  fontSize: "10px",
+  letterSpacing: "0.15em",
+  textTransform: "uppercase" as const,
+  textDecoration: "none" as const,
+  paddingBottom: "2px",
+};
+
+function renderTab(tab: Tab, pathname: string, leagueId: string) {
+  const active = tab.isActive(pathname, leagueId);
+  return (
+    <Link
+      key={tab.label}
+      href={tab.href(leagueId)}
+      className="font-mono hover:text-vault-text transition-colors"
+      style={{
+        ...TAB_STYLE,
+        borderBottom: active
+          ? "1px solid var(--vault-gold)"
+          : "1px solid transparent",
+        color: active ? "var(--vault-gold)" : "var(--vault-text2)",
+      }}
+    >
+      {tab.label}
+    </Link>
+  );
+}
 
 export function TopNav({ leagueId, leagueName }: Props) {
   const pathname = usePathname() ?? "";
@@ -85,31 +129,22 @@ export function TopNav({ leagueId, leagueName }: Props) {
           {leagueName}
         </Link>
 
-        {/* Surface tabs - gold underline active state per section 5.4 */}
-        <div className="flex gap-6">
-          {TABS.map((tab) => {
-            const active = tab.isActive(pathname, leagueId);
-            return (
-              <Link
-                key={tab.label}
-                href={tab.href(leagueId)}
-                className="font-mono hover:text-vault-text transition-colors"
-                style={{
-                  fontSize: "10px",
-                  letterSpacing: "0.15em",
-                  textTransform: "uppercase",
-                  textDecoration: "none",
-                  paddingBottom: "2px",
-                  borderBottom: active
-                    ? "1px solid var(--vault-gold)"
-                    : "1px solid transparent",
-                  color: active ? "var(--vault-gold)" : "var(--vault-text2)",
-                }}
-              >
-                {tab.label}
-              </Link>
-            );
-          })}
+        {/* Surface tabs - public group, dim rule separator, commissioner group.
+            Office tab visible to all viewers per section VIII visibility
+            principle; the 403 rendering happens at the Office route itself. */}
+        <div className="flex gap-6 items-center">
+          {PUBLIC_TABS.map((tab) => renderTab(tab, pathname, leagueId))}
+          <span
+            aria-hidden="true"
+            style={{
+              display: "inline-block",
+              width: 1,
+              height: 12,
+              background: "var(--vault-border)",
+              opacity: 0.6,
+            }}
+          />
+          {COMMISSIONER_TABS.map((tab) => renderTab(tab, pathname, leagueId))}
         </div>
       </div>
     </nav>

@@ -23,7 +23,7 @@
 // Payload is tiny; one shape across consumers is simpler than several
 // narrower shapes.
 import { cache } from "react";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createServerClient } from "@/lib/supabase/server";
 
 export type League = {
   id: string;
@@ -43,5 +43,40 @@ export const getLeague = cache(
       .eq("canonical_id", canonicalId)
       .maybeSingle();
     return (data as League | null) ?? null;
+  },
+);
+
+// Viewer identity within a league context. Returns:
+//   userId         - the authenticated user id, or null for anonymous viewers
+//   isCommissioner - true iff userId matches league.commissioner_user_id
+//
+// Both fields together let callers distinguish three viewer states:
+//   { userId: null,  isCommissioner: false } - anonymous
+//   { userId: "...", isCommissioner: false } - authenticated, not commissioner
+//   { userId: "...", isCommissioner: true  } - the commissioner
+//
+// Wrapped in React.cache() so multiple consumers within a single render
+// request share one auth lookup and one league lookup. Commissioner-gated
+// pages and the layout both call this; the second caller pays nothing.
+//
+// Returns the "anonymous, not commissioner" shape when the league is
+// missing - callers branch on getLeague's null return for missing-league
+// rendering decisions; getViewer just answers the viewer-identity question.
+export type Viewer = {
+  userId: string | null;
+  isCommissioner: boolean;
+};
+
+export const getViewer = cache(
+  async (canonicalId: string): Promise<Viewer> => {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id ?? null;
+    if (!userId) return { userId: null, isCommissioner: false };
+    const league = await getLeague(canonicalId);
+    return {
+      userId,
+      isCommissioner: !!league && league.commissioner_user_id === userId,
+    };
   },
 );

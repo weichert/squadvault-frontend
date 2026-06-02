@@ -1,8 +1,7 @@
 // src/app/league/[id]/office/page.tsx
 // Commissioner Office — approval queue
-import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getLeague } from "@/lib/league";
+import { getLeague, getViewer } from "@/lib/league";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -54,14 +53,14 @@ function formatRelativeTime(iso: string): string {
 export default async function OfficePage({ params }: Props) {
   const { id } = await params;
 
-  // Verify commissioner session
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  // Resolve viewer identity. getViewer is React.cache()'d alongside
+  // getLeague, so the auth + commissioner check is a single shared cost
+  // across this page and the layout.
+  const viewer = await getViewer(id);
+  if (!viewer.userId) {
     redirect(`/auth/login?redirect=/league/${id}/office`);
   }
 
-  // Verify this user is the commissioner of this league
   const league = await getLeague(id);
   if (!league) notFound();
   const admin = createAdminClient();
@@ -69,7 +68,7 @@ export default async function OfficePage({ params }: Props) {
   // Role check: render Forbidden state for non-commissioners per
   // Design Brief section VIII visibility principle (room visible to all,
   // entry restricted by role). Anon users were redirected to login above.
-  if (league.commissioner_user_id !== user.id) {
+  if (!viewer.isCommissioner) {
     return (
       <main style={{ background: "var(--vault-bg)", minHeight: "100vh" }}>
         <div className="max-w-4xl mx-auto px-6 py-12">
