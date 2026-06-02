@@ -2,6 +2,7 @@
 // Weekly recap archive — every APPROVED WEEKLY_RECAP, grouped by season descending.
 // Public; uses admin client server-side.
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -21,7 +22,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Weekly Recaps · ${id}` };
 }
 
-type LeagueRow = { id: string; name: string };
 
 type RecapRow = {
   id: string;
@@ -45,13 +45,8 @@ export default async function RecapArchivePage({ params }: Props) {
   const { id } = await params;
   const admin = createAdminClient();
 
-  const { data: leagueData } = await admin
-    .from("leagues")
-    .select("id, name")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: LeagueRow | null };
-  if (!leagueData) notFound();
-  const league = leagueData;
+  const league = await getLeague(id);
+  if (!league) notFound();
 
   const { data: recapsData } = await admin
     .from("artifacts")

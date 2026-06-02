@@ -4,6 +4,7 @@
 // Until the A1/A2/A3 filesystem-source sync milestone lands, each card renders
 // its empty state. The cards themselves are permanent fixtures of the archive.
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -23,7 +24,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Permanent Records · ${id}` };
 }
 
-type LeagueRow = { id: string; name: string };
 
 type RecordRow = {
   id: string;
@@ -77,13 +77,8 @@ export default async function RecordsArchivePage({ params }: Props) {
   const { id } = await params;
   const admin = createAdminClient();
 
-  const { data: leagueData } = await admin
-    .from("leagues")
-    .select("id, name")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: LeagueRow | null };
-  if (!leagueData) notFound();
-  const league = leagueData;
+  const league = await getLeague(id);
+  if (!league) notFound();
 
   // Permanent records map to artifact_type=SEASON_RETROSPECTIVE in Supabase.
   // We fetch every APPROVED retrospective for this league and pick the most

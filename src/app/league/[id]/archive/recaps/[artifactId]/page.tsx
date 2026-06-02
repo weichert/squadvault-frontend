@@ -2,6 +2,7 @@
 // Single weekly recap — commissioner-read-only view of an APPROVED artifact.
 // Public; uses admin client server-side. No approval controls.
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
@@ -32,7 +33,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Week ${data.week_index}, ${data.season}` };
 }
 
-type LeagueRow = { id: string; name: string };
 
 type ArtifactRow = {
   id: string;
@@ -50,15 +50,9 @@ type ArtifactRow = {
 
 export default async function RecapDetailPage({ params }: Props) {
   const { id, artifactId } = await params;
+  const league = await getLeague(id);
+  if (!league) notFound();
   const admin = createAdminClient();
-
-  const { data: leagueData } = await admin
-    .from("leagues")
-    .select("id, name")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: LeagueRow | null };
-  if (!leagueData) notFound();
-  const league = leagueData;
 
   const { data: artifactData } = await admin
     .from("artifacts")

@@ -8,7 +8,7 @@
 //
 // When the actual Members surface is built (charter member row, record
 // board, trophy wall per section 7.5), this stub is replaced wholesale.
-import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -18,7 +18,6 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-type LeagueRow = { id: string; name: string };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
@@ -27,12 +26,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function MembersPage({ params }: Props) {
   const { id } = await params;
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("leagues")
-    .select("id, name")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: LeagueRow | null };
+  const data = await getLeague(id);
 
   if (!data) notFound();
 

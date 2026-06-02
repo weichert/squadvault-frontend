@@ -2,6 +2,7 @@
 // Server component: fetch artifact + version, gate to commissioner, render review UI
 import { createAdminClient } from "@/lib/supabase/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound, redirect } from "next/navigation";
 import { ArtifactReview } from "@/components/ui/artifact-review";
 import { CommissionerOnly } from "@/components/ui/commissioner-only";
@@ -30,18 +31,10 @@ export default async function ApprovePage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/auth/login?redirect=/league/${id}/approve/${artifactId}`);
 
-  const admin = createAdminClient();
-
   // Verify commissioner
-  const { data: league } = await admin
-    .from("leagues")
-    .select("id, name, commissioner_user_id")
-    .eq("canonical_id", id)
-    .maybeSingle() as {
-      data: { id: string; name: string; commissioner_user_id: string | null } | null
-    };
-
+  const league = await getLeague(id);
   if (!league) notFound();
+  const admin = createAdminClient();
 
   // Role check: render Forbidden state for non-commissioners per
   // Design Brief section VIII visibility principle. Anon users were

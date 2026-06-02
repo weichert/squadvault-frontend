@@ -26,17 +26,17 @@
 // - NULL-season entries (if any) sort first in DESC order per Postgres
 //   default. Matches the Trophy Room surface's behavior; could revisit
 //   with `nullsFirst: false` if it becomes a problem on real data.
-// - The component takes leagueUuid as a prop so it skips the canonical-id
-//   to internal-id resolution. Layout-level league context candidate
-//   would obviate the prop.
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { TrustBar } from "@/components/ui/trust-bar";
 import type { TrophyProvenance } from "@/lib/supabase/types";
 
 interface Props {
-  leagueId: string;    // canonical_id - used to build link to /league/[id]/trophy-room
-  leagueUuid: string;  // internal leagues.id - used for trophy_room_entries.league_id join
+  leagueId: string;  // canonical_id - used to build link to /league/[id]/trophy-room
+                     // Internal leagues.id is resolved via the request-scoped
+                     // getLeague helper; React.cache() means this is free even
+                     // though the community page also fetched the row.
 }
 
 type ChampionshipRow = {
@@ -68,14 +68,19 @@ const PROVENANCE_STYLE: Record<
   DEMO:                  { color: "#8B6E2A", borderColor: "rgba(139, 110, 42, 0.5)" },
 };
 
-export async function TrophyPreview({ leagueId, leagueUuid }: Props) {
+export async function TrophyPreview({ leagueId }: Props) {
+  // Resolve internal leagues.id from canonical_id. The community page
+  // (parent) already called this; React.cache() makes the second call free.
+  const league = await getLeague(leagueId);
+  if (!league) return null;
+
   const admin = createAdminClient();
 
   // Three most recent championships, season DESC.
   const { data: entriesData } = await admin
     .from("trophy_room_entries")
     .select("id, season, title, description, provenance, franchise_id")
-    .eq("league_id", leagueUuid)
+    .eq("league_id", league.id)
     .eq("entry_type", "CHAMPIONSHIP")
     .order("season", { ascending: false })
     .limit(3) as { data: ChampionshipRow[] | null };

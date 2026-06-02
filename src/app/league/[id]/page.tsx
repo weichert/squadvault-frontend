@@ -1,5 +1,4 @@
-import { createServerClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { getLeague } from '@/lib/league';
 import { LockedRoom } from '@/components/ui/locked-room';
 import { TrophyPreview } from '@/components/ui/trophy-preview';
 import { notFound } from 'next/navigation';
@@ -15,18 +14,9 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-type LeagueRow = {
-  id: string; name: string; founding_year: number;
-  status: string; canonical_id: string;
-};
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('leagues').select('name, founding_year')
-    .eq('canonical_id', id).maybeSingle();
-  const league = data as { name: string; founding_year: number } | null;
+  const league = await getLeague(id);
   if (!league) return { title: 'Clubhouse' };
   return {
     title: league.name,
@@ -37,11 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LeaguePage({ params }: Props) {
   const { id } = await params;
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('leagues').select('id, name, founding_year, status, canonical_id')
-    .eq('canonical_id', id).maybeSingle();
-  const league = data as LeagueRow | null;
+  const league = await getLeague(id);
   if (!league) notFound();
   if (league.status === 'founding') {
     return <LockedRoom leagueName={league.name} />;
@@ -58,7 +44,7 @@ export default async function LeaguePage({ params }: Props) {
           <div className="mx-auto mb-6" style={{ width: 40, height: 1, background: 'rgba(139, 112, 53, 0.5)' }} />
           <p className="font-mono text-[9px] tracking-[0.12em] text-vault-text3 leading-loose">COMMISSIONER: FOUNDING MEMBER</p>
         </div>
-        <TrophyPreview leagueId={id} leagueUuid={league.id} />
+        <TrophyPreview leagueId={id} />
         <div className="text-center">
           <p className="font-ui text-sm text-vault-text3">The archive is being populated. Check back soon.</p>
         </div>

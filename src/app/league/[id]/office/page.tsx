@@ -2,6 +2,7 @@
 // Commissioner Office — approval queue
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -61,14 +62,9 @@ export default async function OfficePage({ params }: Props) {
   }
 
   // Verify this user is the commissioner of this league
-  const admin = createAdminClient();
-  const { data: league } = await admin
-    .from("leagues")
-    .select("id, name, commissioner_user_id")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: { id: string; name: string; commissioner_user_id: string | null } | null };
-
+  const league = await getLeague(id);
   if (!league) notFound();
+  const admin = createAdminClient();
 
   // Role check: render Forbidden state for non-commissioners per
   // Design Brief section VIII visibility principle (room visible to all,

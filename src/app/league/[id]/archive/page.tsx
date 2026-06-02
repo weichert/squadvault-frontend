@@ -2,6 +2,7 @@
 // Archive index — lists every surface with its current count.
 // Public (no auth required); uses admin client server-side per established pattern.
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -21,7 +22,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Archive · ${id}` };
 }
 
-type LeagueRow = { id: string; name: string };
 
 // One row per surface card. Surfaces with `href: null` show count but no link
 // (e.g. F1 — Section 7 of Milestone 3 brief defers the chronicle surface).
@@ -89,16 +89,9 @@ async function fetchCountForClass(
 
 export default async function ArchiveIndexPage({ params }: Props) {
   const { id } = await params;
+  const league = await getLeague(id);
+  if (!league) notFound();
   const admin = createAdminClient();
-
-  const { data: leagueData } = await admin
-    .from("leagues")
-    .select("id, name")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: LeagueRow | null };
-
-  if (!leagueData) notFound();
-  const league = leagueData;
 
   const counts = await Promise.all(
     SURFACES.map((s) => fetchCountForClass(admin, league.id, s.artifactClass)),

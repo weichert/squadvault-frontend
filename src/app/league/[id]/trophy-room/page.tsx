@@ -11,6 +11,7 @@
 // See engine _observations/OBSERVATIONS_2026_05_30_TROPHY_ROOM_UI_SHIPMENT.md
 // for the five-decision scope record.
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { TrustBar } from "@/components/ui/trust-bar";
@@ -31,7 +32,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Trophy Room - ${id}` };
 }
 
-type LeagueRow = { id: string; name: string };
 
 type ChampionshipRow = {
   id: string;
@@ -68,16 +68,9 @@ const PROVENANCE_STYLE: Record<
 
 export default async function TrophyRoomPage({ params }: Props) {
   const { id } = await params;
+  const league = await getLeague(id);
+  if (!league) notFound();
   const admin = createAdminClient();
-
-  const { data: leagueData } = await admin
-    .from("leagues")
-    .select("id, name")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: LeagueRow | null };
-
-  if (!leagueData) notFound();
-  const league = leagueData;
 
   // Fetch championship entries, season descending. Two-query pattern (entries
   // then franchises by id) mirrors the recap archive - avoids PostgREST

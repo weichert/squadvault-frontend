@@ -15,7 +15,7 @@
 // FUTURE: layout-level league context candidate - the page below this layout
 // re-fetches league.name, so the same name is queried twice per render. Not
 // noisy enough at v1 to warrant a context; capture in next memo.
-import { createAdminClient } from "@/lib/supabase/server";
+import { getLeague } from "@/lib/league";
 import { TopNav } from "@/components/ui/top-nav";
 
 // Skip Next.js route segment caching so league status changes (e.g. founding
@@ -29,24 +29,14 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-type LeagueStatusRow = {
-  name: string;
-  status: string;
-};
-
 export default async function LeagueLayout({ children, params }: Props) {
   const { id } = await params;
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("leagues")
-    .select("name, status")
-    .eq("canonical_id", id)
-    .maybeSingle() as { data: LeagueStatusRow | null };
+  const league = await getLeague(id);
 
   // No data, or status is founding: render children bare so LockedRoom /
   // notFound() handle the surface on their own terms. No nav above a sealed
   // or non-existent surface.
-  if (!data || data.status === "founding") {
+  if (!league || league.status === "founding") {
     return <>{children}</>;
   }
 
@@ -55,7 +45,7 @@ export default async function LeagueLayout({ children, params }: Props) {
   // the nav height without hard-coding the value in two places.
   return (
     <div style={{ "--nav-height": "80px" } as React.CSSProperties}>
-      <TopNav leagueId={id} leagueName={data.name} />
+      <TopNav leagueId={id} leagueName={league.name} />
       {children}
     </div>
   );
