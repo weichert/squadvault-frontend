@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import { ArtifactReview } from "@/components/ui/artifact-review";
+import { CommissionerOnly } from "@/components/ui/commissioner-only";
 import type { Metadata } from "next";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
@@ -41,7 +42,21 @@ export default async function ApprovePage({ params }: Props) {
     };
 
   if (!league) notFound();
-  if (league.commissioner_user_id !== user.id) redirect(`/league/${id}`);
+
+  // Role check: render Forbidden state for non-commissioners per
+  // Design Brief section VIII visibility principle. Anon users were
+  // redirected to login above. The Approve route is a deep link to a
+  // specific artifact, so the Forbidden card renders bare without an
+  // Office-style room header above it.
+  if (league.commissioner_user_id !== user.id) {
+    return (
+      <main style={{ background: "var(--vault-bg)", minHeight: "100vh" }}>
+        <div className="max-w-4xl mx-auto px-6 py-12">
+          <CommissionerOnly leagueId={id} leagueName={league.name} />
+        </div>
+      </main>
+    );
+  }
 
   // Fetch artifact
   const { data: artifact } = await admin

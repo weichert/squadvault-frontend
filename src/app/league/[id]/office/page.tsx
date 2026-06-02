@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { CommissionerOnly } from "@/components/ui/commissioner-only";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
 // caching so synced artifacts surface without a hard reload. See
@@ -68,8 +69,33 @@ export default async function OfficePage({ params }: Props) {
     .maybeSingle() as { data: { id: string; name: string; commissioner_user_id: string | null } | null };
 
   if (!league) notFound();
+
+  // Role check: render Forbidden state for non-commissioners per
+  // Design Brief section VIII visibility principle (room visible to all,
+  // entry restricted by role). Anon users were redirected to login above.
   if (league.commissioner_user_id !== user.id) {
-    redirect(`/league/${id}`);
+    return (
+      <main style={{ background: "var(--vault-bg)", minHeight: "100vh" }}>
+        <div className="max-w-4xl mx-auto px-6 py-12">
+          <div className="mb-10">
+            <Link
+              href={`/league/${id}`}
+              className="font-mono text-[9px] tracking-[0.12em] text-vault-text3 hover:text-vault-text2 transition-colors"
+            >
+              ← {league.name}
+            </Link>
+            <h1
+              className="font-ui font-medium text-vault-text mt-3"
+              style={{ fontSize: "1.5rem" }}
+            >
+              Commissioner Office
+            </h1>
+            <div className="mt-2" style={{ width: 40, height: 1, background: "rgba(139, 112, 53, 0.4)" }} />
+          </div>
+          <CommissionerOnly leagueId={id} leagueName={league.name} />
+        </div>
+      </main>
+    );
   }
 
   // Fetch approval queue — DRAFT and CHANGES_REQUESTED, ordered by created_at
