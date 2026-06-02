@@ -44,7 +44,12 @@ export default async function LeagueLayout({ children, params }: Props) {
   // div so the community page's main element can pull itself up by exactly
   // the nav height without hard-coding the value in two places.
   return (
-    <div style={{ "--nav-height": "80px" } as React.CSSProperties}>
+    <div
+      className="league-shell"
+      style={
+        { "--nav-height": "80px", "--bottom-nav-height": "56px" } as React.CSSProperties
+      }
+    >
       <TopNav leagueId={id} leagueName={league.name} />
       {children}
     </div>
