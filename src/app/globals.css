@@ -329,3 +329,17 @@
 @media (prefers-reduced-motion: reduce) {
   .nav-rule-active { animation: none; }
 }
+
+/* approval-ux mobile clearance (2026-06-02) --------------------------------- */
+/* On mobile the bottom tab bar occupies the bottom of the viewport, so the
+   approve-route fixed-bottom elements lift above it. Desktop has no bar. */
+.approve-action-zone {
+  bottom: calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px));
+}
+.approve-floating-bottom {
+  bottom: calc(2rem + var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .approve-action-zone { bottom: 0; }
+  .approve-floating-bottom { bottom: 2rem; }
+}

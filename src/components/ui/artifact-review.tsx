@@ -316,9 +316,9 @@ export function ArtifactReview({
 
       {/* Action zone — fixed to bottom, appears after full scroll */}
       <div
+        className="approve-action-zone"
         style={{
           position: "fixed",
-          bottom: 0,
           left: 0,
           right: 0,
           background: "linear-gradient(to top, var(--vault-bg) 70%, transparent)",
@@ -354,7 +354,7 @@ export function ArtifactReview({
 
       {/* Post-approval state */}
       {action === "approved" && showRecordOpen && (
-        <div className="fixed bottom-8 left-0 right-0 flex justify-center pointer-events-none" style={{ zIndex: 50 }}>
+        <div className="fixed approve-floating-bottom left-0 right-0 flex justify-center pointer-events-none" style={{ zIndex: 50 }}>
           <p
             className="font-ceremonial font-light italic text-vault-text2"
             style={{ fontSize: "1.3rem", letterSpacing: "0.04em", animation: "fadeIn 0.6s ease forwards" }}
@@ -374,7 +374,7 @@ export function ArtifactReview({
 
       {/* Withheld state */}
       {action === "withheld" && (
-        <div className="fixed bottom-8 left-0 right-0 flex justify-center" style={{ zIndex: 50 }}>
+        <div className="fixed approve-floating-bottom left-0 right-0 flex justify-center" style={{ zIndex: 50 }}>
           <div className="vault-card px-8 py-4 text-center">
             <p className="font-mono text-[9px] tracking-[0.15em] text-vault-text3 mb-2">WITHHELD</p>
             <p className="font-ui text-sm text-vault-text2">This artifact has been removed from the record.</p>
