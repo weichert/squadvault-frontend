@@ -261,6 +261,89 @@ async function g9() {
   }
 }
 
+// ── G10: founding_sessions is commissioner-scoped (RLS) ────────────────
+async function g10() {
+  console.log('\nG10 — founding_sessions is commissioner-scoped (RLS)');
+
+  // (a) Anon cannot create a founding session. Data-independent: anon has no
+  // auth.uid(), so INSERT WITH CHECK (commissioner_user_id = auth.uid())
+  // denies it. (A bad FK would also reject it; either way anon cannot write.)
+  const { error: insErr } = await anonClient
+    .from('founding_sessions')
+    .insert({
+      league_id: DEMO_LEAGUE_ID,
+      commissioner_user_id: '00000000-0000-0000-0000-0000000000ff',
+      state: 'IN_PROGRESS',
+      exchanges: [],
+      covered_topics: [],
+      pending_required_topics: [],
+      consent: {},
+      voice_profile_selection: null,
+      total_tokens_used: 0,
+      outputs_generated: false,
+      outputs_approved: false,
+    });
+  if (insErr) {
+    pass('G10: Anon cannot insert founding_sessions (RLS enforced)');
+  } else {
+    fail('G10', 'Anon inserted a founding_sessions row — RLS FAILURE');
+  }
+
+  // (b) Anon cannot read a commissioner's session. Needs a real row, so
+  // resolve a commissioner from an existing league; skip with a note if none.
+  const { data: leagueRow } = (await serviceClient
+    .from('leagues')
+    .select('id, commissioner_user_id')
+    .not('commissioner_user_id', 'is', null)
+    .limit(1)
+    .maybeSingle()) as {
+    data: { id: string; commissioner_user_id: string } | null;
+  };
+
+  if (!leagueRow) {
+    console.log(
+      '     (skip G10b: no league with a commissioner_user_id in this environment)',
+    );
+    return;
+  }
+
+  const { data: seeded } = (await serviceClient
+    .from('founding_sessions')
+    .insert({
+      league_id: leagueRow.id,
+      commissioner_user_id: leagueRow.commissioner_user_id,
+      state: 'IN_PROGRESS',
+      exchanges: [],
+      covered_topics: [],
+      pending_required_topics: [],
+      consent: {},
+      voice_profile_selection: null,
+      total_tokens_used: 0,
+      outputs_generated: false,
+      outputs_approved: false,
+    })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+
+  if (!seeded) {
+    fail('G10', 'Could not seed a founding_sessions row via service role');
+    return;
+  }
+
+  const { data: anonRead } = await anonClient
+    .from('founding_sessions')
+    .select('id')
+    .eq('id', seeded.id);
+
+  if (!anonRead || anonRead.length === 0) {
+    pass('G10: Anon cannot read a commissioner founding_sessions row (RLS enforced)');
+  } else {
+    fail('G10', `Anon read a founding_sessions row — RLS FAILURE (${anonRead.length})`);
+  }
+
+  await serviceClient.from('founding_sessions').delete().eq('id', seeded.id);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -274,6 +357,7 @@ async function main() {
   await g6();
   await g7();
   await g9();
+  await g10();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);
