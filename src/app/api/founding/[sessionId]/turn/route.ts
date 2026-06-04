@@ -81,6 +81,7 @@ export async function POST(
     exchanges: result.next.exchanges,
     covered_topics: result.next.covered_topics,
     pending_required_topics: result.next.pending_required_topics,
+    state: result.next.state,
     total_tokens_used: session.total_tokens_used + result.tokens,
   };
   // Contained cast: the repo's Database type lacks the keys supabase-js needs

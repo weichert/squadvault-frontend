@@ -53,6 +53,20 @@ export function isRequiredCoverageComplete(session: FoundingSession): boolean {
   return requiredTopicsRemaining(session).length === 0;
 }
 
+// Advance IN_PROGRESS -> CONSENT_COLLECTION once every required topic is
+// covered (F3-2-B). Idempotent and edge-guarded; any other state is returned
+// unchanged. Callers persist the resulting state.
+export function advanceFoundingState(session: FoundingSession): FoundingSession {
+  if (
+    session.state === 'IN_PROGRESS' &&
+    isRequiredCoverageComplete(session) &&
+    isLegalFoundingTransition('IN_PROGRESS', 'CONSENT_COLLECTION')
+  ) {
+    return { ...session, state: 'CONSENT_COLLECTION' };
+  }
+  return session;
+}
+
 // ── Immutable mutators ─────────────────────────────────────────────────
 export function markTopicCovered(
   session: FoundingSession,

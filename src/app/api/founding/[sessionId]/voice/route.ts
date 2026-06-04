@@ -10,7 +10,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient, createAdminClient } from '@/lib/supabase/server';
 import { runAgentTurn } from '@/lib/founding/turn-engine';
-import { markTopicCovered } from '@/lib/founding/session-state';
+import {
+  advanceFoundingState,
+  markTopicCovered,
+} from '@/lib/founding/session-state';
 import { VOICE_CARDS } from '@/lib/founding/voice-cards';
 import { MAX_EXCHANGES } from '@/lib/founding/config';
 import type {
@@ -97,12 +100,14 @@ export async function POST(
   // dependent on the model having returned them.
   let next = markTopicCovered(result.next, 'VOICE_CALIBRATION');
   next = { ...next, voice_profile_selection: key as VoiceProfileKey };
+  next = advanceFoundingState(next);
 
   const update: FoundingSessionUpdate = {
     exchanges: next.exchanges,
     covered_topics: next.covered_topics,
     pending_required_topics: next.pending_required_topics,
     voice_profile_selection: next.voice_profile_selection,
+    state: next.state,
     total_tokens_used: session.total_tokens_used + result.tokens,
   };
   const { error: updErr } = await supabase

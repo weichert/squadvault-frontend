@@ -8,6 +8,10 @@ import type {
   VoiceProfileKey,
 } from '@/lib/supabase/types';
 import { VoiceCardsPanel } from '@/components/founding/voice-cards-panel';
+import {
+  ConsentPanel,
+  type ConsentValues,
+} from '@/components/founding/consent-panel';
 
 const PHASES: FoundingSessionState[] = [
   'IN_PROGRESS',
@@ -70,6 +74,11 @@ export function FoundingConversation({
     coveredTopics.includes('COMPETITION_REGISTER') &&
     !coveredTopics.includes('VOICE_CALIBRATION') &&
     voiceSelection === null;
+
+  // Consent collection (spec 6): surfaced once required coverage completes
+  // (engine advanced the phase to CONSENT_COLLECTION). Hidden again as soon
+  // as consent is stored and the phase advances to OUTPUT_GENERATION.
+  const showConsentPanel = state === 'CONSENT_COLLECTION';
 
   async function send() {
     const text = input.trim();
@@ -170,6 +179,29 @@ export function FoundingConversation({
     }
   }
 
+  async function submitConsent(values: ConsentValues) {
+    if (pending) return;
+    setError(null);
+    setPending(true);
+    try {
+      const res = await fetch(`/api/founding/${sessionId}/consent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) {
+        setError('Could not save the league defaults. Please try again.');
+        return;
+      }
+      const data = (await res.json()) as { state: FoundingSessionState };
+      setState(data.state);
+    } catch {
+      setError('Could not save the league defaults. Please try again.');
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div
       style={{
@@ -252,6 +284,25 @@ export function FoundingConversation({
           <div style={{ marginBottom: '1.5rem' }}>
             <VoiceCardsPanel onSelect={selectVoice} disabled={pending} />
           </div>
+        ) : null}
+
+        {showConsentPanel ? (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <ConsentPanel onConfirm={submitConsent} disabled={pending} />
+          </div>
+        ) : null}
+
+        {state === 'OUTPUT_GENERATION' ? (
+          <p
+            className="font-ui"
+            style={{
+              color: 'var(--vault-text3)',
+              fontSize: '0.9rem',
+              marginBottom: '1.5rem',
+            }}
+          >
+            The founding record is being prepared.
+          </p>
         ) : null}
 
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>

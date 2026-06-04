@@ -20,7 +20,11 @@ import {
   type IntentClass,
   type TopicId,
 } from '@/lib/founding/protocol';
-import { appendExchange, markTopicCovered } from '@/lib/founding/session-state';
+import {
+  advanceFoundingState,
+  appendExchange,
+  markTopicCovered,
+} from '@/lib/founding/session-state';
 import { FOUNDING_MODEL } from '@/lib/founding/config';
 import type { FoundingSession } from '@/lib/supabase/types';
 
@@ -127,6 +131,9 @@ export async function runAgentTurn(args: {
     created_at: new Date().toISOString(),
   });
   for (const t of coveredNow) next = markTopicCovered(next, t);
+
+  // F3-2-B: advance to consent collection once required coverage is complete.
+  next = advanceFoundingState(next);
 
   return { next, reply: agentReply, tokens, fallback: parsed === null };
 }
