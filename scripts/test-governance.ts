@@ -341,6 +341,17 @@ async function g10() {
     fail('G10', `Anon read a founding_sessions row — RLS FAILURE (${anonRead.length})`);
   }
 
+  const { data: anonUpdated } = await anonClient
+    .from('founding_sessions')
+    .update({ state: 'COMPLETE' })
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonUpdated || anonUpdated.length === 0) {
+    pass('G10: Anon cannot update founding_sessions (RLS enforced)');
+  } else {
+    fail('G10', 'Anon updated a founding_sessions row — RLS FAILURE');
+  }
+
   await serviceClient.from('founding_sessions').delete().eq('id', seeded.id);
 }
 

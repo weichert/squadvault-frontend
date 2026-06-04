@@ -4,14 +4,14 @@
 // Top-level route (outside the league nav layout) so it renders without app
 // chrome, per Design Brief section 7.4. Server component: authenticate, guard
 // (founding-status league + commissioner), resolve an existing session to
-// resume, else show the "Begin" entry. The turn input + Anthropic loop are B3;
-// this surface is read-only.
+// resume into the interactive conversation, else show the "Begin" entry.
 import { redirect, notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getLeague, getViewer } from '@/lib/league';
 import { createServerClient } from '@/lib/supabase/server';
-import type { FoundingSession, FoundingSessionState } from '@/lib/supabase/types';
+import type { FoundingSession } from '@/lib/supabase/types';
 import { BeginButton } from '@/components/founding/begin-button';
+import { FoundingConversation } from '@/components/founding/conversation';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,73 +22,6 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   return { title: `Founding Session · ${id}` };
-}
-
-const PHASES: FoundingSessionState[] = [
-  'IN_PROGRESS',
-  'CONSENT_COLLECTION',
-  'OUTPUT_GENERATION',
-  'COMPLETE',
-];
-
-function ProgressDots({ state }: { state: FoundingSessionState }) {
-  const activeIndex = PHASES.indexOf(state);
-  return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      {PHASES.map((phase, i) => (
-        <span
-          key={phase}
-          aria-hidden
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background:
-              i <= activeIndex ? 'var(--vault-gold)' : 'var(--vault-text3)',
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function Transcript({ exchanges }: { exchanges: FoundingSession['exchanges'] }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1.75rem',
-        width: '100%',
-        maxWidth: 720,
-      }}
-    >
-      {exchanges.map((ex) => {
-        const isAgent = ex.role === 'agent';
-        return (
-          <div
-            key={ex.turn}
-            style={{
-              alignSelf: isAgent ? 'flex-start' : 'flex-end',
-              maxWidth: '85%',
-            }}
-          >
-            <p
-              className={isAgent ? 'font-ceremonial' : 'font-ui'}
-              style={{
-                whiteSpace: 'pre-wrap',
-                lineHeight: 1.6,
-                fontSize: isAgent ? '1.15rem' : '1rem',
-                color: isAgent ? 'var(--vault-text)' : 'var(--vault-text2)',
-              }}
-            >
-              {ex.content}
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export default async function FoundingPage({ params }: Props) {
@@ -166,7 +99,6 @@ export default async function FoundingPage({ params }: Props) {
         >
           {league.name}
         </span>
-        {session ? <ProgressDots state={session.state} /> : null}
       </header>
 
       <div
@@ -181,7 +113,11 @@ export default async function FoundingPage({ params }: Props) {
         }}
       >
         {session ? (
-          <Transcript exchanges={session.exchanges} />
+          <FoundingConversation
+            sessionId={session.id}
+            initialExchanges={session.exchanges}
+            initialState={session.state}
+          />
         ) : (
           <div
             style={{
