@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from 'react';
 import type {
   SessionExchange,
   FoundingSessionState,
+  VoiceProfileKey,
 } from '@/lib/supabase/types';
+import { VoiceCardsPanel } from '@/components/founding/voice-cards-panel';
 
 const PHASES: FoundingSessionState[] = [
   'IN_PROGRESS',
@@ -38,13 +40,22 @@ export function FoundingConversation({
   sessionId,
   initialExchanges,
   initialState,
+  initialCoveredTopics,
+  initialVoiceSelection,
 }: {
   sessionId: string;
   initialExchanges: SessionExchange[];
   initialState: FoundingSessionState;
+  initialCoveredTopics: string[];
+  initialVoiceSelection: VoiceProfileKey | null;
 }) {
   const [exchanges, setExchanges] = useState<SessionExchange[]>(initialExchanges);
   const [state, setState] = useState<FoundingSessionState>(initialState);
+  const [coveredTopics, setCoveredTopics] =
+    useState<string[]>(initialCoveredTopics);
+  const [voiceSelection, setVoiceSelection] = useState<VoiceProfileKey | null>(
+    initialVoiceSelection,
+  );
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +64,12 @@ export function FoundingConversation({
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [exchanges.length, pending]);
+
+  // Calibration moment (spec 4.5): register discussed, no choice made yet.
+  const showVoiceCards =
+    coveredTopics.includes('COMPETITION_REGISTER') &&
+    !coveredTopics.includes('VOICE_CALIBRATION') &&
+    voiceSelection === null;
 
   async function send() {
     const text = input.trim();
@@ -84,6 +101,7 @@ export function FoundingConversation({
       const data = (await res.json()) as {
         reply: string;
         state: FoundingSessionState;
+        covered_topics: string[];
       };
       setExchanges((prev) => [
         ...prev,
@@ -96,8 +114,57 @@ export function FoundingConversation({
         },
       ]);
       setState(data.state);
+      setCoveredTopics(data.covered_topics);
     } catch {
       setError('The vault did not respond. Please try again.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function selectVoice(key: VoiceProfileKey) {
+    if (pending) return;
+    setError(null);
+    setPending(true);
+    try {
+      const res = await fetch(`/api/founding/${sessionId}/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+      if (!res.ok) {
+        setError('Could not set the voice. Please try again.');
+        return;
+      }
+      const data = (await res.json()) as {
+        selection_message: string;
+        reply: string;
+        state: FoundingSessionState;
+        covered_topics: string[];
+        voice_profile_selection: VoiceProfileKey;
+      };
+      setExchanges((prev) => [
+        ...prev,
+        {
+          turn: prev.length + 1,
+          role: 'commissioner',
+          content: data.selection_message,
+          intent_classified: null,
+          created_at: new Date().toISOString(),
+        },
+        {
+          turn: prev.length + 2,
+          role: 'agent',
+          content: data.reply,
+          intent_classified: null,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      setState(data.state);
+      setCoveredTopics(data.covered_topics);
+      setVoiceSelection(data.voice_profile_selection);
+    } catch {
+      setError('Could not set the voice. Please try again.');
     } finally {
       setPending(false);
     }
@@ -180,6 +247,13 @@ export function FoundingConversation({
             {error}
           </p>
         ) : null}
+
+        {showVoiceCards ? (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <VoiceCardsPanel onSelect={selectVoice} disabled={pending} />
+          </div>
+        ) : null}
+
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
           <textarea
             value={input}

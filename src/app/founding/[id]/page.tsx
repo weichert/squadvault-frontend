@@ -117,6 +117,8 @@ export default async function FoundingPage({ params }: Props) {
             sessionId={session.id}
             initialExchanges={session.exchanges}
             initialState={session.state}
+            initialCoveredTopics={session.covered_topics}
+            initialVoiceSelection={session.voice_profile_selection}
           />
         ) : (
           <div
