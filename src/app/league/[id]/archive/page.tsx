@@ -66,8 +66,8 @@ const SURFACES: ReadonlyArray<SurfaceCard> = [
     artifactClass: "F1",
     title: "Rivalry Chronicle",
     description: "Head-to-head histories between rival franchises.",
-    href: null, // surface under construction this milestone
-    emptyDetail: "Surface in preparation.",
+    href: "rivalries",
+    emptyDetail: "Awaiting first chronicle.",
   },
 ] as const;
 
