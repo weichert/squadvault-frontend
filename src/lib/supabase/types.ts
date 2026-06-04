@@ -63,6 +63,14 @@ export const TRUST_BAR = {
 export type TrustBarVariant = keyof typeof TRUST_BAR;
 
 // ── Database row types ───────────────────────────────────────────────────
+export interface OfficeBrief {
+  theme: string;
+  voice_calibration: VoiceProfileKey;
+  physical_artifact: string | null;
+  founding_plaque: string;
+  notes: string[];
+}
+
 export interface League {
   id: string;
   canonical_id: string;
@@ -75,6 +83,7 @@ export interface League {
   seal_svg_url: string | null;
   seal_png_url: string | null;
   first_approval_completed: boolean;
+  office_brief?: OfficeBrief | null;
   created_at: string;
   updated_at: string;
 }
