@@ -57,9 +57,17 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Generate docket ID
+  // Generate docket ID.
+  // F4-A3: league short code is hardcoded to "PFL". PFL Buddies
+  // (canonical_id 70985) is currently the only real production league, and
+  // canonical_id is the numeric MFL id, so it cannot be sliced into a short
+  // code (that would read SV-2024-70985-001, a regression). The previously
+  // computed-but-unused leagueCode slice has been removed because it invited
+  // exactly that naive substitution. FOLLOW-ON: when a second real league
+  // onboards, add a governed leagues.docket_code column (a presentation
+  // field, not an immutable fact) and read it here in place of this constant.
   const year = artifact.season ?? new Date().getFullYear();
-  const leagueCode = league.canonical_id.toUpperCase().slice(0, 5);
+  const LEAGUE_DOCKET_CODE = "PFL";
   const { count } = await admin
     .from("artifacts")
     .select("id", { count: "exact", head: true })
@@ -69,7 +77,7 @@ export async function POST(
   const seq = String((count ?? 0) + 1).padStart(3, "0");
   const docketId = artifact.is_demo
     ? `DEMO-${year}-${seq}`
-    : `SV-${year}-PFL-${seq}`;
+    : `SV-${year}-${LEAGUE_DOCKET_CODE}-${seq}`;
 
   // Approve: DRAFT → UNDER_REVIEW → APPROVED (trigger enforces each step)
   if (artifact.approval_state === "DRAFT") {
