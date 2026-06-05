@@ -12,6 +12,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import type { FoundingSession } from '@/lib/supabase/types';
 import { BeginButton } from '@/components/founding/begin-button';
 import { FoundingConversation } from '@/components/founding/conversation';
+import { SkipFoundingButton } from '@/components/founding/skip-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -152,6 +153,7 @@ export default async function FoundingPage({ params }: Props) {
               spaces ready for the people about to join.
             </p>
             <BeginButton canonicalId={id} />
+            <SkipFoundingButton canonicalId={id} />
           </div>
         )}
       </div>

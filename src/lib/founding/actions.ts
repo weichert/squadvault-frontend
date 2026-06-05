@@ -167,3 +167,60 @@ export async function foundingOutputStatus(
     approved,
   };
 }
+
+export async function skipFoundingSession(
+  canonicalId: string,
+): Promise<StartResult> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'unauthorized' };
+
+  const league = await getLeague(canonicalId);
+  if (!league) return { ok: false, error: 'not_found' };
+  // Already set up (e.g. a re-click after skipping) is an idempotent no-op.
+  if (league.status === 'active') {
+    revalidatePath(`/founding/${canonicalId}`);
+    return { ok: true };
+  }
+  if (league.status !== 'founding') return { ok: false, error: 'not_founding' };
+  if (league.commissioner_user_id !== user.id) {
+    return { ok: false, error: 'forbidden' };
+  }
+
+  // Entry-screen skip is for leagues with no session yet (spec section 9.1).
+  // If a session already exists the founding page renders the conversation, not
+  // the Begin screen, so this path should not be reached; guard anyway.
+  const { data: existing } = await supabase
+    .from('founding_sessions')
+    .select('id')
+    .eq('league_id', league.id)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { ok: false, error: 'session_exists' };
+  }
+
+  // B1 / spec section 9.1: skip the founding session. No Founding Artifact, no
+  // founding_sessions row, and leagues.voice_profile_id is left null. The voice
+  // defaults to MIXED at the recap-time consumer (the engine), matching the
+  // founding generate route's `?? 'MIXED'` resolution, so a skipped league
+  // behaves like one founded on the MIXED register. The status flip moves the
+  // league into the established experience, where the founding session stays
+  // re-runnable from the Review Room (B2). Service-role write behind the SSR
+  // commissioner check above, mirroring the generate route.
+  const admin = createUntypedAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { error } = await admin
+    .from('leagues')
+    .update({ status: 'active' })
+    .eq('id', league.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/founding/${canonicalId}`);
+  revalidatePath(`/league/${canonicalId}`);
+  return { ok: true };
+}
