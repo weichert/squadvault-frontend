@@ -156,6 +156,18 @@ export async function foundingOutputStatus(
       .from('founding_sessions')
       .update({ state: 'COMPLETE', outputs_approved: true } as never)
       .eq('id', sessionId);
+    // P / completion lifecycle: approving the Founding Artifact opens the
+    // Clubhouse. The league home renders LockedRoom while status is 'founding'
+    // and the established experience once 'active'; the First Approval Ceremony
+    // ("The record is open.") and the founding closing ("Enter the Clubhouse")
+    // both presuppose this flip. Service-role write behind the commissioner
+    // check above; scoped to status='founding' so it is a one-way, idempotent
+    // open that never disturbs an archived or already-open league.
+    await admin
+      .from('leagues')
+      .update({ status: 'active' })
+      .eq('id', session.league_id)
+      .eq('status', 'founding');
     state = 'COMPLETE';
   }
 
