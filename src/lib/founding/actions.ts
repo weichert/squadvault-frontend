@@ -18,7 +18,14 @@ import { createServerClient } from '@/lib/supabase/server';
 import { getLeague } from '@/lib/league';
 import { REQUIRED_TOPICS } from '@/lib/founding/protocol';
 import { foundingOpeningMessage } from '@/lib/founding/session-prompt';
-import type { Database, SessionExchange } from '@/lib/supabase/types';
+import { createClient as createUntypedAdmin } from '@supabase/supabase-js';
+import { isLegalFoundingTransition } from '@/lib/founding/session-state';
+import type {
+  Database,
+  FoundingSession,
+  FoundingSessionState,
+  SessionExchange,
+} from '@/lib/supabase/types';
 
 export type StartResult = { ok: boolean; error?: string };
 
@@ -89,4 +96,74 @@ export async function startFoundingSession(
 
   revalidatePath(`/founding/${canonicalId}`);
   return { ok: true };
+}
+
+export type FoundingOutputStatus = {
+  ok: boolean;
+  state?: FoundingSessionState;
+  outputsGenerated?: boolean;
+  artifactId?: string | null;
+  approved?: boolean;
+  error?: string;
+};
+
+// F3-3b: reconcile the output phase for the founding page. Returns current
+// status and, once the Founding Artifact is APPROVED, advances the session to
+// COMPLETE (edge-guarded). Reads the artifact via service-role admin like the
+// generate/approve routes; the founding_sessions write stays on the RLS client.
+export async function foundingOutputStatus(
+  sessionId: string,
+): Promise<FoundingOutputStatus> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'unauthorized' };
+
+  const { data: sessionRow } = await supabase
+    .from('founding_sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .maybeSingle();
+  const session = sessionRow as FoundingSession | null;
+  if (!session) return { ok: false, error: 'not_found' };
+  if (session.commissioner_user_id !== user.id) {
+    return { ok: false, error: 'forbidden' };
+  }
+
+  const admin = createUntypedAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data: art } = (await admin
+    .from('artifacts')
+    .select('id, approval_state')
+    .eq('league_id', session.league_id)
+    .eq('artifact_type', 'FOUNDING')
+    .maybeSingle()) as {
+    data: { id: string; approval_state: string } | null;
+  };
+
+  const approved = art?.approval_state === 'APPROVED';
+  let state: FoundingSessionState = session.state;
+  if (
+    approved &&
+    state === 'OUTPUT_GENERATION' &&
+    isLegalFoundingTransition('OUTPUT_GENERATION', 'COMPLETE')
+  ) {
+    await supabase
+      .from('founding_sessions')
+      .update({ state: 'COMPLETE', outputs_approved: true } as never)
+      .eq('id', sessionId);
+    state = 'COMPLETE';
+  }
+
+  return {
+    ok: true,
+    state,
+    outputsGenerated: session.outputs_generated,
+    artifactId: art?.id ?? null,
+    approved,
+  };
 }

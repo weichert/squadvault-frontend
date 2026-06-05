@@ -12,6 +12,7 @@ import {
   ConsentPanel,
   type ConsentValues,
 } from '@/components/founding/consent-panel';
+import { FoundingOutputs } from '@/components/founding/founding-outputs';
 
 const PHASES: FoundingSessionState[] = [
   'IN_PROGRESS',
@@ -46,12 +47,16 @@ export function FoundingConversation({
   initialState,
   initialCoveredTopics,
   initialVoiceSelection,
+  canonicalId,
+  initialOutputsGenerated,
 }: {
   sessionId: string;
   initialExchanges: SessionExchange[];
   initialState: FoundingSessionState;
   initialCoveredTopics: string[];
   initialVoiceSelection: VoiceProfileKey | null;
+  canonicalId: string;
+  initialOutputsGenerated: boolean;
 }) {
   const [exchanges, setExchanges] = useState<SessionExchange[]>(initialExchanges);
   const [state, setState] = useState<FoundingSessionState>(initialState);
@@ -292,19 +297,18 @@ export function FoundingConversation({
           </div>
         ) : null}
 
-        {state === 'OUTPUT_GENERATION' ? (
-          <p
-            className="font-ui"
-            style={{
-              color: 'var(--vault-text3)',
-              fontSize: '0.9rem',
-              marginBottom: '1.5rem',
-            }}
-          >
-            The founding record is being prepared.
-          </p>
+        {state === 'OUTPUT_GENERATION' || state === 'COMPLETE' ? (
+          <div style={{ marginBottom: '1.5rem', width: '100%' }}>
+            <FoundingOutputs
+              sessionId={sessionId}
+              canonicalId={canonicalId}
+              initialState={state}
+              initialOutputsGenerated={initialOutputsGenerated}
+            />
+          </div>
         ) : null}
 
+        {state !== 'OUTPUT_GENERATION' && state !== 'COMPLETE' ? (
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
           <textarea
             value={input}
@@ -349,6 +353,7 @@ export function FoundingConversation({
             Send
           </button>
         </div>
+        ) : null}
       </div>
     </div>
   );
