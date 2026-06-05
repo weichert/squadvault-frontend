@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SquadVault — Frontend (The Clubhouse)
 
-## Getting Started
+This is the frontend for **SquadVault**, a deterministic recap engine with
+governed expressive output. SquadVault turns a fantasy league's immutable
+factual history into narrative artifacts — weekly recaps, rivalry chronicles,
+hall-of-fame records — under a strict governance model where a human always
+approves before anything is published.
 
-First, run the development server:
+This repo is **The Clubhouse**: the Next.js application where commissioners
+review and approve artifacts, run a league's founding session, and where
+members read the league's permanent record.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Two-repo model
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+SquadVault spans two repositories:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Engine** — `weichert/squadvault` (Python / SQLite). The append-only fact
+  ledger, recap generation pipeline, verifier, and the sync scripts that push
+  approved artifacts to Supabase.
+- **Frontend** — `weichert/squadvault-frontend` (this repo). The Clubhouse UI.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The two are coupled through **Supabase**, not a synchronous API: the engine
+pushes artifacts as `DRAFT`; the commissioner approves them here; the frontend
+renders live Supabase state. The schema contract lives in
+`src/lib/supabase/types.ts`.
 
-## Learn More
+## Governance posture (non-negotiable)
 
-To learn more about Next.js, take a look at the following resources:
+- Facts are immutable and append-only.
+- Narratives are derived, never fact-creating.
+- AI assists; humans approve publication.
+- Silence is preferred over speculation.
+- No analytics, optimization, engagement loops, or prediction — ever.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Next.js 14 (App Router) · TypeScript · Supabase (Auth + Postgres + Storage) ·
+Tailwind CSS · Vercel. Node version pinned in `.nvmrc`.
 
-## Deploy on Vercel
+## Getting started
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+See **[SETUP.md](./SETUP.md)** for local development, environment, database
+migrations, gates, and deploy wiring.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Where things are
+
+- **[ROADMAP.md](./ROADMAP.md)** — milestone state, what's built, what's next.
+- **`_observations/`** — running session memos and decision records.
+- **`SquadVault_Clubhouse_Design_Brief_v1_0.docx`** — authoritative design source.

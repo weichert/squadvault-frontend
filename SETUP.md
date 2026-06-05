@@ -1,232 +1,171 @@
-# SquadVault — Milestone 0 + 1 Setup Guide
+# SquadVault Frontend — Setup
 
-## Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- A Supabase account (free tier works)
-- Supabase CLI (`npm install -g supabase`)
+Current-state setup for The Clubhouse (the SquadVault frontend). Replaces the
+old Milestone 0+1 guide. For milestone state see `ROADMAP.md`; for the deploy
+incident history see `_observations/`.
 
 ---
 
-## Step 1 — Create the Next.js project
+## 1. Two-repo orientation
 
-```bash
-npx create-next-app@14.2.15 squadvault \
-  --typescript \
-  --tailwind \
-  --app \
-  --no-src-dir \
-  --no-eslint \
-  --import-alias "@/*"
+You will be working across two checkouts that **both prompt as `squadvault %`**:
+
+- **Frontend (this repo):** `~/squadvault` -> `weichert/squadvault-frontend`.
+- **Engine:** `~/projects/squadvault` -> `weichert/squadvault`.
+
+Always confirm which one you are in before running anything:
+
+```
+grep '"dev"' package.json
 ```
 
-Then copy all scaffold files into the project:
-
-```bash
-# Copy scaffold files into your new project
-cp -r /path/to/sv-scaffold/* squadvault/
-cd squadvault
-```
+The frontend shows `"dev": "next dev"`. The engine has no root `package.json`.
 
 ---
 
-## Step 2 — Install dependencies
+## 2. Prerequisites
 
-```bash
-npm install
-```
-
----
-
-## Step 3 — Create two Supabase projects
-
-Create at https://supabase.com/dashboard:
-- `squadvault-staging` — for all development work
-- `squadvault-prod` — for production (leave empty until Milestone 7)
-
-For now, only the staging project is used.
+- Node — version pinned in `.nvmrc` (currently 24). With nvm: `nvm use`.
+- npm.
+- A Supabase project (staging is `qcaxemuydxlzpzgnnnoa`).
+- An Anthropic API key (for the founding session).
 
 ---
 
-## Step 4 — Configure environment variables
+## 3. Install
 
-```bash
-cp .env.local.example .env.local
 ```
-
-Edit `.env.local` with your staging Supabase credentials:
-- `NEXT_PUBLIC_SUPABASE_URL` — from Project Settings > API > Project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — from Project Settings > API > anon/public key
-- `SUPABASE_SERVICE_ROLE_KEY` — from Project Settings > API > service_role key
-- `ANTHROPIC_API_KEY` — from console.anthropic.com
-
----
-
-## Step 5 — Apply schema migrations
-
-Link the Supabase CLI to your staging project:
-
-```bash
-supabase login
-supabase link --project-ref your-staging-project-ref
-```
-
-Apply all migrations in order:
-
-```bash
-supabase db push
-```
-
-Or apply manually via the Supabase SQL Editor:
-1. Open `supabase/migrations/001_core_schema.sql` → run
-2. Open `supabase/migrations/002_constraints_and_triggers.sql` → run
-3. Open `supabase/migrations/003_rls_policies.sql` → run
-
----
-
-## Step 6 — Seed the PFL Buddies demo data
-
-Via Supabase SQL Editor, run:
-```
-supabase/seed/001_pfl_buddies_demo.sql
-```
-
-Expected output at the end:
-```
-NOTICE: Seed complete: 1 league, 10 franchises, 1 artifacts
+npm ci
 ```
 
 ---
 
-## Step 7 — Configure Supabase Storage buckets
+## 4. Environment
 
-In Supabase Dashboard > Storage:
+Create `.env.local` at the repo root with:
 
-1. Create bucket: `league-media`
-   - Set to **Private** (NOT public)
-   - Apply RLS policies (see Migration 003)
+```
+NEXT_PUBLIC_SUPABASE_URL=...        # staging project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...   # anon/public key (ships to browser by design)
+SUPABASE_SERVICE_ROLE_KEY=...       # server-only secret
+ANTHROPIC_API_KEY=...               # founding session
+```
 
-2. Create bucket: `league-seals`
-   - Set to **Private** (NOT public)
-   - Apply RLS policies
+`.env.local` is gitignored. The two `NEXT_PUBLIC_` values are also required at
+**build time** (the login page prerenders a Supabase client).
 
-**CRITICAL:** Supabase Storage defaults to public. You must explicitly set buckets to private.
+> **Gotcha — do NOT put `NODE_ENV=development` in `.env.local`.** It is harmless
+> for `next dev`, but it poisons `next build` (forces the dev React runtime into
+> a production build -> `Cannot read properties of null (reading 'useContext')`
+> across all pages). If a local build fails that way, run
+> `unset NODE_ENV && npm run build`. Vercel is unaffected (clean env; never
+> reads `.env.local`).
 
 ---
 
-## Step 8 — Run locally
+## 5. Database (Supabase)
 
-```bash
+Migrations are **committed records**, applied by hand via the Supabase SQL
+Editor (there is no runner). Apply in order:
+
+```
+supabase/migrations/001_core_schema.sql
+supabase/migrations/002_constraints_and_triggers.sql
+supabase/migrations/003_rls_policies.sql
+supabase/migrations/004_commissioner_email.sql
+supabase/migrations/005_office_brief.sql
+supabase/migrations/006_oral_history_eligible.sql
+supabase/migrations/007_founding_session_active_unique.sql
+```
+
+Seeds:
+
+```
+supabase/seed/001_pfl_buddies_demo.sql      # real league: PFL Buddies (70985)
+supabase/seed/002_founding_test_league.sql  # FOUNDING-TEST walkthrough fixture
+```
+
+Storage buckets (`league-media`, `league-seals`) must be **Private** — Supabase
+defaults to public.
+
+---
+
+## 6. Run locally
+
+```
+nvm use
 npm run dev
 ```
 
-Open http://localhost:3000.
-
-You should see the SquadVault landing page. Navigate to:
-- http://localhost:3000/league/70985 — should show the PFL Buddies founding plaque
+Open http://localhost:3000. After pulling changes that touch config or the
+build, clear the cache first: `rm -rf .next`.
 
 ---
 
-## Step 9 — Verify Milestone 0 exit criteria
+## 7. Gates
 
-Run the governance tests:
+Run before pushing.
 
-```bash
-# Set env vars for the test runner
-set -a && source .env.local && set +a
+**Type-check** (always):
 
+```
+npm run type-check
+```
+
+**Governance tests** — required for any schema / RLS / write-path change. They
+hit a live Supabase project and mutate it, so they are a **local** gate (not
+CI). Load env first:
+
+```
+set -a; source .env.local; set +a
 npm run test:governance
 ```
 
-All tests must pass:
-- G1: Anon cannot retrieve unapproved artifacts ✓
-- G3: No DELETE policies on any table ✓
-- G4: Invalid state transition rejected at DB layer ✓
-- G6: Anon cannot read private league artifacts ✓
-- G7: Demo artifact has correct trust bar text ✓
-- G9: Trust bar and docket ID on approved artifacts ✓
+Current checks: G1 (member cannot read unapproved), G3 (no DELETE policies),
+G4 (invalid state transition rejected at DB), G6 (anon cannot read private
+league artifacts), G7 (demo trust-bar text), G9 (trust bar + docket on
+approved), G10 (founding_sessions commissioner-scoped).
 
----
+**Production build** locally (needs the two public env vars present):
 
-## Step 10 — Verify the service role key is client-side safe
-
-```bash
+```
+set -a; source .env.local; set +a
+unset NODE_ENV
 npm run build
-grep -r "SUPABASE_SERVICE_ROLE_KEY" .next/
 ```
-
-This should return **no results**. If the service role key appears in the build output, stop immediately — it is a critical security failure.
 
 ---
 
-## Milestone 0 exit criteria checklist
+## 8. CI
 
-- [ ] App runs locally (`npm run dev`)
-- [ ] App deploys to Vercel successfully
-- [ ] Commissioner can create an account via Supabase Auth (magic link)
-- [ ] Navigate to `/league/70985` — founding plaque renders correctly
-- [ ] Navigate to `/league/nonexistent` — 404 renders (not an error)
-- [ ] Navigate to `/league/70985` as anon — middleware redirects to /auth/login
-- [ ] `npm run test:governance` — all tests pass
-- [ ] `grep -r "SUPABASE_SERVICE_ROLE_KEY" .next/` — returns no results
-- [ ] CSP headers present on all routes (check browser DevTools > Network > Response Headers)
-
-## Milestone 1 exit criteria checklist
-
-- [ ] All tables exist in staging Supabase project
-- [ ] Governance tests G1–G4 pass
-- [ ] Demo league, 10 franchises, 1 approved artifact seeded
-- [ ] Invalid state transition (e.g. DRAFT → APPROVED) rejected by DB trigger
-- [ ] Member-role query returns only APPROVED artifacts
-- [ ] `npm run type-check` passes with zero errors
+`.github/workflows/ci.yml` runs **type-check + production build** on every push
+to `main` and every PR, using `.nvmrc` for Node and placeholder public Supabase
+values for the build. Governance tests are deliberately excluded (they mutate
+live Supabase).
 
 ---
 
-## What's next (Milestone 2)
+## 9. Deploy (Vercel)
 
-The approval UX — the trust foundation for everything that follows.
-- Approval queue in Commissioner Office
-- Single artifact review with scroll-to-unlock
-- Approval stamp animation (the First Approval Ceremony for the first artifact)
-- Trust bar upgrade animation
-- Docket ID generation
-- Haptic feedback on mobile
+The site auto-deploys from `main`. Wiring that must stay correct:
+
+- **Connected Git repo:** Settings -> Git -> must be
+  `weichert/squadvault-frontend` (NOT the engine `weichert/squadvault`).
+- **Framework Preset:** Settings -> Build and Deployment -> **Next.js**. Also
+  pinned in `vercel.json` (`framework: "nextjs"`) so it cannot silently
+  regress to the Python builder.
+- **Environment variables:** Settings -> Environment Variables -> all four keys
+  from section 4, each scoped to **Production** (plus Preview/Development).
+
+> **Gotcha — env vars do NOT survive a Git reconnect.** If you ever
+> disconnect/reconnect the Git source, re-verify all four env vars afterward; a
+> wiped env makes the build fail with "Supabase URL and API key are required."
 
 ---
 
-## File reference
+## 10. Working conventions
 
-```
-src/
-├── app/
-│   ├── layout.tsx              Root layout + font loading
-│   ├── globals.css             Design tokens + Tailwind base
-│   ├── auth/
-│   │   ├── login/page.tsx      Magic link sign-in
-│   │   └── callback/route.ts   Supabase OAuth callback
-│   ├── league/[id]/
-│   │   └── page.tsx            Locked Room → Community Page
-│   └── api/
-│       ├── manifest/route.ts   PWA manifest (per-league)
-│       └── og/route.tsx        OG image generation
-├── lib/supabase/
-│   ├── client.ts               Browser Supabase client
-│   ├── server.ts               Server Supabase clients (incl. admin)
-│   └── types.ts                TypeScript types for all tables
-├── components/ui/
-│   ├── trust-bar.tsx           All 4 trust bar variants
-│   ├── docket-id.tsx           Docket ID display
-│   └── locked-room.tsx         Pre-activation vault door
-middleware.ts                   Edge auth guard
-next.config.js                  CSP security headers
-tailwind.config.ts              Full design token system
-supabase/migrations/
-├── 001_core_schema.sql
-├── 002_constraints_and_triggers.sql
-└── 003_rls_policies.sql
-supabase/seed/
-└── 001_pfl_buddies_demo.sql
-scripts/
-└── test-governance.ts          Governance test runner
-```
+- Run one-time apply scripts from **outside** the repo (e.g. `~/sv-apply/`,
+  invoked by path) so `git add -A` cannot sweep them into a commit.
+- Apply / gate / commit / push are separate steps, never `&&`-chained.
+- One topic per commit.
