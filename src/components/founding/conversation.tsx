@@ -13,6 +13,7 @@ import {
   type ConsentValues,
 } from '@/components/founding/consent-panel';
 import { FoundingOutputs } from '@/components/founding/founding-outputs';
+import { foundingResumeOrientation } from '@/lib/founding/resume-orientation';
 
 const PHASES: FoundingSessionState[] = [
   'IN_PROGRESS',
@@ -84,6 +85,16 @@ export function FoundingConversation({
   // (engine advanced the phase to CONSENT_COLLECTION). Hidden again as soon
   // as consent is stored and the phase advances to OUTPUT_GENERATION.
   const showConsentPanel = state === 'CONSENT_COLLECTION';
+
+  // Resume orientation (spec section 9.4): on resuming an interrupted session
+  // into the conversational phase, orient from session state before the first
+  // new turn. Deterministic; not written to the transcript.
+  const resumeOrientation =
+    initialState === 'IN_PROGRESS' &&
+    initialExchanges.length > 0 &&
+    exchanges.length === initialExchanges.length
+      ? foundingResumeOrientation(initialCoveredTopics)
+      : null;
 
   async function send() {
     const text = input.trim();
@@ -272,6 +283,20 @@ export function FoundingConversation({
       </div>
 
       <div style={{ width: '100%', maxWidth: 720, paddingTop: '1.5rem' }}>
+        {resumeOrientation ? (
+          <p
+            className="font-mono"
+            style={{
+              fontSize: 11,
+              letterSpacing: '0.06em',
+              color: 'var(--vault-text3)',
+              marginBottom: '0.75rem',
+            }}
+          >
+            {resumeOrientation}
+          </p>
+        ) : null}
+
         {error ? (
           <p
             className="font-ui"
