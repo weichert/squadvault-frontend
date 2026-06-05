@@ -236,3 +236,77 @@ export async function skipFoundingSession(
   revalidatePath(`/league/${canonicalId}`);
   return { ok: true };
 }
+
+export async function retriggerFoundingSession(
+  canonicalId: string,
+): Promise<StartResult> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'unauthorized' };
+
+  const league = await getLeague(canonicalId);
+  if (!league) return { ok: false, error: 'not_found' };
+  if (league.commissioner_user_id !== user.id) {
+    return { ok: false, error: 'forbidden' };
+  }
+
+  // F4-B2 / spec sections 9.1 and 9.4: re-open the founding flow for an
+  // already-set-up league. Append-only -- any existing COMPLETE session and the
+  // approved Founding Artifact are preserved untouched; nothing is deleted or
+  // reset. The founding page resolves the latest session by created_at, so a
+  // fresh session drives the conversation while the prior record stays intact.
+  // If a non-COMPLETE session already exists, resume it instead of inserting a
+  // duplicate (the partial unique index allows at most one active session).
+  const { data: active } = await supabase
+    .from('founding_sessions')
+    .select('id')
+    .eq('league_id', league.id)
+    .neq('state', 'COMPLETE')
+    .limit(1);
+
+  if (!active || active.length === 0) {
+    const opening: SessionExchange = {
+      turn: 1,
+      role: 'agent',
+      content: foundingOpeningMessage(league.name),
+      intent_classified: null,
+      created_at: new Date().toISOString(),
+    };
+    const payload: FoundingSessionInsert = {
+      league_id: league.id,
+      commissioner_user_id: user.id,
+      state: 'IN_PROGRESS',
+      exchanges: [opening],
+      covered_topics: [],
+      pending_required_topics: [...REQUIRED_TOPICS],
+      consent: { photos: null, voice_recording: null, text_likeness: null },
+      voice_profile_selection: null,
+      total_tokens_used: 0,
+      outputs_generated: false,
+      outputs_approved: false,
+    };
+    const { error } = await supabase
+      .from('founding_sessions')
+      .insert(payload as never);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  // Re-open the founding flow: the founding page guards on status='founding'.
+  // Completion re-opens the Clubhouse via foundingOutputStatus (the P
+  // transition). Service-role write behind the commissioner check above.
+  const admin = createUntypedAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  await admin
+    .from('leagues')
+    .update({ status: 'founding' })
+    .eq('id', league.id);
+
+  revalidatePath(`/founding/${canonicalId}`);
+  revalidatePath(`/league/${canonicalId}`);
+  return { ok: true };
+}

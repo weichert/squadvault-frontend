@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { CommissionerOnly } from "@/components/ui/commissioner-only";
+import { RetriggerFoundingButton } from "@/components/founding/retrigger-button";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
 // caching so synced artifacts surface without a hard reload. See
@@ -201,6 +202,16 @@ export default async function OfficePage({ params }: Props) {
               ))}
             </div>
           )}
+        </section>
+
+        {/* Founding session re-run (F4-B2, spec sections 9.1/9.4). Re-opening
+            founding preserves the existing record (append-only) and starts a
+            fresh session. */}
+        <section className="mt-12">
+          <p className="font-mono text-[9px] tracking-[0.15em] text-vault-text3 mb-4">
+            FOUNDING
+          </p>
+          <RetriggerFoundingButton canonicalId={id} />
         </section>
       </div>
     </main>
