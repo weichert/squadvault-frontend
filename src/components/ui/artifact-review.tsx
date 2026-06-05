@@ -270,6 +270,21 @@ export function ArtifactReview({
                 </span>
               </div>
             )}
+
+            {/* F4-A1: founding return affordance. The session COMPLETE
+                reconcile and the "founding record is set" closing live on
+                /founding/[id]; route the commissioner back there. */}
+            {artifactType === "FOUNDING" && action === "approved" && (
+              <div className="mt-4">
+                <a
+                  href={`/founding/${leagueId}`}
+                  className="font-mono text-[9px] tracking-[0.1em] transition-colors hover:opacity-80"
+                  style={{ color: "var(--vault-gold-dim)" }}
+                >
+                  Return to the founding record →
+                </a>
+              </div>
+            )}
           </div>
         </div>
 
