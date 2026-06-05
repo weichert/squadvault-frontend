@@ -83,6 +83,7 @@ export interface League {
   seal_svg_url: string | null;
   seal_png_url: string | null;
   first_approval_completed: boolean;
+  oral_history_eligible: boolean;
   office_brief?: OfficeBrief | null;
   created_at: string;
   updated_at: string;

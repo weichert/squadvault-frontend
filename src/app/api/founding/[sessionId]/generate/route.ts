@@ -173,10 +173,18 @@ export async function POST(
     }
   }
 
-  // 3) Office Brief: idempotent overwrite.
+  // 3) Office Brief + State-2 eligibility (spec section 9.3): idempotent.
+  // oral_history_eligible is promoted to the league from the session's
+  // covered_topics so the State-2 (oral-history) signal survives the
+  // ephemeral founding session. Consumer is the future State-2 offer; not
+  // read yet.
   await admin
     .from('leagues')
-    .update({ office_brief: outputs.officeBrief })
+    .update({
+      office_brief: outputs.officeBrief,
+      oral_history_eligible:
+        session.covered_topics.includes('PRE_DIGITAL_HISTORY'),
+    })
     .eq('id', session.league_id);
 
   // 4) Mark generated LAST, through the RLS-scoped client.
