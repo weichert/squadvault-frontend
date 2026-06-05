@@ -1,0 +1,38 @@
+name: CI
+
+# Type-check and production build on every push to main and every PR.
+# Governance tests (npm run test:governance) are intentionally NOT run here:
+# they execute against a live Supabase project and mutate it, so they remain
+# a local pre-push gate (see SETUP.md "Gates"), not a CI step.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Production build
+        run: npm run build
+        env:
+          # next build prerenders /auth/login, which constructs a Supabase
+          # client at module load and requires these at build time. CI uses
+          # harmless placeholders; real values live in Vercel project env.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci-build-only
