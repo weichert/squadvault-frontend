@@ -113,6 +113,18 @@ export interface Franchise {
   created_at: string;
 }
 
+// Season-scoped team name (migration 009). One row per (franchise slot,
+// season): the team name AS IT EXISTED that season, for era-correct
+// attribution where a slot's ownership turned over.
+export interface FranchiseSeasonName {
+  id: string;
+  league_id: string;
+  canonical_franchise_id: string;
+  season: number;
+  team_name: string;
+  created_at: string;
+}
+
 export interface Artifact {
   id: string;
   league_id: string;
@@ -248,6 +260,7 @@ export type Database = {
       leagues:           { Row: League;          Insert: Omit<League, 'id' | 'created_at' | 'updated_at'>; Update: Partial<League> };
       voice_profiles:    { Row: VoiceProfile;    Insert: Omit<VoiceProfile, 'id' | 'created_at'>; Update: Partial<VoiceProfile> };
       franchises:        { Row: Franchise;       Insert: Omit<Franchise, 'id' | 'created_at'>; Update: Partial<Franchise> };
+      franchise_season_names: { Row: FranchiseSeasonName; Insert: Omit<FranchiseSeasonName, 'id' | 'created_at'>; Update: Partial<FranchiseSeasonName> };
       artifacts:         { Row: Artifact;        Insert: Omit<Artifact, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Artifact> };
       artifact_versions: { Row: ArtifactVersion; Insert: Omit<ArtifactVersion, 'id' | 'created_at'>; Update: Partial<ArtifactVersion> };
       approval_events:   { Row: ApprovalEvent;   Insert: Omit<ApprovalEvent, 'id' | 'created_at'>; Update: never };

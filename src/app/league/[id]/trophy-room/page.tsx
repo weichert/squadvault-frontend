@@ -44,7 +44,14 @@ type ChampionshipRow = {
 
 type FranchiseRow = {
   id: string;
+  canonical_franchise_id: string;
   owner_display_name: string;
+};
+
+type SeasonNameRow = {
+  canonical_franchise_id: string;
+  season: number;
+  team_name: string;
 };
 
 // Provenance label text per Design Brief sections 2.5 and 7.6.
@@ -93,15 +100,37 @@ export default async function TrophyRoomPage({ params }: Props) {
     ),
   );
 
+  // Resolve franchise names. Two maps off one franchises round trip:
+  //   franchiseCanonicalById: uuid -> canonical_franchise_id (the era-name key)
+  //   franchiseNameById:      uuid -> current name (defensive fallback only)
+  const franchiseCanonicalById = new Map<string, string>();
   const franchiseNameById = new Map<string, string>();
   if (franchiseIds.length > 0) {
     const { data: franchisesData } = await admin
       .from("franchises")
-      .select("id, owner_display_name")
+      .select("id, canonical_franchise_id, owner_display_name")
       .in("id", franchiseIds) as { data: FranchiseRow[] | null };
 
     for (const f of franchisesData ?? []) {
+      franchiseCanonicalById.set(f.id, f.canonical_franchise_id);
       franchiseNameById.set(f.id, f.owner_display_name);
+    }
+  }
+
+  // Era-correct champion names: the team name AS IT EXISTED in the title
+  // season (franchise_season_names, migration 009). A slot whose ownership
+  // turned over renders each season under its true name rather than the
+  // current name - e.g. slot 0010's 2016 title reads "SS Express", not the
+  // current "Brandon Knows Ball". Keyed `${canonical_franchise_id}:${season}`.
+  const seasonNameByKey = new Map<string, string>();
+  {
+    const { data: seasonNamesData } = await admin
+      .from("franchise_season_names")
+      .select("canonical_franchise_id, season, team_name")
+      .eq("league_id", league.id) as { data: SeasonNameRow[] | null };
+
+    for (const r of seasonNamesData ?? []) {
+      seasonNameByKey.set(`${r.canonical_franchise_id}:${r.season}`, r.team_name);
     }
   }
 
@@ -142,9 +171,18 @@ export default async function TrophyRoomPage({ params }: Props) {
             {entries.map((entry) => {
               const provStyle = PROVENANCE_STYLE[entry.provenance];
               const provLabel = PROVENANCE_LABEL[entry.provenance];
-              const franchiseName = entry.franchise_id
-                ? franchiseNameById.get(entry.franchise_id) ?? null
-                : null;
+              // Era-correct: uuid -> canonical_franchise_id -> (cfid, season)
+              // name. Falls back to the current name only if a season name is
+              // absent (should not occur for 2010-2025; defensive).
+              const franchiseName = (() => {
+                if (!entry.franchise_id) return null;
+                const cfid = franchiseCanonicalById.get(entry.franchise_id);
+                if (cfid && entry.season != null) {
+                  const eraName = seasonNameByKey.get(`${cfid}:${entry.season}`);
+                  if (eraName) return eraName;
+                }
+                return franchiseNameById.get(entry.franchise_id) ?? null;
+              })();
 
               return (
                 <article
