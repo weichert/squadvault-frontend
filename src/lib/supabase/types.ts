@@ -125,6 +125,26 @@ export interface FranchiseSeasonName {
   created_at: string;
 }
 
+// Per-franchise, per-season record board facts (migration 008). One row per
+// (franchise slot, season): W-L-T and points-for, plus the exactly-provable
+// playoff result tier. result is '' | 'CHAMPION' | 'RUNNER_UP' ('' = no title;
+// matches the DB CHECK). No final rank: never ingested, not exactly derivable,
+// omitted per silence-over-speculation. franchise_id is the UUID FK to
+// franchises.id (the era-name join hops uuid -> canonical_franchise_id).
+export interface FranchiseSeasonRecord {
+  id: string;
+  league_id: string;
+  franchise_id: string;
+  season: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  points_for: number;
+  result: '' | 'CHAMPION' | 'RUNNER_UP';
+  provenance: string;
+  created_at: string;
+}
+
 export interface Artifact {
   id: string;
   league_id: string;
@@ -261,6 +281,7 @@ export type Database = {
       voice_profiles:    { Row: VoiceProfile;    Insert: Omit<VoiceProfile, 'id' | 'created_at'>; Update: Partial<VoiceProfile> };
       franchises:        { Row: Franchise;       Insert: Omit<Franchise, 'id' | 'created_at'>; Update: Partial<Franchise> };
       franchise_season_names: { Row: FranchiseSeasonName; Insert: Omit<FranchiseSeasonName, 'id' | 'created_at'>; Update: Partial<FranchiseSeasonName> };
+      franchise_season_records: { Row: FranchiseSeasonRecord; Insert: Omit<FranchiseSeasonRecord, 'id' | 'created_at'>; Update: Partial<FranchiseSeasonRecord> };
       artifacts:         { Row: Artifact;        Insert: Omit<Artifact, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Artifact> };
       artifact_versions: { Row: ArtifactVersion; Insert: Omit<ArtifactVersion, 'id' | 'created_at'>; Update: Partial<ArtifactVersion> };
       approval_events:   { Row: ApprovalEvent;   Insert: Omit<ApprovalEvent, 'id' | 'created_at'>; Update: never };
