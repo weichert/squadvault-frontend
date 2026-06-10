@@ -280,6 +280,72 @@ export interface MemberConsentCurrent {
   recorded_at: string;
 }
 
+// W.1 A/V Room (four-memo chain, ratified 2026-06-10; migration 011). Four
+// append-only classes; Increment 1 writes are all commissioner-authored.
+export type MediaKind = 'photo' | 'video';
+
+export type MediaProvenanceTagKind =
+  | 'contributor'
+  | 'date'
+  | 'season'
+  | 'event'
+  | 'member_identification';
+
+export type MediaDatePrecision = 'exact' | 'year' | 'season';
+
+// One ingested photo/video (spec 5.2). storage_path is the object key in the
+// private league-media bucket; bytes are served only via server-issued signed URLs.
+export interface MediaEntry {
+  id: string;
+  league_id: string;
+  media_kind: MediaKind;
+  storage_path: string;
+  mime_type: string;
+  uploaded_by: string;
+  upload_note: string | null;
+  created_at: string;
+}
+
+// Append-only provenance event (spec 5.3). Current tag state for an item =
+// latest non-superseded, non-withdrawn event per tag_kind; absence = unknown
+// (rendered as an honest gap). date_precision is set iff tag_kind is 'date';
+// tagged_member_user_id is set iff tag_kind is 'member_identification'.
+export interface MediaProvenanceTagEvent {
+  id: string;
+  media_entry_id: string;
+  tag_kind: MediaProvenanceTagKind;
+  tag_value: string | null;
+  date_precision: MediaDatePrecision | null;
+  tagged_member_user_id: string | null;
+  ratified_by: string;
+  note: string | null;
+  recorded_at: string;
+  supersedes: string | null;
+}
+
+// The fail-closed gate (spec 5.4): the display route renders nothing for a
+// league until a row exists here. Append-only; re-ratification is a new row.
+export interface RoomRatificationEvent {
+  id: string;
+  league_id: string;
+  ratified_by: string;
+  scope_note: string | null;
+  recorded_at: string;
+}
+
+// Display withdrawal (spec 5.5; W.1 mints it, later units reuse it).
+// media_entry_id is nullable for Increment 2 testimony reuse; league_id is
+// carried explicitly so RLS league-scoping holds when media_entry_id is null.
+export interface MediaDisplayWithdrawal {
+  id: string;
+  league_id: string;
+  media_entry_id: string | null;
+  requested_by: string;
+  ratified_by: string | null;
+  note: string | null;
+  recorded_at: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -330,6 +396,10 @@ export type Database = {
       sync_log:          { Row: SyncLog;         Insert: Omit<SyncLog, 'id' | 'created_at'>; Update: never };
       audit_log:         { Row: AuditLog;        Insert: Omit<AuditLog, 'id' | 'created_at'>; Update: never };
       member_consent_events: { Row: MemberConsentEvent; Insert: Omit<MemberConsentEvent, 'id' | 'recorded_at'>; Update: never };
+      media_entries:     { Row: MediaEntry;     Insert: Omit<MediaEntry, 'id' | 'created_at'>; Update: never };
+      media_provenance_tag_events: { Row: MediaProvenanceTagEvent; Insert: Omit<MediaProvenanceTagEvent, 'id' | 'recorded_at'>; Update: never };
+      room_ratification_events: { Row: RoomRatificationEvent; Insert: Omit<RoomRatificationEvent, 'id' | 'recorded_at'>; Update: never };
+      media_display_withdrawals: { Row: MediaDisplayWithdrawal; Insert: Omit<MediaDisplayWithdrawal, 'id' | 'recorded_at'>; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };

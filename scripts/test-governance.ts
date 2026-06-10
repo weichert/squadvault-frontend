@@ -460,6 +460,326 @@ async function g11() {
   await serviceClient.from('member_consent_events').delete().eq('id', seeded.id);
 }
 
+// Resolve a real (member_user_id, league_id) to satisfy the auth.users FK on the
+// W.1 tables when seeding via service role. Returns null if the environment has no
+// franchise with a member yet (then seeded sub-tests skip, like G11b-d).
+async function resolveMember(): Promise<{ member_user_id: string; league_id: string } | null> {
+  const { data } = (await serviceClient
+    .from('franchises')
+    .select('member_user_id, league_id')
+    .not('member_user_id', 'is', null)
+    .limit(1)
+    .maybeSingle()) as { data: { member_user_id: string; league_id: string } | null };
+  return data;
+}
+
+// ── G12: media_entries is commissioner-write + append-only (RLS, W.1) ────
+async function g12() {
+  console.log('\nG12 — media_entries is commissioner-write + append-only (RLS, W.1)');
+
+  // (a) Anon cannot INSERT. Data-independent: INSERT WITH CHECK requires
+  // is_commissioner/is_admin AND uploaded_by = auth.uid(); anon has neither.
+  const { error: insErr } = await anonClient.from('media_entries').insert({
+    league_id: DEMO_LEAGUE_ID,
+    media_kind: 'photo',
+    storage_path: `${DEMO_LEAGUE_ID}/00000000-0000-0000-0000-0000000000aa/original.jpg`,
+    mime_type: 'image/jpeg',
+    uploaded_by: '00000000-0000-0000-0000-0000000000ff',
+    upload_note: 'governance_test',
+  });
+  if (insErr) {
+    pass('G12: Anon cannot insert media_entries (commissioner-only INSERT)');
+  } else {
+    fail('G12', 'Anon inserted a media_entries row — RLS FAILURE');
+  }
+
+  const fr = await resolveMember();
+  if (!fr) {
+    console.log('     (skip G12b-d: no franchise with a member_user_id in this environment)');
+    return;
+  }
+
+  const { data: seeded } = (await serviceClient
+    .from('media_entries')
+    .insert({
+      league_id: fr.league_id,
+      media_kind: 'photo',
+      storage_path: `${fr.league_id}/00000000-0000-0000-0000-0000000000ab/original.jpg`,
+      mime_type: 'image/jpeg',
+      uploaded_by: fr.member_user_id,
+      upload_note: 'governance_test',
+    })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+
+  if (!seeded) {
+    fail('G12', 'Could not seed a media_entries row via service role');
+    return;
+  }
+
+  // (b) Anon cannot UPDATE (append-only — no UPDATE policy).
+  const { data: anonUpd } = await anonClient
+    .from('media_entries')
+    .update({ upload_note: 'tampered' })
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonUpd || anonUpd.length === 0) {
+    pass('G12: Anon cannot update media_entries (append-only)');
+  } else {
+    fail('G12', 'Anon updated a media_entries row — APPEND-ONLY FAILURE');
+  }
+
+  // (c) Anon cannot DELETE (append-only — no DELETE policy).
+  const { data: anonDel } = await anonClient
+    .from('media_entries')
+    .delete()
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonDel || anonDel.length === 0) {
+    pass('G12: Anon cannot delete media_entries (append-only)');
+  } else {
+    fail('G12', 'Anon deleted a media_entries row — APPEND-ONLY FAILURE');
+  }
+
+  await serviceClient.from('media_entries').delete().eq('id', seeded.id);
+}
+
+// ── G13: media_provenance_tag_events append-only + scoped (RLS, W.1) ─────
+async function g13() {
+  console.log('\nG13 — media_provenance_tag_events is commissioner-write + append-only (RLS, W.1)');
+
+  // (a) Anon cannot INSERT. Data-independent: WITH CHECK requires commissioner on
+  // the parent media_entries league AND ratified_by = auth.uid(); anon has neither.
+  const { error: insErr } = await anonClient.from('media_provenance_tag_events').insert({
+    media_entry_id: '00000000-0000-0000-0000-0000000000ac',
+    tag_kind: 'contributor',
+    tag_value: 'governance_test',
+    ratified_by: '00000000-0000-0000-0000-0000000000ff',
+  });
+  if (insErr) {
+    pass('G13: Anon cannot insert media_provenance_tag_events (commissioner-only INSERT)');
+  } else {
+    fail('G13', 'Anon inserted a media_provenance_tag_events row — RLS FAILURE');
+  }
+
+  const fr = await resolveMember();
+  if (!fr) {
+    console.log('     (skip G13b-d: no franchise with a member_user_id in this environment)');
+    return;
+  }
+
+  // Seed a parent media_entries row, then a tag event on it.
+  const { data: parent } = (await serviceClient
+    .from('media_entries')
+    .insert({
+      league_id: fr.league_id,
+      media_kind: 'photo',
+      storage_path: `${fr.league_id}/00000000-0000-0000-0000-0000000000ad/original.jpg`,
+      mime_type: 'image/jpeg',
+      uploaded_by: fr.member_user_id,
+      upload_note: 'governance_test',
+    })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+
+  if (!parent) {
+    fail('G13', 'Could not seed a parent media_entries row via service role');
+    return;
+  }
+
+  const { data: seeded } = (await serviceClient
+    .from('media_provenance_tag_events')
+    .insert({
+      media_entry_id: parent.id,
+      tag_kind: 'contributor',
+      tag_value: 'governance_test',
+      ratified_by: fr.member_user_id,
+    })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+
+  if (!seeded) {
+    fail('G13', 'Could not seed a media_provenance_tag_events row via service role');
+    await serviceClient.from('media_entries').delete().eq('id', parent.id);
+    return;
+  }
+
+  // (b) Anon cannot read the tag event (RLS select scope, via the parent league).
+  const { data: anonRead } = await anonClient
+    .from('media_provenance_tag_events')
+    .select('id')
+    .eq('id', seeded.id);
+  if (!anonRead || anonRead.length === 0) {
+    pass('G13: Anon cannot read a media_provenance_tag_events row (RLS enforced)');
+  } else {
+    fail('G13', `Anon read a media_provenance_tag_events row — RLS FAILURE (${anonRead.length})`);
+  }
+
+  // (c) Anon cannot UPDATE (append-only — supersession, not edit).
+  const { data: anonUpd } = await anonClient
+    .from('media_provenance_tag_events')
+    .update({ note: 'tampered' })
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonUpd || anonUpd.length === 0) {
+    pass('G13: Anon cannot update media_provenance_tag_events (append-only)');
+  } else {
+    fail('G13', 'Anon updated a media_provenance_tag_events row — APPEND-ONLY FAILURE');
+  }
+
+  // (d) Anon cannot DELETE (append-only).
+  const { data: anonDel } = await anonClient
+    .from('media_provenance_tag_events')
+    .delete()
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonDel || anonDel.length === 0) {
+    pass('G13: Anon cannot delete media_provenance_tag_events (append-only)');
+  } else {
+    fail('G13', 'Anon deleted a media_provenance_tag_events row — APPEND-ONLY FAILURE');
+  }
+
+  await serviceClient.from('media_provenance_tag_events').delete().eq('id', seeded.id);
+  await serviceClient.from('media_entries').delete().eq('id', parent.id);
+}
+
+// ── G14: room_ratification_events append-only + the fail-closed gate ─────
+async function g14() {
+  console.log('\nG14 — room_ratification_events is commissioner-write + append-only (RLS, W.1)');
+
+  // (a) Anon cannot INSERT (the gate cannot be opened by anon).
+  const { error: insErr } = await anonClient.from('room_ratification_events').insert({
+    league_id: DEMO_LEAGUE_ID,
+    ratified_by: '00000000-0000-0000-0000-0000000000ff',
+    scope_note: 'governance_test',
+  });
+  if (insErr) {
+    pass('G14: Anon cannot insert room_ratification_events (commissioner-only INSERT)');
+  } else {
+    fail('G14', 'Anon inserted a room_ratification_events row — RLS FAILURE');
+  }
+
+  const fr = await resolveMember();
+  if (!fr) {
+    console.log('     (skip G14b-c: no franchise with a member_user_id in this environment)');
+    return;
+  }
+
+  const { data: seeded } = (await serviceClient
+    .from('room_ratification_events')
+    .insert({
+      league_id: fr.league_id,
+      ratified_by: fr.member_user_id,
+      scope_note: 'governance_test',
+    })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+
+  if (!seeded) {
+    fail('G14', 'Could not seed a room_ratification_events row via service role');
+    return;
+  }
+
+  // (b) Anon cannot UPDATE (append-only).
+  const { data: anonUpd } = await anonClient
+    .from('room_ratification_events')
+    .update({ scope_note: 'tampered' })
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonUpd || anonUpd.length === 0) {
+    pass('G14: Anon cannot update room_ratification_events (append-only)');
+  } else {
+    fail('G14', 'Anon updated a room_ratification_events row — APPEND-ONLY FAILURE');
+  }
+
+  // (c) Anon cannot DELETE (append-only — the gate cannot be un-ratified).
+  const { data: anonDel } = await anonClient
+    .from('room_ratification_events')
+    .delete()
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonDel || anonDel.length === 0) {
+    pass('G14: Anon cannot delete room_ratification_events (append-only)');
+  } else {
+    fail('G14', 'Anon deleted a room_ratification_events row — APPEND-ONLY FAILURE');
+  }
+
+  await serviceClient.from('room_ratification_events').delete().eq('id', seeded.id);
+}
+
+// ── G15: media_display_withdrawals append-only + commissioner-write ──────
+async function g15() {
+  console.log('\nG15 — media_display_withdrawals is commissioner-write + append-only (RLS, W.1)');
+
+  // (a) Anon cannot INSERT a withdrawal.
+  const { error: insErr } = await anonClient.from('media_display_withdrawals').insert({
+    league_id: DEMO_LEAGUE_ID,
+    media_entry_id: null,
+    requested_by: '00000000-0000-0000-0000-0000000000ff',
+    note: 'governance_test',
+  });
+  if (insErr) {
+    pass('G15: Anon cannot insert media_display_withdrawals (commissioner-only INSERT)');
+  } else {
+    fail('G15', 'Anon inserted a media_display_withdrawals row — RLS FAILURE');
+  }
+
+  const fr = await resolveMember();
+  if (!fr) {
+    console.log('     (skip G15b-c: no franchise with a member_user_id in this environment)');
+    return;
+  }
+
+  const { data: seeded } = (await serviceClient
+    .from('media_display_withdrawals')
+    .insert({
+      league_id: fr.league_id,
+      media_entry_id: null,
+      requested_by: fr.member_user_id,
+      note: 'governance_test',
+    })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+
+  if (!seeded) {
+    fail('G15', 'Could not seed a media_display_withdrawals row via service role');
+    return;
+  }
+
+  // (b) Anon cannot UPDATE (append-only).
+  const { data: anonUpd } = await anonClient
+    .from('media_display_withdrawals')
+    .update({ note: 'tampered' })
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonUpd || anonUpd.length === 0) {
+    pass('G15: Anon cannot update media_display_withdrawals (append-only)');
+  } else {
+    fail('G15', 'Anon updated a media_display_withdrawals row — APPEND-ONLY FAILURE');
+  }
+
+  // (c) Anon cannot DELETE (append-only).
+  const { data: anonDel } = await anonClient
+    .from('media_display_withdrawals')
+    .delete()
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonDel || anonDel.length === 0) {
+    pass('G15: Anon cannot delete media_display_withdrawals (append-only)');
+  } else {
+    fail('G15', 'Anon deleted a media_display_withdrawals row — APPEND-ONLY FAILURE');
+  }
+
+  // NOTE (harness limitation): the fail-closed room render (no ratification ->
+  // empty display) and "signed URLs are server-issued, no public read path" are
+  // render/route-level acceptance criteria (brief deliverable 6) exercised at the
+  // founder click-through, not in this anon-RLS harness. The league-media bucket is
+  // created out-of-band and is private (no public SELECT policy), so a direct anon
+  // object read has no path; that is asserted at runtime, not here.
+
+  await serviceClient.from('media_display_withdrawals').delete().eq('id', seeded.id);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -475,6 +795,10 @@ async function main() {
   await g9();
   await g10();
   await g11();
+  await g12();
+  await g13();
+  await g14();
+  await g15();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);
