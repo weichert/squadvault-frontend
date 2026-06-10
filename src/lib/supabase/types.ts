@@ -242,6 +242,44 @@ export interface ConsentRecord {
   text_likeness: 'OPT_IN' | 'OPT_OUT' | null;
 }
 
+// W.6 Consent Governance Memo v1.2 (ratified 2026-06-10) — per-member consent
+// system of record (migration 010). NOTE: distinct from ConsentRecord above,
+// which is the league-defaults layer on founding_sessions.consent (D-X).
+export type MemberConsentCategory =
+  | 'media_appearance'
+  | 'recorded_voice'
+  | 'likeness_derived'
+  | 'attributed_quotes'
+  | 'synthesized_voice';
+
+export type MemberConsentEventType = 'GRANT' | 'REVOKE';
+
+// Append-only event (D-T). rendering_class is required iff category is
+// 'synthesized_voice' (D-S 2e); null for all other categories.
+export interface MemberConsentEvent {
+  id: string;
+  member_user_id: string;
+  league_id: string;
+  event_type: MemberConsentEventType;
+  category: MemberConsentCategory;
+  rendering_class: string | null;
+  context: string;
+  note: string | null;
+  recorded_at: string;
+}
+
+// Derived current state (the member_consent_current view, W.6 section 1.1).
+// ABSENCE of a row for a (member, category[, class]) = ungranted
+// (default-posture law, W.6 section 1.4) — consumers treat missing as no-grant.
+export interface MemberConsentCurrent {
+  member_user_id: string;
+  league_id: string;
+  category: MemberConsentCategory;
+  rendering_class: string | null;
+  current_state: MemberConsentEventType;
+  recorded_at: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -291,6 +329,10 @@ export type Database = {
       commissioner_notes: { Row: CommissionerNote; Insert: Omit<CommissionerNote, 'id' | 'created_at'>; Update: never };
       sync_log:          { Row: SyncLog;         Insert: Omit<SyncLog, 'id' | 'created_at'>; Update: never };
       audit_log:         { Row: AuditLog;        Insert: Omit<AuditLog, 'id' | 'created_at'>; Update: never };
+      member_consent_events: { Row: MemberConsentEvent; Insert: Omit<MemberConsentEvent, 'id' | 'recorded_at'>; Update: never };
+    };
+    Views: {
+      member_consent_current: { Row: MemberConsentCurrent };
     };
     Functions: {
       get_user_league_id: { Args: Record<never, never>; Returns: string };

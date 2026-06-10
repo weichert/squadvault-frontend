@@ -355,6 +355,111 @@ async function g10() {
   await serviceClient.from('founding_sessions').delete().eq('id', seeded.id);
 }
 
+// ── G11: member_consent_events is member-scoped + append-only (RLS, W.6) ──
+async function g11() {
+  console.log('\nG11 — member_consent_events is member-scoped + append-only (RLS, W.6)');
+
+  // (a) Anon cannot INSERT a consent event. Data-independent: anon has no
+  // auth.uid(), so INSERT WITH CHECK (member_user_id = auth.uid()) denies it.
+  // This is the W.6 section 1.3 guarantee at the RLS layer — only the member
+  // may author a grant; no anon/commissioner/admin proxy.
+  const { error: insErr } = await anonClient
+    .from('member_consent_events')
+    .insert({
+      member_user_id: '00000000-0000-0000-0000-0000000000ff',
+      league_id: DEMO_LEAGUE_ID,
+      event_type: 'GRANT',
+      category: 'media_appearance',
+      rendering_class: null,
+      context: 'governance_test',
+      note: null,
+    });
+  if (insErr) {
+    pass('G11: Anon cannot insert member_consent_events (RLS enforced)');
+  } else {
+    fail('G11', 'Anon inserted a member_consent_events row — RLS FAILURE');
+  }
+
+  // (b)-(d) need a real (member_user_id, league_id) to satisfy the auth.users
+  // FK. Resolve a member from franchises; skip with a note if none.
+  const { data: fr } = (await serviceClient
+    .from('franchises')
+    .select('member_user_id, league_id')
+    .not('member_user_id', 'is', null)
+    .limit(1)
+    .maybeSingle()) as {
+    data: { member_user_id: string; league_id: string } | null;
+  };
+
+  if (!fr) {
+    console.log(
+      '     (skip G11b-d: no franchise with a member_user_id in this environment)',
+    );
+    return;
+  }
+
+  const { data: seeded } = (await serviceClient
+    .from('member_consent_events')
+    .insert({
+      member_user_id: fr.member_user_id,
+      league_id: fr.league_id,
+      event_type: 'GRANT',
+      category: 'attributed_quotes',
+      rendering_class: null,
+      context: 'governance_test',
+      note: null,
+    })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+
+  if (!seeded) {
+    fail('G11', 'Could not seed a member_consent_events row via service role');
+    return;
+  }
+
+  // (b) Anon cannot read a member's consent row (RLS select scope).
+  const { data: anonRead } = await anonClient
+    .from('member_consent_events')
+    .select('id')
+    .eq('id', seeded.id);
+  if (!anonRead || anonRead.length === 0) {
+    pass('G11: Anon cannot read a member_consent_events row (RLS enforced)');
+  } else {
+    fail('G11', `Anon read a member_consent_events row — RLS FAILURE (${anonRead.length})`);
+  }
+
+  // (c) Append-only: no UPDATE policy — anon update affects no rows.
+  const { data: anonUpd } = await anonClient
+    .from('member_consent_events')
+    .update({ note: 'tampered' })
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonUpd || anonUpd.length === 0) {
+    pass('G11: Anon cannot update member_consent_events (append-only)');
+  } else {
+    fail('G11', 'Anon updated a member_consent_events row — APPEND-ONLY FAILURE');
+  }
+
+  // (d) Append-only: no DELETE policy — anon delete affects no rows.
+  const { data: anonDel } = await anonClient
+    .from('member_consent_events')
+    .delete()
+    .eq('id', seeded.id)
+    .select('id');
+  if (!anonDel || anonDel.length === 0) {
+    pass('G11: Anon cannot delete member_consent_events (append-only)');
+  } else {
+    fail('G11', 'Anon deleted a member_consent_events row — APPEND-ONLY FAILURE');
+  }
+
+  // NOTE (harness limitation): member-A-vs-member-B SELECT isolation and the
+  // commissioner-cannot-proxy-INSERT guarantee (W.6 1.3) require authenticated
+  // member/commissioner sessions; this harness exercises anon-denial only.
+  // Those assertions are deferred to an authenticated-session harness extension.
+
+  await serviceClient.from('member_consent_events').delete().eq('id', seeded.id);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -369,6 +474,7 @@ async function main() {
   await g7();
   await g9();
   await g10();
+  await g11();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);
