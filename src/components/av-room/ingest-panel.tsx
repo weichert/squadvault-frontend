@@ -179,6 +179,23 @@ export function IngestPanel({
   const presentIds = new Set(visibleEntries.map((e) => e.id));
   const selectedIds = Array.from(selected).filter((id) => presentIds.has(id));
 
+  // R4-D8: select exactly the filtered set for batch tagging. Only selectable (non-
+  // withdrawn) visible items - batch tagging never touches a withdrawn item. One control,
+  // toggling between select-all-in-view and deselect.
+  const selectableVisible = visibleEntries.filter((e) => !e.withdrawn);
+  const allVisibleSelected = selectableVisible.length > 0 && selectableVisible.every((e) => selected.has(e.id));
+  function toggleSelectAllInView() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const e of selectableVisible) next.delete(e.id);
+      } else {
+        for (const e of selectableVisible) next.add(e.id);
+      }
+      return next;
+    });
+  }
+
   // R4-D5: the untagged work queue's quiet count - entries carrying no tags at all.
   // Deterministic, commissioner-only tool-state; no streaks, no progress mechanics.
   const untaggedCount = entries.filter((e) => e.tags.length === 0).length;
@@ -236,6 +253,13 @@ export function IngestPanel({
         )}
         {entries.length > 0 && (
           <HashBackfill leagueId={leagueId} onDone={() => router.refresh()} />
+        )}
+        {selectableVisible.length > 0 && (
+          <div style={{ marginBottom: '0.75rem' }}>
+            <button type="button" onClick={toggleSelectAllInView} className="font-mono" style={{ ...btnStyle(false), padding: '0.35rem 0.6rem' }}>
+              {allVisibleSelected ? 'Deselect all' : `Select all in view (${selectableVisible.length})`}
+            </button>
+          </div>
         )}
         {selectedIds.length > 0 && (
           <BatchTagBar
