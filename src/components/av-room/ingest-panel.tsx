@@ -7,7 +7,7 @@
 // read-only 2a grant state shown beside member identification (W.6 5), correction-
 // by-supersession, item withdrawal, and room ratification. All writes POST to the
 // /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
@@ -171,6 +171,14 @@ export function IngestPanel({
   const presentIds = new Set(visibleEntries.map((e) => e.id));
   const selectedIds = Array.from(selected).filter((id) => presentIds.has(id));
 
+  // R4-D1 quick-look: an index INTO the filtered list (so arrow-keys walk exactly what
+  // the commissioner is looking at). Opening resolves the row's id to its filtered index.
+  const [quickLook, setQuickLook] = useState<number | null>(null);
+  function openQuickLook(id: string) {
+    const i = visibleEntries.findIndex((e) => e.id === id);
+    if (i >= 0) setQuickLook(i);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <RoomRatification leagueId={leagueId} ratified={ratified} />
@@ -235,9 +243,20 @@ export function IngestPanel({
             members={members}
             selected={selected}
             onToggleSelect={toggleSelect}
+            onOpen={openQuickLook}
           />
         )}
       </section>
+
+      {quickLook !== null && visibleEntries[quickLook] && (
+        <QuickLook
+          entries={visibleEntries}
+          index={quickLook}
+          members={members}
+          onIndexChange={setQuickLook}
+          onClose={() => setQuickLook(null)}
+        />
+      )}
     </div>
   );
 }
@@ -254,11 +273,13 @@ function VirtualCorpus({
   members,
   selected,
   onToggleSelect,
+  onOpen,
 }: {
   entries: IngestEntry[];
   members: IngestMember[];
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
+  onOpen: (id: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -299,6 +320,7 @@ function VirtualCorpus({
                 selectable={!e.withdrawn}
                 selected={selected.has(e.id)}
                 onToggleSelect={() => onToggleSelect(e.id)}
+                onOpen={() => onOpen(e.id)}
               />
             </div>
           </div>
@@ -1186,34 +1208,228 @@ function BatchTagBar({
   );
 }
 
-function EntryCard({
-  entry,
+// R4-D1: quick-look - a full-size lightbox over the FILTERED corpus. You cannot tag what
+// you cannot see; accurate provenance depends on actually looking at the image. Arrow keys
+// walk the filtered order, Esc closes, and the tag panel sits alongside so the commissioner
+// can tag while viewing. The image is the full original (signed on demand); a video shows
+// its poster + the attestation placeholder (NO player - the image-only line holds); an item
+// the browser can't render (e.g. the HEIC the canvas could not thumbnail) still resolves to
+// an honest "open the original" link, so an unreadable item stays viewable/identifiable.
+function QuickLook({
+  entries,
+  index,
   members,
-  selectable,
-  selected,
-  onToggleSelect,
+  onIndexChange,
+  onClose,
 }: {
-  entry: IngestEntry;
+  entries: IngestEntry[];
+  index: number;
   members: IngestMember[];
-  selectable: boolean;
-  selected: boolean;
-  onToggleSelect: () => void;
+  onIndexChange: (i: number) => void;
+  onClose: () => void;
 }) {
+  const entry = entries[index];
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [signFailed, setSignFailed] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  // Sign the current item's image on open and on every navigation.
+  useEffect(() => {
+    if (!entry) return;
+    let cancelled = false;
+    setUrl(null);
+    setLoading(true);
+    setSignFailed(false);
+    setImgError(false);
+    (async () => {
+      try {
+        const res = await fetch('/api/av-room/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mediaEntryId: entry.id }),
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const j = (await res.json()) as { url: string };
+          setUrl(j.url);
+        } else {
+          setSignFailed(true);
+        }
+      } catch {
+        if (!cancelled) setSignFailed(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [entry]);
+
+  // Arrow keys walk the filtered corpus; Esc closes.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft' && index > 0) onIndexChange(index - 1);
+      else if (e.key === 'ArrowRight' && index < entries.length - 1) onIndexChange(index + 1);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [index, entries.length, onClose, onIndexChange]);
+
+  if (!entry) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Quick-look"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        background: 'rgba(0, 0, 0, 0.86)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header: position + walk controls + close. Stop propagation so clicks here
+          don't close the overlay. */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.6rem 0.9rem', flexShrink: 0 }}
+      >
+        <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text)' }}>
+          {index + 1} / {entries.length} · {entry.mediaKind.toUpperCase()} ·{' '}
+          {new Date(entry.createdAt).toISOString().slice(0, 10)}
+          {entry.withdrawn ? ' · WITHDRAWN' : ''}
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button type="button" disabled={index === 0} onClick={() => onIndexChange(index - 1)} style={btnStyle(index === 0)}>
+            ← Prev
+          </button>
+          <button
+            type="button"
+            disabled={index === entries.length - 1}
+            onClick={() => onIndexChange(index + 1)}
+            style={btnStyle(index === entries.length - 1)}
+          >
+            Next →
+          </button>
+          <button type="button" onClick={onClose} style={btnStyle(false)}>
+            Close (Esc)
+          </button>
+        </div>
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          padding: '0 0.9rem 0.9rem',
+        }}
+      >
+        {/* Image side */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            flex: '2 1 360px',
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.6rem',
+          }}
+        >
+          {loading ? (
+            <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text2)' }}>
+              LOADING…
+            </span>
+          ) : url && !imgError ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={url}
+              alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`}
+              onError={() => setImgError(true)}
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
+          ) : (
+            // Honest fallback: a video with no poster, a sign failure, or - the
+            // carry-forward - an original the browser cannot render (HEIC). The item
+            // stays identifiable, and where we have a URL it stays openable.
+            <div style={{ textAlign: 'center', maxWidth: 360 }}>
+              <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
+                {entry.mediaKind === 'video'
+                  ? 'No poster still — playback pending voice attestation.'
+                  : "This file's format can't be previewed in the browser."}
+              </p>
+              {url && (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono"
+                  style={{ ...btnStyle(false), display: 'inline-block', marginTop: 8, textDecoration: 'none' }}
+                >
+                  Open the original
+                </a>
+              )}
+            </div>
+          )}
+          {entry.mediaKind === 'video' && url && !imgError && (
+            <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.78rem' }}>
+              Poster still — playback pending voice attestation (image-only).
+            </p>
+          )}
+        </div>
+
+        {/* Tag panel side - scrollable so the form is always reachable. */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            flex: '1 1 280px',
+            minWidth: 0,
+            maxWidth: 460,
+            overflowY: 'auto',
+            background: 'var(--vault-s1)',
+            border: '1px solid var(--vault-border)',
+            borderRadius: 6,
+            padding: '0.9rem',
+          }}
+        >
+          <EntryDetailPanel entry={entry} members={members} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// R4-D1: the shared editable detail of an entry - provenance list + poster control + tag
+// form. Rendered both inside the corpus row's expand (EntryCard) AND alongside the full
+// image in quick-look (QuickLook): "you cannot tag what you cannot see." Owns the tag-form
+// and poster/correction writes; the compact row's withdraw/reinstate stay in EntryCard.
+function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: IngestMember[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // D0: commissioner set/replace poster for a video (the honest fallback when
-  // auto-extraction could not decode the file).
   const [posterBusy, setPosterBusy] = useState(false);
   const [posterMsg, setPosterMsg] = useState<string | null>(null);
+  const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
+  const [tagValue, setTagValue] = useState('');
+  const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
+  const [taggedMember, setTaggedMember] = useState('');
+  const [tagNote, setTagNote] = useState('');
+  const [supersedes, setSupersedes] = useState<string | null>(null);
 
-  // D3: the edit affordances (tag form + poster) collapse behind a toggle so a large
-  // corpus stays scannable; the default row is thumbnail + current tags + actions.
-  const [expanded, setExpanded] = useState(false);
-  // R3-D1: a thumb URL that fails to load (no rendition yet) falls back to the
-  // placeholder - never to the full original.
-  const [thumbFailed, setThumbFailed] = useState(false);
+  const memberName = (uid: string | null) =>
+    members.find((m) => m.memberUserId === uid)?.displayName ?? 'Unknown member';
+  const selectedMember = members.find((m) => m.memberUserId === taggedMember) ?? null;
 
   async function setPoster(img: File) {
     setPosterBusy(true);
@@ -1235,19 +1451,6 @@ function EntryCard({
       setPosterBusy(false);
     }
   }
-
-  // Tag-form state.
-  const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
-  const [tagValue, setTagValue] = useState('');
-  const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
-  const [taggedMember, setTaggedMember] = useState('');
-  const [tagNote, setTagNote] = useState('');
-  const [supersedes, setSupersedes] = useState<string | null>(null);
-
-
-  const memberName = (uid: string | null) =>
-    members.find((m) => m.memberUserId === uid)?.displayName ?? 'Unknown member';
-  const selectedMember = members.find((m) => m.memberUserId === taggedMember) ?? null;
 
   function resetTagForm() {
     setTagValue('');
@@ -1301,6 +1504,234 @@ function EntryCard({
     }
   }
 
+  function correct(tag: IngestTag) {
+    setTagKind(tag.tagKind);
+    setSupersedes(tag.id);
+    setError(null);
+    if (tag.tagKind === 'member_identification') {
+      setTaggedMember(tag.taggedMemberUserId ?? '');
+    } else {
+      setTagValue(tag.tagValue ?? '');
+      if (tag.tagKind === 'date' && tag.datePrecision) setDatePrecision(tag.datePrecision);
+    }
+  }
+
+  function describeTag(t: IngestTag): string {
+    if (t.tagKind === 'member_identification') {
+      const m = members.find((x) => x.memberUserId === t.taggedMemberUserId);
+      const grant = m ? (m.granted2a ? 'shown' : 'silent — no appearance grant') : 'silent';
+      return `${memberName(t.taggedMemberUserId)} (${grant})`;
+    }
+    if (t.tagKind === 'date') return `${t.tagValue} (${t.datePrecision})`;
+    return t.tagValue ?? '';
+  }
+
+  return (
+    <>
+      {entry.uploadNote && (
+        <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.82rem', margin: '0 0 0.6rem' }}>
+          {entry.uploadNote}
+        </p>
+      )}
+      {/* Current provenance, grouped. Honest gaps: kinds with no tag are absent. */}
+      {entry.tags.length > 0 ? (
+        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.6rem' }}>
+          {entry.tags.map((t) => (
+            <li
+              key={t.id}
+              className="font-ui"
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.8rem', padding: '0.2rem 0', color: 'var(--vault-text2)' }}
+            >
+              <span>
+                <span style={{ color: 'var(--vault-text3)' }}>{TAG_KIND_LABEL[t.tagKind]}: </span>
+                <span style={{ color: 'var(--vault-text)' }}>{describeTag(t)}</span>
+              </span>
+              {!entry.withdrawn && (
+                <button type="button" onClick={() => correct(t)} style={{ ...btnStyle(false), padding: '0.1rem 0.4rem' }}>
+                  Correct
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.78rem', margin: '0 0 0.6rem' }}>
+          No tags yet.
+        </p>
+      )}
+      {!entry.withdrawn && (
+        <>
+          {/* D0: video poster - set/replace by hand when auto-extraction could not
+              read the file. Honest gap: a missing poster says so, not nothing. */}
+          {entry.mediaKind === 'video' && (
+            <div style={{ marginBottom: '0.9rem' }}>
+              <p
+                className="font-ui"
+                style={{ fontSize: '0.78rem', color: entry.hasPoster ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
+              >
+                {entry.hasPoster
+                  ? 'Poster still set — the room shows it for this video.'
+                  : 'No still yet — the room shows a placeholder. Auto-extraction could not read this video; set a still by hand.'}
+              </p>
+              <label className="font-mono" style={{ ...btnStyle(posterBusy), display: 'inline-block', marginTop: 6 }}>
+                {posterBusy ? 'Saving…' : entry.hasPoster ? 'Replace poster' : 'Set poster'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={posterBusy}
+                  onChange={(e) => {
+                    const img = e.target.files?.[0];
+                    if (img) void setPoster(img);
+                    e.target.value = '';
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {posterMsg && (
+                <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
+                  {posterMsg}
+                </p>
+              )}
+            </div>
+          )}
+          {supersedes && (
+            <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', marginBottom: 6 }}>
+              CORRECTING AN EARLIER TAG — this supersedes it
+            </p>
+          )}
+          {/* R3-D4: auto-fit collapses the form to a single column on a phone
+              (no media query needed - intrinsic sizing), two columns where it fits. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.6rem' }}>
+            <div>
+              <label className="font-mono" style={labelStyle}>Kind</label>
+              <select
+                value={tagKind}
+                onChange={(e) => {
+                  setTagKind(e.target.value as MediaProvenanceTagKind);
+                  setSupersedes(null);
+                }}
+                className="font-ui"
+                style={{ ...inputStyle, marginTop: 4 }}
+              >
+                {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
+                  <option key={k} value={k}>{TAG_KIND_LABEL[k]}</option>
+                ))}
+              </select>
+            </div>
+
+            {tagKind === 'member_identification' ? (
+              <div>
+                <label className="font-mono" style={labelStyle}>Member</label>
+                <select
+                  value={taggedMember}
+                  onChange={(e) => setTaggedMember(e.target.value)}
+                  className="font-ui"
+                  style={{ ...inputStyle, marginTop: 4 }}
+                >
+                  <option value="">Choose…</option>
+                  {members.map((m) => (
+                    <option key={m.memberUserId} value={m.memberUserId}>{m.displayName}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="font-mono" style={labelStyle}>
+                  {tagKind === 'date' ? 'Date value' : 'Value'}
+                </label>
+                <input
+                  type="text"
+                  value={tagValue}
+                  onChange={(e) => setTagValue(e.target.value)}
+                  placeholder={tagKind === 'date' ? 'e.g. 1998 or 1998-09-04' : ''}
+                  className="font-ui"
+                  style={{ ...inputStyle, marginTop: 4 }}
+                />
+              </div>
+            )}
+
+            {tagKind === 'date' && (
+              <div>
+                <label className="font-mono" style={labelStyle}>Precision</label>
+                <select
+                  value={datePrecision}
+                  onChange={(e) => setDatePrecision(e.target.value as MediaDatePrecision)}
+                  className="font-ui"
+                  style={{ ...inputStyle, marginTop: 4 }}
+                >
+                  {DATE_PRECISIONS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="font-mono" style={labelStyle}>Note (optional)</label>
+              <input
+                type="text"
+                value={tagNote}
+                onChange={(e) => setTagNote(e.target.value)}
+                className="font-ui"
+                style={{ ...inputStyle, marginTop: 4 }}
+              />
+            </div>
+          </div>
+
+          {/* Read-only 2a grant state beside member identification (W.6 5). */}
+          {tagKind === 'member_identification' && selectedMember && (
+            <p className="font-ui" style={{ fontSize: '0.78rem', marginTop: 6, color: selectedMember.granted2a ? 'var(--vault-gold)' : 'var(--vault-text2)' }}>
+              {selectedMember.granted2a
+                ? 'This member has granted appearance — the identification will show in the room.'
+                : 'This member has not granted appearance — the identification is recorded but stays silent in the room until they grant it.'}
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem' }}>
+            <button type="button" disabled={busy} onClick={submitTag} style={btnStyle(busy)}>
+              {busy ? 'Saving…' : supersedes ? 'Save correction' : 'Add tag'}
+            </button>
+            {supersedes && (
+              <button type="button" disabled={busy} onClick={resetTagForm} style={btnStyle(busy)}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {error && (
+        <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+function EntryCard({
+  entry,
+  members,
+  selectable,
+  selected,
+  onToggleSelect,
+  onOpen,
+}: {
+  entry: IngestEntry;
+  members: IngestMember[];
+  selectable: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onOpen: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // D3: the edit affordances collapse behind a toggle so a large corpus stays scannable.
+  const [expanded, setExpanded] = useState(false);
+  // R3-D1: a thumb URL that fails to load (no rendition yet) falls back to the
+  // placeholder - never to the full original.
+  const [thumbFailed, setThumbFailed] = useState(false);
+
   async function withdraw() {
     if (!confirm('Withdraw this item from display? The record stands; it stops showing.')) return;
     setBusy(true);
@@ -1347,29 +1778,6 @@ function EntryCard({
     }
   }
 
-  function correct(tag: IngestTag) {
-    setExpanded(true); // D3: Correct on a collapsed row reveals the form.
-    setTagKind(tag.tagKind);
-    setSupersedes(tag.id);
-    setError(null);
-    if (tag.tagKind === 'member_identification') {
-      setTaggedMember(tag.taggedMemberUserId ?? '');
-    } else {
-      setTagValue(tag.tagValue ?? '');
-      if (tag.tagKind === 'date' && tag.datePrecision) setDatePrecision(tag.datePrecision);
-    }
-  }
-
-  function describeTag(t: IngestTag): string {
-    if (t.tagKind === 'member_identification') {
-      const m = members.find((x) => x.memberUserId === t.taggedMemberUserId);
-      const grant = m ? (m.granted2a ? 'shown' : 'silent — no appearance grant') : 'silent';
-      return `${memberName(t.taggedMemberUserId)} (${grant})`;
-    }
-    if (t.tagKind === 'date') return `${t.tagValue} (${t.datePrecision})`;
-    return t.tagValue ?? '';
-  }
-
   return (
     <article style={{ ...cardStyle, padding: '0.55rem 0.7rem', opacity: entry.withdrawn ? 0.6 : 1, outline: selected ? '1px solid var(--vault-gold)' : 'none' }}>
       {/* D2 (round 2): compact default row - thumbnail + title/note + kind/date ONLY.
@@ -1384,17 +1792,25 @@ function EntryCard({
             style={{ width: 16, height: 16, accentColor: 'var(--vault-gold)', cursor: 'pointer', flexShrink: 0 }}
           />
         )}
-        <div
+        {/* R4-D1: the thumbnail is a quick-look trigger - tap, or Enter/Space when
+            focused (native button). Opens the full image + tag panel. */}
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label="Open quick-look"
           style={{
             width: 52,
             height: 52,
             flexShrink: 0,
+            padding: 0,
+            border: 'none',
             background: 'var(--vault-s3)',
             borderRadius: 4,
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            cursor: 'pointer',
           }}
         >
           {entry.thumbUrl && !thumbFailed ? (
@@ -1412,7 +1828,7 @@ function EntryCard({
               {entry.mediaKind.toUpperCase()}
             </span>
           )}
-        </div>
+        </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="font-mono" style={labelStyle}>
             {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
@@ -1449,179 +1865,7 @@ function EntryCard({
           affordances. Available for withdrawn items too, so their tags stay viewable. */}
       {expanded && (
         <div style={{ marginTop: '0.7rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.7rem' }}>
-          {/* D2 (round 2): the compact row ellipsizes the note; restore it in full here
-              so a long note stays readable, not just hover-able. */}
-          {entry.uploadNote && (
-            <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.82rem', margin: '0 0 0.6rem' }}>
-              {entry.uploadNote}
-            </p>
-          )}
-          {/* Current provenance, grouped. Honest gaps: kinds with no tag are absent. */}
-          {entry.tags.length > 0 ? (
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.6rem' }}>
-              {entry.tags.map((t) => (
-                <li
-                  key={t.id}
-                  className="font-ui"
-                  style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.8rem', padding: '0.2rem 0', color: 'var(--vault-text2)' }}
-                >
-                  <span>
-                    <span style={{ color: 'var(--vault-text3)' }}>{TAG_KIND_LABEL[t.tagKind]}: </span>
-                    <span style={{ color: 'var(--vault-text)' }}>{describeTag(t)}</span>
-                  </span>
-                  {!entry.withdrawn && (
-                    <button type="button" onClick={() => correct(t)} style={{ ...btnStyle(false), padding: '0.1rem 0.4rem' }}>
-                      Correct
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.78rem', margin: '0 0 0.6rem' }}>
-              No tags yet.
-            </p>
-          )}
-          {!entry.withdrawn && (
-            <>
-              {/* D0: video poster - set/replace by hand when auto-extraction could not
-                  read the file. Honest gap: a missing poster says so, not nothing. */}
-              {entry.mediaKind === 'video' && (
-                <div style={{ marginBottom: '0.9rem' }}>
-                  <p
-                    className="font-ui"
-                    style={{ fontSize: '0.78rem', color: entry.hasPoster ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
-                  >
-                    {entry.hasPoster
-                      ? 'Poster still set — the room shows it for this video.'
-                      : 'No still yet — the room shows a placeholder. Auto-extraction could not read this video; set a still by hand.'}
-                  </p>
-                  <label className="font-mono" style={{ ...btnStyle(posterBusy), display: 'inline-block', marginTop: 6 }}>
-                    {posterBusy ? 'Saving…' : entry.hasPoster ? 'Replace poster' : 'Set poster'}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      disabled={posterBusy}
-                      onChange={(e) => {
-                        const img = e.target.files?.[0];
-                        if (img) void setPoster(img);
-                        e.target.value = '';
-                      }}
-                      style={{ display: 'none' }}
-                    />
-                  </label>
-                  {posterMsg && (
-                    <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
-                      {posterMsg}
-                    </p>
-                  )}
-                </div>
-              )}
-              {supersedes && (
-                <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', marginBottom: 6 }}>
-                  CORRECTING AN EARLIER TAG — this supersedes it
-                </p>
-              )}
-              {/* R3-D4: auto-fit collapses the form to a single column on a phone
-                  (no media query needed - intrinsic sizing), two columns where it fits. */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.6rem' }}>
-                <div>
-                  <label className="font-mono" style={labelStyle}>Kind</label>
-                  <select
-                    value={tagKind}
-                    onChange={(e) => {
-                      setTagKind(e.target.value as MediaProvenanceTagKind);
-                      setSupersedes(null);
-                    }}
-                    className="font-ui"
-                    style={{ ...inputStyle, marginTop: 4 }}
-                  >
-                    {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
-                      <option key={k} value={k}>{TAG_KIND_LABEL[k]}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {tagKind === 'member_identification' ? (
-                  <div>
-                    <label className="font-mono" style={labelStyle}>Member</label>
-                    <select
-                      value={taggedMember}
-                      onChange={(e) => setTaggedMember(e.target.value)}
-                      className="font-ui"
-                      style={{ ...inputStyle, marginTop: 4 }}
-                    >
-                      <option value="">Choose…</option>
-                      {members.map((m) => (
-                        <option key={m.memberUserId} value={m.memberUserId}>{m.displayName}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="font-mono" style={labelStyle}>
-                      {tagKind === 'date' ? 'Date value' : 'Value'}
-                    </label>
-                    <input
-                      type="text"
-                      value={tagValue}
-                      onChange={(e) => setTagValue(e.target.value)}
-                      placeholder={tagKind === 'date' ? 'e.g. 1998 or 1998-09-04' : ''}
-                      className="font-ui"
-                      style={{ ...inputStyle, marginTop: 4 }}
-                    />
-                  </div>
-                )}
-
-                {tagKind === 'date' && (
-                  <div>
-                    <label className="font-mono" style={labelStyle}>Precision</label>
-                    <select
-                      value={datePrecision}
-                      onChange={(e) => setDatePrecision(e.target.value as MediaDatePrecision)}
-                      className="font-ui"
-                      style={{ ...inputStyle, marginTop: 4 }}
-                    >
-                      {DATE_PRECISIONS.map((p) => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label className="font-mono" style={labelStyle}>Note (optional)</label>
-                  <input
-                    type="text"
-                    value={tagNote}
-                    onChange={(e) => setTagNote(e.target.value)}
-                    className="font-ui"
-                    style={{ ...inputStyle, marginTop: 4 }}
-                  />
-                </div>
-              </div>
-
-              {/* Read-only 2a grant state beside member identification (W.6 5). */}
-              {tagKind === 'member_identification' && selectedMember && (
-                <p className="font-ui" style={{ fontSize: '0.78rem', marginTop: 6, color: selectedMember.granted2a ? 'var(--vault-gold)' : 'var(--vault-text2)' }}>
-                  {selectedMember.granted2a
-                    ? 'This member has granted appearance — the identification will show in the room.'
-                    : 'This member has not granted appearance — the identification is recorded but stays silent in the room until they grant it.'}
-                </p>
-              )}
-
-              <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem' }}>
-                <button type="button" disabled={busy} onClick={submitTag} style={btnStyle(busy)}>
-                  {busy ? 'Saving…' : supersedes ? 'Save correction' : 'Add tag'}
-                </button>
-                {supersedes && (
-                  <button type="button" disabled={busy} onClick={resetTagForm} style={btnStyle(busy)}>
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+          <EntryDetailPanel entry={entry} members={members} />
         </div>
       )}
 

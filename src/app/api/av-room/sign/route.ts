@@ -20,17 +20,21 @@ export const dynamic = 'force-dynamic';
 const SIGNED_URL_TTL_SECONDS = 120;
 
 export async function POST(req: NextRequest) {
-  let body: { mediaEntryId?: unknown };
+  let body: { mediaEntryId?: unknown; variant?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
   }
 
-  const { mediaEntryId } = body;
+  const { mediaEntryId, variant } = body;
   if (typeof mediaEntryId !== 'string' || mediaEntryId.length === 0) {
     return NextResponse.json({ error: 'mediaEntryId is required' }, { status: 400 });
   }
+  // R4-D1 quick-look: 'original' (the default - the full-resolution photo) or 'poster'
+  // (a video's still). A video's ORIGINAL is never signed for display - the image-only /
+  // no-playback line holds; quick-look shows a video's poster, never the .mov.
+  const wantPoster = variant === 'poster';
 
   const supabase = await createServerClient();
   const {
@@ -41,18 +45,24 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: entry } = (await admin
     .from('media_entries')
-    .select('league_id, storage_path')
+    .select('league_id, storage_path, media_kind')
     .eq('id', mediaEntryId)
-    .maybeSingle()) as { data: { league_id: string; storage_path: string } | null };
+    .maybeSingle()) as {
+    data: { league_id: string; storage_path: string; media_kind: string } | null;
+  };
   if (!entry) return NextResponse.json({ error: 'Media entry not found' }, { status: 404 });
 
   if (!(await isLeagueMember(admin, entry.league_id, user.id))) {
     return NextResponse.json({ error: 'Not a member of this league' }, { status: 403 });
   }
 
+  // A video may only ever be signed as its poster sibling, never the original bytes.
+  const folder = entry.storage_path.slice(0, entry.storage_path.lastIndexOf('/'));
+  const path = wantPoster || entry.media_kind === 'video' ? `${folder}/poster.jpg` : entry.storage_path;
+
   const { data: signed, error: signErr } = await admin.storage
     .from('league-media')
-    .createSignedUrl(entry.storage_path, SIGNED_URL_TTL_SECONDS);
+    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
   if (signErr || !signed) {
     return NextResponse.json({ error: 'Could not sign URL' }, { status: 502 });
   }
