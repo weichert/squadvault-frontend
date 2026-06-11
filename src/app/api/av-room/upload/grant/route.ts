@@ -42,6 +42,14 @@ export async function POST(req: NextRequest) {
   if (typeof mime !== 'string') {
     return NextResponse.json({ error: 'mime is required' }, { status: 400 });
   }
+  // D6 backstop: HEIC/HEIF gets a specific, actionable reason (browsers can't render
+  // it) rather than the generic unsupported-type message; the client refuses it first.
+  if (mime === 'image/heic' || mime === 'image/heif') {
+    return NextResponse.json(
+      { error: 'HEIC/HEIF photos are not supported. Export the photo as JPEG and upload that.' },
+      { status: 415 },
+    );
+  }
   const ext = EXT_BY_MIME[mime];
   if (!ext) {
     return NextResponse.json({ error: `Unsupported file type: ${mime || 'unknown'}` }, { status: 400 });

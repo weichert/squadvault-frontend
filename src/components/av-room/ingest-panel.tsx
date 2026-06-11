@@ -269,9 +269,24 @@ function UploadForm({ leagueId }: { leagueId: string }) {
   // here, with the exact size and limit, and never leaves the browser (D1).
   const oversized = !!file && file.size > MAX_UPLOAD_BYTES;
 
+  // D6 HEIC honesty: iPhone photos default to HEIC/HEIF, which browsers can't render
+  // in an <img>, so storing one would only yield a broken thumbnail. Refuse it here
+  // with an explicit instruction rather than letting it look accepted and fail at the
+  // grant route. (Some browsers leave file.type empty for HEIC, so also sniff the
+  // extension.) Conversion is deliberately out of scope.
+  const isHeic =
+    !!file &&
+    (file.type === 'image/heic' ||
+      file.type === 'image/heif' ||
+      /\.(heic|heif)$/i.test(file.name));
+
   async function submit() {
     if (!file || !kind) {
       setError('Choose an image or video file.');
+      return;
+    }
+    if (isHeic) {
+      setError('HEIC photos are not supported. On your phone, export or share the photo as JPEG, then upload that.');
       return;
     }
     if (oversized) {
@@ -361,11 +376,16 @@ function UploadForm({ leagueId }: { leagueId: string }) {
           style={{ ...inputStyle, padding: '0.4rem' }}
         />
         {file && (
-          <p className="font-mono" style={{ ...labelStyle, color: kind && !oversized ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
+          <p className="font-mono" style={{ ...labelStyle, color: kind && !oversized && !isHeic ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
             {kind ? `${kind.toUpperCase()} · ${file.name}` : 'UNSUPPORTED FILE TYPE'}
           </p>
         )}
-        {oversized && file && (
+        {isHeic && file && (
+          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
+            HEIC photos are not supported. On your phone, export or share the photo as JPEG, then upload that.
+          </p>
+        )}
+        {oversized && file && !isHeic && (
           <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
             This file is {formatSize(file.size)}; the limit is {MAX_UPLOAD_LABEL}. Choose a smaller file.
           </p>
@@ -383,7 +403,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
             style={{ ...inputStyle, marginTop: 4 }}
           />
         </div>
-        <button type="button" disabled={busy || !file || !kind || oversized} onClick={submit} style={btnStyle(busy || !file || !kind || oversized)}>
+        <button type="button" disabled={busy || !file || !kind || oversized || isHeic} onClick={submit} style={btnStyle(busy || !file || !kind || oversized || isHeic)}>
           {busy ? 'Uploading…' : 'Upload'}
         </button>
         {error && (
