@@ -19,6 +19,7 @@ import type { Metadata } from 'next';
 import { getLeague, getViewer } from '@/lib/league';
 import { createAdminClient } from '@/lib/supabase/server';
 import { loadRoomState, isLeagueMember, type RoomEntry } from '@/lib/av-room';
+import { RoomImage } from '@/components/av-room/room-image';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,25 +110,27 @@ export default async function AvRoomPage({ params }: Props) {
   const videos = room.entries.filter((re) => re.entry.media_kind === 'video');
   const ordered = [...photos, ...videos];
 
-  // Mint short-TTL signed URLs for photos inline (server-side; no public read).
+  // R3-D1: the room is a list surface, so it serves the small thumb.jpg rendition for
+  // photos - NEVER the full original (that is reserved for quick-look and downloads).
+  // The sibling path is signed unconditionally; a missing rendition simply fails to
+  // load and RoomImage falls back to a placeholder (no per-folder list on the render
+  // path, no broken image, no original).
   const photoUrl = new Map<string, string>();
   for (const re of photos) {
+    const sp = re.entry.storage_path;
+    const folder = sp.slice(0, sp.lastIndexOf('/'));
     const { data } = await admin.storage
       .from('league-media')
-      .createSignedUrl(re.entry.storage_path, PHOTO_URL_TTL_SECONDS);
+      .createSignedUrl(`${folder}/thumb.jpg`, PHOTO_URL_TTL_SECONDS);
     if (data) photoUrl.set(re.entry.id, data.signedUrl);
   }
 
-  // A video may carry a derived poster still (D3) at the by-convention sibling path
-  // {prefix}/poster.jpg. List the entry's folder to confirm the poster exists, then
-  // sign it like a photo. Videos without a poster simply stay absent here and fall
-  // back to the placeholder - no playback, no 2b read.
+  // A video carries a derived poster still ({prefix}/poster.jpg). Sign it the same way;
+  // RoomImage falls back to the honest "playback pending" placeholder when absent.
   const videoPosterUrl = new Map<string, string>();
   for (const re of videos) {
     const sp = re.entry.storage_path;
     const folder = sp.slice(0, sp.lastIndexOf('/'));
-    const { data: listed } = await admin.storage.from('league-media').list(folder);
-    if (!listed?.some((o) => o.name === 'poster.jpg')) continue;
     const { data } = await admin.storage
       .from('league-media')
       .createSignedUrl(`${folder}/poster.jpg`, PHOTO_URL_TTL_SECONDS);
@@ -178,34 +181,15 @@ export default async function AvRoomPage({ params }: Props) {
                       justifyContent: 'center',
                     }}
                   >
-                    {re.entry.media_kind === 'photo' && url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={url}
-                        alt={re.entry.upload_note ?? 'Archival photograph'}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : re.entry.media_kind === 'video' && posterUrl ? (
-                      // Video poster still (D3): a derived image rendition, image-only.
-                      // No <video> and no playback - that stays deferred to the voice
-                      // attestation gate. This is an image, not a 2b read.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={posterUrl}
-                        alt={re.entry.upload_note ?? 'Archival video — poster still'}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      // Video without a poster: present but not playable (deferred).
-                      <div style={{ textAlign: 'center', padding: '1rem' }}>
-                        <span className="font-mono" style={{ fontSize: '10px', letterSpacing: '0.12em', color: 'var(--vault-text2)' }}>
-                          VIDEO
-                        </span>
-                        <p className="font-ui" style={{ fontSize: '0.72rem', color: 'var(--vault-text3)', marginTop: 6, lineHeight: 1.4 }}>
-                          Playback pending voice attestation
-                        </p>
-                      </div>
-                    )}
+                    <RoomImage
+                      kind={re.entry.media_kind}
+                      url={re.entry.media_kind === 'photo' ? (url ?? null) : (posterUrl ?? null)}
+                      alt={
+                        re.entry.media_kind === 'photo'
+                          ? (re.entry.upload_note ?? 'Archival photograph')
+                          : (re.entry.upload_note ?? 'Archival video — poster still')
+                      }
+                    />
                   </div>
                   <figcaption>
                     <ProvenancePanel re={re} />

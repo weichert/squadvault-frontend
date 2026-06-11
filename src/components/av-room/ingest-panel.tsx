@@ -196,6 +196,9 @@ export function IngestPanel({
             onReset={() => setFilters(EMPTY_FILTERS)}
           />
         )}
+        {entries.length > 0 && (
+          <ThumbnailBackfill leagueId={leagueId} onDone={() => router.refresh()} />
+        )}
         {selectedIds.length > 0 && (
           <BatchTagBar
             selectedIds={selectedIds}
@@ -336,6 +339,69 @@ function CorpusFilters({
   );
 }
 
+// R3-D1 backfill: generate the missing thumb.jpg renditions for the existing corpus.
+// A one-off commissioner maintenance action - it asks the server which photos lack a
+// thumb (and gets a signed URL of each original), pulls each into a canvas, downscales,
+// and POSTs the small thumb back. Deterministic, bounded, and idempotent: photos that
+// already have a thumb are never revisited.
+function ThumbnailBackfill({ leagueId, onDone }: { leagueId: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setMsg('Checking for photos without a thumbnail…');
+    try {
+      const res = await fetch(`/api/av-room/thumb?leagueId=${encodeURIComponent(leagueId)}`);
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setMsg(j.error ?? 'Could not check thumbnails.');
+        return;
+      }
+      const { targets } = (await res.json()) as { targets: { mediaEntryId: string; originalUrl: string }[] };
+      if (targets.length === 0) {
+        setMsg('Every photo already has a thumbnail.');
+        return;
+      }
+      let done = 0;
+      let failed = 0;
+      for (const t of targets) {
+        setMsg(`Generating thumbnails… ${done + failed}/${targets.length}`);
+        const blob = await imageToThumbBlob(t.originalUrl);
+        if (!blob) {
+          failed += 1;
+          continue;
+        }
+        const form = new FormData();
+        form.set('mediaEntryId', t.mediaEntryId);
+        form.set('thumb', blob, 'thumb.jpg');
+        const up = await fetch('/api/av-room/thumb', { method: 'POST', body: form });
+        if (up.ok) done += 1;
+        else failed += 1;
+      }
+      setMsg(`Generated ${done} thumbnail${done === 1 ? '' : 's'}${failed ? `, ${failed} could not be read` : ''}.`);
+      if (done > 0) onDone();
+    } catch {
+      setMsg('Could not generate thumbnails.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+      <button type="button" disabled={busy} onClick={run} className="font-mono" style={{ ...btnStyle(busy), padding: '0.35rem 0.6rem' }}>
+        {busy ? 'Working…' : 'Generate missing thumbnails'}
+      </button>
+      {msg && (
+        <span className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.78rem' }}>
+          {msg}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RoomRatification({ leagueId, ratified }: { leagueId: string; ratified: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -455,6 +521,62 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
   });
 }
 
+// R3-D1: generate a small JPEG thumbnail (~400px long edge) from an image source, in
+// the browser, via canvas. Best-effort and side-effect-free on failure (resolves
+// null). Reused by the upload path (the commissioner's own local file) and by backfill
+// (an existing original pulled from a signed URL). The original is never modified
+// (6.9); the thumb is a derived, regenerable rendition stored beside it as thumb.jpg.
+const THUMB_MAX_EDGE = 400;
+
+function imageToThumbBlob(src: string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined') {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    // Signed Storage URLs are cross-origin; request anonymously so the canvas is not
+    // tainted and toBlob can read it. (For a same-origin object URL this is a no-op.)
+    img.crossOrigin = 'anonymous';
+    let settled = false;
+    const timeout = setTimeout(() => finish(null), 12000);
+    function finish(blob: Blob | null) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(blob);
+    }
+    img.onerror = () => finish(null);
+    img.onload = () => {
+      try {
+        const { naturalWidth: w0, naturalHeight: h0 } = img;
+        if (!w0 || !h0) return finish(null);
+        const scale = Math.min(1, THUMB_MAX_EDGE / Math.max(w0, h0));
+        const w = Math.max(1, Math.round(w0 * scale));
+        const h = Math.max(1, Math.round(h0 * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return finish(null);
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((b) => finish(b), 'image/jpeg', 0.78);
+      } catch {
+        finish(null);
+      }
+    };
+    img.src = src;
+  });
+}
+
+function fileToThumbBlob(file: File): Promise<Blob | null> {
+  const url = URL.createObjectURL(file);
+  return imageToThumbBlob(url).then((b) => {
+    URL.revokeObjectURL(url);
+    return b;
+  });
+}
+
 // D6 HEIC honesty (module-level so single + queue paths share it). iPhone photos
 // default to HEIC/HEIF, which browsers can't render in an <img>, so storing one only
 // yields a broken thumbnail. Some browsers leave file.type empty, so also sniff ext.
@@ -521,6 +643,12 @@ async function uploadOneFile(file: File, leagueId: string, note: string): Promis
   if (kind === 'video') {
     const poster = await extractPosterBlob(file);
     if (poster) finalizeForm.set('poster', poster, 'poster.jpg');
+  } else {
+    // R3-D1: a photo carries its own small thumb rendition, generated from the local
+    // file (no second round-trip for the original). Best-effort: if it fails, the
+    // record still finalizes and backfill can generate the thumb later.
+    const thumb = await fileToThumbBlob(file);
+    if (thumb) finalizeForm.set('thumb', thumb, 'thumb.jpg');
   }
   const finRes = await fetch('/api/av-room/upload/finalize', { method: 'POST', body: finalizeForm });
   if (!finRes.ok) {
@@ -843,6 +971,9 @@ function EntryCard({
   // D3: the edit affordances (tag form + poster) collapse behind a toggle so a large
   // corpus stays scannable; the default row is thumbnail + current tags + actions.
   const [expanded, setExpanded] = useState(false);
+  // R3-D1: a thumb URL that fails to load (no rendition yet) falls back to the
+  // placeholder - never to the full original.
+  const [thumbFailed, setThumbFailed] = useState(false);
 
   async function setPoster(img: File) {
     setPosterBusy(true);
@@ -1026,10 +1157,16 @@ function EntryCard({
             justifyContent: 'center',
           }}
         >
-          {entry.thumbUrl ? (
-            // Photo -> its original; video -> the SAME poster the room reads. Image-only.
+          {entry.thumbUrl && !thumbFailed ? (
+            // Photo -> its thumb.jpg rendition; video -> the SAME poster the room reads.
+            // Image-only, and never the full original (R3-D1).
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={entry.thumbUrl} alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img
+              src={entry.thumbUrl}
+              alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`}
+              onError={() => setThumbFailed(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           ) : (
             <span className="font-mono" style={{ fontSize: '9px', letterSpacing: '0.1em', color: 'var(--vault-text3)' }}>
               {entry.mediaKind.toUpperCase()}

@@ -130,5 +130,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // R3-D1 thumb (photo only), the same by-convention-sibling pattern as the poster:
+  // a small derived rendition the list surfaces serve instead of the full original.
+  // Written AFTER the record, best-effort - a missing thumb is backfillable and the
+  // list falls back to a placeholder, never the multi-MB original.
+  if (mediaKind === 'photo') {
+    const thumb = form.get('thumb');
+    if (thumb instanceof File && thumb.size > 0) {
+      const thumbBytes = new Uint8Array(await thumb.arrayBuffer());
+      await admin.storage
+        .from('league-media')
+        .upload(`${folder}/thumb.jpg`, thumbBytes, { contentType: 'image/jpeg', upsert: false });
+    }
+  }
+
   return NextResponse.json({ id: mediaEntryId, storage_path: storagePath });
 }
