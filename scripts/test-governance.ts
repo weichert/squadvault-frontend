@@ -6,6 +6,7 @@
 // A governance test failure is BLOCKING — it does not get merged with a note.
 
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
 import ws from 'ws';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const wsTransport = ws as any;
@@ -784,6 +785,64 @@ async function g15() {
   await serviceClient.from('media_display_withdrawals').delete().eq('id', seeded.id);
 }
 
+// ── G16: league-media storage write is commissioner-only (RLS) — the
+//        defense-in-depth layer under D-W1-V1 remedy B (Spec 5.1 Amendment 1) ──
+async function g16() {
+  console.log('\nG16 — league-media storage write is commissioner-only (RLS, W.1 remedy B)');
+
+  // Under Amendment 1 the byte write moves to a client-direct upload under a
+  // server-minted grant; the grant route's commissioner check + the server-chosen
+  // path are the PRIMARY boundary. storage.objects RLS (league_media_commissioner_insert)
+  // remains the defense-in-depth layer: a non-commissioner has NO direct write path
+  // into league-media, regardless of prefix. Anon is the strongest non-commissioner.
+  const bytes = new Uint8Array([0x00]);
+
+  // Confirm the private bucket exists here via a service-role probe (service bypasses
+  // RLS). If it is not provisioned in this environment, skip rather than false-pass
+  // on a "bucket not found" error that looks like a denial.
+  const probePath = `${DEMO_LEAGUE_ID}/${randomUUID()}/probe.bin`;
+  const { error: probeErr } = await serviceClient.storage
+    .from('league-media')
+    .upload(probePath, bytes, { contentType: 'application/octet-stream', upsert: false });
+  if (probeErr) {
+    console.log('     (skip G16: league-media bucket not provisioned in this environment)');
+    return;
+  }
+  await serviceClient.storage.from('league-media').remove([probePath]);
+
+  // Anon cannot write an object into league-media (its own demo prefix)...
+  const anonPath = `${DEMO_LEAGUE_ID}/${randomUUID()}/original.jpg`;
+  const { data: anonData, error: anonErr } = await anonClient.storage
+    .from('league-media')
+    .upload(anonPath, bytes, { contentType: 'image/jpeg', upsert: false });
+  if (!anonData && anonErr) {
+    pass('G16: Anon cannot write league-media objects (storage RLS enforced)');
+  } else {
+    fail('G16', 'Anon wrote an object into league-media — STORAGE RLS FAILURE');
+    await serviceClient.storage.from('league-media').remove([anonPath]);
+  }
+
+  // ...nor into an arbitrary other league prefix it has no claim to (the boundary is
+  // not specific to one league id).
+  const otherPath = `${randomUUID()}/${randomUUID()}/original.jpg`;
+  const { data: otherData, error: otherErr } = await anonClient.storage
+    .from('league-media')
+    .upload(otherPath, bytes, { contentType: 'image/jpeg', upsert: false });
+  if (!otherData && otherErr) {
+    pass('G16: Anon cannot write an arbitrary league-media prefix (storage RLS enforced)');
+  } else {
+    fail('G16', 'Anon wrote into an arbitrary league-media prefix — STORAGE RLS FAILURE');
+    await serviceClient.storage.from('league-media').remove([otherPath]);
+  }
+
+  // NOTE (harness limitation, consistent with G10-G15): the route-level cross-league
+  // MINT guarantee — a commissioner of league X cannot obtain a grant for league Y —
+  // is enforced in /api/av-room/upload/grant by isLeagueCommissioner(leagueId) + the
+  // server-chosen path (Amendment 1 clauses a-b). That is an authenticated-route
+  // assertion; this anon-RLS harness covers the storage defense-in-depth layer above,
+  // and the founder click-through covers the authed-route path.
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -803,6 +862,7 @@ async function main() {
   await g13();
   await g14();
   await g15();
+  await g16();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);
