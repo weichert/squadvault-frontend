@@ -15,6 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   Database,
   MediaEntry,
+  MediaKind,
   MediaProvenanceTagEvent,
   MediaProvenanceTagKind,
   MediaDatePrecision,
@@ -43,6 +44,29 @@ export const VALUE_REQUIRED_KINDS: MediaProvenanceTagKind[] = [
 // 2a (media_appearance) is the consent category that gates identified display
 // (W.1 spec 5.3 / contract card 7.2). Named here so the gate reads one constant.
 export const IDENTIFIED_DISPLAY_CATEGORY = 'media_appearance' as const;
+
+// Allowed content types -> stored file extension. Deliberately small and explicit;
+// the original bytes are retained as-is (6.9), so this only governs the key's ext.
+// Shared by the grant + finalize routes so they agree on the server-chosen path.
+export const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+};
+const PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const VIDEO_MIMES = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+
+// The media_kind a mime belongs to, or null if unsupported - so the declared kind
+// can be checked against the file's actual type (no photo bytes filed as video).
+export function mediaKindForMime(mime: string): MediaKind | null {
+  if (PHOTO_MIMES.has(mime)) return 'photo';
+  if (VIDEO_MIMES.has(mime)) return 'video';
+  return null;
+}
 
 type AdminClient = SupabaseClient<Database>;
 
