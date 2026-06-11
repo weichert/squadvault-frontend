@@ -34,6 +34,8 @@ Trophy Room, members (stub), and the full Commissioner Founding Session.
 | M4 | Surface surge: audience-split rendering, Trophy Room, Part VIII nav, role-aware 403, community section 7.1, F1 Rivalry Chronicle | Done | `97dd41c`, `8d0ae36`, `98b0724`, `8b7ba23`, `0bcf7fb`, `64d18ad`, `9e9b953`, `4f2e4e4`, `57bb1d8` |
 | M5 | Commissioner Founding Session (State 3) + edge cases (F-4) | Done | `2012e0d`..`bbfc1c0`, `f68bc4a`..`d876d84` |
 | Post-M5 | Deploy recovery + hardening: login Suspense build-fix, CI, `.nvmrc`, `vercel.json` framework guard, continuity scaffold | In progress | `b4219a0`, `397c215`, + this scaffold |
+| W.6 | Member consent (D-V/D-X): `member_consent_events` foundation + member consent panel + write path; `founding_sessions.consent` reinterpreted as league-defaults layer | Done | `d58191b`, `06cf568`, `6c2ed32`, `248895c` |
+| W.1 | A/V Room **Increment 1**: fail-closed room, photo ingest, five-kind provenance tagging, vacuous-tag rejection, correction-by-supersession, ratification, withdrawal, honest gaps; video present-but-not-playable (deferred) | Inc 1 done; video + member-testimony deferred | `c21e858`, `df79a4f`, `c284053`, `7eee29d`, `65da2e6` |
 
 Milestone numbering past M3 was assigned retroactively (work shipped without
 labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
@@ -46,6 +48,22 @@ labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
 - **Voice bridge** — founding Voice Profile -> engine recap voice. Cross-repo;
   build only when deliberately designed. (Engine never reads
   `voice_profile_id` today.)
+- **A/V Room — member testimony (Increment 2)** — build-gated on **E2.3**
+  (member<->franchise identity linkage). No member-facing write path exists yet;
+  the 6.6 fail-closed 2a-silence path is structurally unexercisable until a
+  franchise carries a linked `member_user_id` (spec 8.1 anchors the first live
+  test there). See `_observations/OBSERVATIONS_2026_06_10_AV_ROOM_INCREMENT_1_CLICKTHROUGH.md`.
+
+### A/V Room — video increment (next, on the proven Inc 1 foundation)
+Queued together because they share the structured **attestation class + 2b
+playback gate** (attestation is its own class, NOT a sixth provenance tag —
+rationale recorded in the click-through memo):
+- Large-file ingest — real-corpus `.MOV` hit Supabase's global 50 MB cap (400
+  after ~40s); needs resumable/direct-to-storage upload or a raised cap.
+- Surface upload-failure reasons to the commissioner (not a generic "failed").
+- Client-side size pre-check (fail fast before the round-trip).
+- Poster-frame extraction as a derived rendition (original untouched, 6.9;
+  image-only, no 2b read).
 
 ### Harden / operate
 - CI live on push/PR (this scaffold).
