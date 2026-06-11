@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
+import { createClient } from '@/lib/supabase/client';
 
 export type IngestTag = {
   id: string;
@@ -275,22 +276,56 @@ function UploadForm({ leagueId }: { leagueId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const form = new FormData();
-      form.set('file', file);
-      form.set('leagueId', leagueId);
-      form.set('media_kind', kind);
-      if (note.trim()) form.set('upload_note', note.trim());
-      // For a video, attach a poster still as an extra part (D3). Best-effort: if
-      // extraction yields nothing, the upload proceeds and the room uses the
-      // placeholder. The original is sent unchanged regardless.
+      // 1) Mint a grant: commissioner-scoped, single-use, server-chosen path. The
+      //    bytes do NOT transit the function (Spec 5.1 Amendment 1).
+      const grantRes = await fetch('/api/av-room/upload/grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, media_kind: kind, mime: file.type, size: file.size }),
+      });
+      if (!grantRes.ok) {
+        const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not start the upload.');
+        return;
+      }
+      const { mediaEntryId, path, token } = (await grantRes.json()) as {
+        mediaEntryId: string;
+        path: string;
+        token: string;
+      };
+
+      // 2) Upload the original CLIENT-DIRECT to Storage under the grant - this is the
+      //    path that lifts the 4.5 MB function-body ceiling (photos and video alike).
+      const supabase = createClient();
+      const { error: upErr } = await supabase.storage
+        .from('league-media')
+        .uploadToSignedUrl(path, token, file, { contentType: file.type });
+      if (upErr) {
+        const msg = (upErr.message ?? '').toLowerCase();
+        if (msg.includes('exceeded') || msg.includes('maximum allowed size') || msg.includes('payload too large')) {
+          setError(`The storage limit (${MAX_UPLOAD_LABEL}) rejected this file. Choose a smaller file.`);
+        } else {
+          setError(`The file could not be uploaded (${upErr.message || 'storage error'}).`);
+        }
+        return;
+      }
+
+      // 3) Finalize the record server-side (insert-after-upload). For a video, attach
+      //    a best-effort poster still (D3); the original is already stored unchanged.
+      const finalizeForm = new FormData();
+      finalizeForm.set('mediaEntryId', mediaEntryId);
+      finalizeForm.set('leagueId', leagueId);
+      finalizeForm.set('media_kind', kind);
+      finalizeForm.set('mime', file.type);
+      if (note.trim()) finalizeForm.set('upload_note', note.trim());
       if (kind === 'video') {
         const poster = await extractPosterBlob(file);
-        if (poster) form.set('poster', poster, 'poster.jpg');
+        if (poster) finalizeForm.set('poster', poster, 'poster.jpg');
       }
-      const res = await fetch('/api/av-room/upload', { method: 'POST', body: form });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(j.error ?? 'Upload failed.');
+      const finRes = await fetch('/api/av-room/upload/finalize', { method: 'POST', body: finalizeForm });
+      if (!finRes.ok) {
+        const j = (await finRes.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Upload could not be finalized.');
         return;
       }
       setFile(null);

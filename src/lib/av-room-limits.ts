@@ -11,9 +11,6 @@
 // the function. See _observations/OBSERVATIONS_2026_06_10_DW1V1_RULING_REMEDY_B.md.
 export const MAX_UPLOAD_BYTES = 1073741824; // 1 GiB
 
-// Whole-MB form (1024), kept for any MB-granular arithmetic.
-export const MAX_UPLOAD_MB = Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024));
-
 // Human-facing label for the ceiling, for copy ("the limit is 1 GB").
 export const MAX_UPLOAD_LABEL = '1 GB';
 
