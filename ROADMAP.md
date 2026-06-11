@@ -64,14 +64,23 @@ Hardening (no playback) shipped 2026-06-10 — `7601f8c`, `b97b19c`, `99dafc0`:
   original untouched 6.9, image-only, no 2b read).
 
 Next + still open:
-- **Large-file ingest — BUILT (remedy B), pending founder click-through + merge.**
-  D-W1-V1 ruled remedy B (2026-06-10): client-direct upload under a server-minted
-  grant; Spec 5.1 Amendment 1. Build (D-B1..D-B5): grant-mint route, client direct
-  upload via `uploadToSignedUrl`, finalize route (insert-after-upload + orphan reap),
-  G16 storage-RLS test, `MAX_UPLOAD_BYTES`=1 GB. Retires the passthrough — also fixes
-  the production photo >4.5 MB break. type-check + build clean; governance 112/0.
-  Memo `_observations/OBSERVATIONS_2026_06_10_AV_ROOM_REMEDY_B_LARGE_FILE_INGEST.md`;
-  ruling `_observations/OBSERVATIONS_2026_06_10_DW1V1_RULING_REMEDY_B.md`.
+- **Large-file ingest — remedy B MERGED (`5c1550b`).** D-W1-V1 ruled remedy B
+  (2026-06-10): client-direct upload under a server-minted grant; Spec 5.1
+  Amendment 1. Build D-B1..D-B5; governance 112/0. >4.5 MB photo corollary PROVEN
+  TRANSITIVELY (a 68.7 MB file rode the same grant transport on prod). **D-W1-V1
+  DISCHARGE is HELD on D0 (posters visible on prod)** — see the ergonomics unit.
+- **Ingest ergonomics + room-poster (D0-D6) — BUILT, in PR.** In-spec D-G photo-first
+  tooling: D0 commissioner set/replace poster + de-silence (the room showed
+  placeholders because no poster objects existed, not a render bug); D1 drag-drop
+  multi-file queue; D2 batch tagging; D3 compact rows; D4 newest-first ingest; D5
+  reinstate (migration 012, append-only, G17); D6 HEIC honesty. type-check/build clean;
+  governance 112/0 (G17 self-activates post-012). Founder steps: apply migration 012;
+  set the two video stills; click-through; then run the held D-W1-V1 discharge.
+  Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ERGONOMICS.md`.
+- **Video playback + the voice-attestation class** — still BLOCKED; the positive
+  design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
+  work (chat/Fable), not a build input. Shares the **attestation class + 2b playback
+  gate** (attestation is its own class, not a sixth provenance tag).
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
   design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
   work (chat/Fable), not a build input. Shares the **attestation class + 2b playback
