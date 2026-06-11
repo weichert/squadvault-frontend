@@ -82,6 +82,18 @@ Done + still open:
   Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ERGONOMICS_ROUND_2.md`.
   Discharges once the founder click-through passes (poster thumbnails on ingest,
   expand/collapse density, filter to a single item two ways).
+- **Ingest round 3 (performance at scale) — DONE on branch, in PR #14 (stacked on
+  #13); DISCHARGE HELD pending founder click-through.** R3-D1 photo thumbnail renditions —
+  lists serve thumb.jpg/poster.jpg, never the original; client-side canvas at upload +
+  backfill + new `/api/av-room/thumb` (`6794744`). R3-D2 batch signing — one
+  `createSignedUrls` round-trip per page, not N (`8e5db41`). R3-D3 list virtualization —
+  `@tanstack/react-virtual` windows the DOM, filters operate on the full set; dev-only
+  `?synthetic=N` harness (`dc06f11`). R3-D4 mobile function-at-width — explicit viewport,
+  tap-to-choose upload, responsive tag form (`295844c`). Stacked on the r2 branch (depends
+  on r2-D1/r2-D3); merge #13 before this. No new table; governance 113/0.
+  Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_3.md`. Discharges once
+  the founder click-through passes (backfill + thumbs render; ?synthetic=1000 scroll;
+  iPhone upload+tag on prod).
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
   design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
   work (chat/Fable) — the next DECIDE moment. Shares the **attestation class + 2b
