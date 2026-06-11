@@ -64,16 +64,14 @@ Hardening (no playback) shipped 2026-06-10 — `7601f8c`, `b97b19c`, `99dafc0`:
   original untouched 6.9, image-only, no 2b read).
 
 Next + still open:
-- **Large-file ingest — UNBLOCKED. D-W1-V1 RULED REMEDY B** (2026-06-10, founder
-  in Fable chat): client-direct upload under a server-minted grant. Remedy A
-  eliminated — the real ceiling is Vercel's unconfigurable 4.5 MB function
-  body limit (413 at the edge), not the Supabase Storage cap (now 1 GB, Pro).
-  **Spec 5.1 Amendment 1** ratified (transport not authority; grant-minted,
-  single-use, server-chosen path, insert-after-upload, 6.9 unchanged). Corollary:
-  production photo uploads >4.5 MB are broken today on the passthrough — B fixes
-  photos and video alike. EXECUTE brief filed:
-  `_observations/session_brief_2026_06_10_w1_large_file_ingest_remedy_b_build.md`;
-  ruling memo `_observations/OBSERVATIONS_2026_06_10_DW1V1_RULING_REMEDY_B.md`.
+- **Large-file ingest — BUILT (remedy B), pending founder click-through + merge.**
+  D-W1-V1 ruled remedy B (2026-06-10): client-direct upload under a server-minted
+  grant; Spec 5.1 Amendment 1. Build (D-B1..D-B5): grant-mint route, client direct
+  upload via `uploadToSignedUrl`, finalize route (insert-after-upload + orphan reap),
+  G16 storage-RLS test, `MAX_UPLOAD_BYTES`=1 GB. Retires the passthrough — also fixes
+  the production photo >4.5 MB break. type-check + build clean; governance 112/0.
+  Memo `_observations/OBSERVATIONS_2026_06_10_AV_ROOM_REMEDY_B_LARGE_FILE_INGEST.md`;
+  ruling `_observations/OBSERVATIONS_2026_06_10_DW1V1_RULING_REMEDY_B.md`.
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
   design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
   work (chat/Fable), not a build input. Shares the **attestation class + 2b playback
