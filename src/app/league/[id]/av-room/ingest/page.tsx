@@ -115,6 +115,11 @@ export default async function AvRoomIngestPage({ params }: Props) {
     })),
   }));
 
+  // D4: the working tool puts the just-added item under your hands - the INGEST list
+  // is newest-first (created_at DESC, deterministic). The ROOM stays oldest-first (a
+  // founder taste call: an archive reads forward through time; W.2 owns presentation).
+  entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
   return (
     <main style={{ background: 'var(--vault-bg)', minHeight: '100vh' }}>
       <div className="max-w-4xl mx-auto px-6 py-12">
