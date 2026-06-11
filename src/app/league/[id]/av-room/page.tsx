@@ -11,7 +11,8 @@
 //   - Video playback DEFERRED this increment: there is no structured commissioner
 //     "no member voice" attestation on the merged schema, so no video plays yet
 //     (strictly fail-closed). Videos show as present items with provenance and a
-//     plain placeholder; playback + attestation are a clean next increment.
+//     derived poster still (D3, image-only) when one exists, else a plain
+//     placeholder; playback + attestation are a clean next increment.
 // No counts, no ordering knobs, no nudges (6.3-6.5).
 import { redirect, notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -117,6 +118,22 @@ export default async function AvRoomPage({ params }: Props) {
     if (data) photoUrl.set(re.entry.id, data.signedUrl);
   }
 
+  // A video may carry a derived poster still (D3) at the by-convention sibling path
+  // {prefix}/poster.jpg. List the entry's folder to confirm the poster exists, then
+  // sign it like a photo. Videos without a poster simply stay absent here and fall
+  // back to the placeholder - no playback, no 2b read.
+  const videoPosterUrl = new Map<string, string>();
+  for (const re of videos) {
+    const sp = re.entry.storage_path;
+    const folder = sp.slice(0, sp.lastIndexOf('/'));
+    const { data: listed } = await admin.storage.from('league-media').list(folder);
+    if (!listed?.some((o) => o.name === 'poster.jpg')) continue;
+    const { data } = await admin.storage
+      .from('league-media')
+      .createSignedUrl(`${folder}/poster.jpg`, PHOTO_URL_TTL_SECONDS);
+    if (data) videoPosterUrl.set(re.entry.id, data.signedUrl);
+  }
+
   return (
     <main style={{ background: 'var(--vault-bg)', minHeight: '100vh' }}>
       <div className="max-w-4xl mx-auto px-6 py-12">
@@ -145,6 +162,7 @@ export default async function AvRoomPage({ params }: Props) {
           >
             {ordered.map((re) => {
               const url = photoUrl.get(re.entry.id);
+              const posterUrl = videoPosterUrl.get(re.entry.id);
               return (
                 <figure key={re.entry.id} style={{ margin: 0 }}>
                   <div
@@ -167,8 +185,18 @@ export default async function AvRoomPage({ params }: Props) {
                         alt={re.entry.upload_note ?? 'Archival photograph'}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
+                    ) : re.entry.media_kind === 'video' && posterUrl ? (
+                      // Video poster still (D3): a derived image rendition, image-only.
+                      // No <video> and no playback - that stays deferred to the voice
+                      // attestation gate. This is an image, not a 2b read.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={posterUrl}
+                        alt={re.entry.upload_note ?? 'Archival video — poster still'}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
                     ) : (
-                      // Video: present but not playable this increment (deferred).
+                      // Video without a poster: present but not playable (deferred).
                       <div style={{ textAlign: 'center', padding: '1rem' }}>
                         <span className="font-mono" style={{ fontSize: '10px', letterSpacing: '0.12em', color: 'var(--vault-text2)' }}>
                           VIDEO

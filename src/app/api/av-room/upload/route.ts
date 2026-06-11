@@ -157,5 +157,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // D3: a video may carry a client-extracted poster still. Write it as a sibling
+  // object under the SAME {league_id}/{media_entry_id}/ prefix the commissioner
+  // storage policy already allows - by convention, no schema column. This happens
+  // AFTER the original and the row, and is best-effort: a poster failure does NOT
+  // fail the upload (the room falls back to the placeholder). The original at
+  // original.{ext} is never touched (6.9).
+  if (mediaKind === 'video') {
+    const poster = form.get('poster');
+    if (poster instanceof File && poster.size > 0 && poster.size <= MAX_UPLOAD_BYTES) {
+      const posterPath = `${leagueId}/${mediaEntryId}/poster.jpg`;
+      const posterBytes = new Uint8Array(await poster.arrayBuffer());
+      await supabase.storage
+        .from('league-media')
+        .upload(posterPath, posterBytes, { contentType: 'image/jpeg', upsert: false });
+    }
+  }
+
   return NextResponse.json({ id: mediaEntryId, storage_path: storagePath });
 }
