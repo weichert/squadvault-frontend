@@ -74,8 +74,14 @@ Done + still open:
   D3 compact rows; D4 newest-first ingest; D5 reinstate (migration 012 applied, G17);
   D6 HEIC honesty. Merged `c82bd5f` (PR #11); migration 012 live (governance 113/0);
   posters confirmed on prod. Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ERGONOMICS.md`.
-  Ingest ergonomics **round 2** (poster thumbnails on ingest, density/expand,
-  deterministic filters) in PR.
+- **Ingest ergonomics round 2 — DONE on branch, in PR #13; DISCHARGE HELD pending
+  founder click-through.** D1 ingest thumbnails use the set poster (`ea63a51`); D2
+  compact rows + detail behind per-item expand (`8ffe2c1`); D3 deterministic
+  find-without-scrolling filters — kind/season/event/withdrawn + substring, compose by
+  AND, no ranking (`b2acded`). Branch `feat/w1-ingest-ergonomics-r2` off `b5f5bf6`.
+  Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ERGONOMICS_ROUND_2.md`.
+  Discharges once the founder click-through passes (poster thumbnails on ingest,
+  expand/collapse density, filter to a single item two ways).
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
   design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
   work (chat/Fable) — the next DECIDE moment. Shares the **attestation class + 2b
