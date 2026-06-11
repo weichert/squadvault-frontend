@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/lib/av-room-limits';
 
 export type IngestTag = {
   id: string;
@@ -203,9 +204,18 @@ function UploadForm({ leagueId }: { leagueId: string }) {
         : null
     : null;
 
+  // Fail fast before any round-trip: a file over the storage ceiling is refused
+  // here, with the exact size and limit, and never leaves the browser (D1).
+  const oversized = !!file && file.size > MAX_UPLOAD_BYTES;
+
   async function submit() {
     if (!file || !kind) {
       setError('Choose an image or video file.');
+      return;
+    }
+    if (oversized) {
+      // Defensive: the button is already disabled when oversized, so no request fires.
+      setError(`This file is ${formatMb(file.size)}; the limit is ${MAX_UPLOAD_MB} MB.`);
       return;
     }
     setBusy(true);
@@ -249,8 +259,13 @@ function UploadForm({ leagueId }: { leagueId: string }) {
           style={{ ...inputStyle, padding: '0.4rem' }}
         />
         {file && (
-          <p className="font-mono" style={{ ...labelStyle, color: kind ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
+          <p className="font-mono" style={{ ...labelStyle, color: kind && !oversized ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
             {kind ? `${kind.toUpperCase()} · ${file.name}` : 'UNSUPPORTED FILE TYPE'}
+          </p>
+        )}
+        {oversized && file && (
+          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
+            This file is {formatMb(file.size)}; the limit is {MAX_UPLOAD_MB} MB. Choose a smaller file.
           </p>
         )}
         <div>
@@ -266,7 +281,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
             style={{ ...inputStyle, marginTop: 4 }}
           />
         </div>
-        <button type="button" disabled={busy || !file || !kind} onClick={submit} style={btnStyle(busy || !file || !kind)}>
+        <button type="button" disabled={busy || !file || !kind || oversized} onClick={submit} style={btnStyle(busy || !file || !kind || oversized)}>
           {busy ? 'Uploading…' : 'Upload'}
         </button>
         {error && (
