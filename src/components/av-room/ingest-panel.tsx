@@ -98,6 +98,24 @@ export function IngestPanel({
   entries: IngestEntry[];
   members: IngestMember[];
 }) {
+  const router = useRouter();
+  // D2: batch tagging - selection lifted here so one tag applies across many items.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelected(new Set());
+  }
+  // Keep selection from going stale across refreshes: only ids still present remain.
+  const presentIds = new Set(entries.map((e) => e.id));
+  const selectedIds = Array.from(selected).filter((id) => presentIds.has(id));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <RoomRatification leagueId={leagueId} ratified={ratified} />
@@ -115,6 +133,16 @@ export function IngestPanel({
             VIEW THE ROOM →
           </a>
         </div>
+        {selectedIds.length > 0 && (
+          <BatchTagBar
+            selectedIds={selectedIds}
+            onDone={() => {
+              clearSelection();
+              router.refresh();
+            }}
+            onClear={clearSelection}
+          />
+        )}
         {entries.length === 0 ? (
           <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
             Nothing has been added yet. Upload the first photograph above.
@@ -122,7 +150,14 @@ export function IngestPanel({
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {entries.map((e) => (
-              <EntryCard key={e.id} entry={e} members={members} />
+              <EntryCard
+                key={e.id}
+                entry={e}
+                members={members}
+                selectable={!e.withdrawn}
+                selected={selected.has(e.id)}
+                onToggleSelect={() => toggleSelect(e.id)}
+              />
             ))}
           </div>
         )}
@@ -416,12 +451,130 @@ function UploadForm({ leagueId }: { leagueId: string }) {
   );
 }
 
+// D2: batch tagging is restricted to the value-bearing provenance kinds; date needs
+// a precision and member_identification needs a per-item subject, so neither is a
+// sensible bulk apply. No new tag kinds - each application is an ordinary tag event.
+const BATCH_TAG_KINDS: { kind: MediaProvenanceTagKind; label: string }[] = [
+  { kind: 'contributor', label: 'Contributor' },
+  { kind: 'season', label: 'Season' },
+  { kind: 'event', label: 'Event' },
+];
+
+function BatchTagBar({
+  selectedIds,
+  onDone,
+  onClear,
+}: {
+  selectedIds: string[];
+  onDone: () => void;
+  onClear: () => void;
+}) {
+  const [kind, setKind] = useState<MediaProvenanceTagKind>('season');
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function apply() {
+    if (!value.trim()) {
+      setMsg('Enter a value to apply.');
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    let ok = 0;
+    let failed = 0;
+    // One ordinary tag event PER ITEM via the same route - append-only, attributed
+    // to the acting commissioner. A UI convenience, not a new fact shape. Sequential
+    // keeps it simple and bounded (a handful at a time is the real use).
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch('/api/av-room/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mediaEntryId: id,
+            tag_kind: kind,
+            tag_value: value.trim(),
+            date_precision: null,
+            tagged_member_user_id: null,
+            note: null,
+            supersedes: null,
+          }),
+        });
+        if (res.ok) ok++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+    setBusy(false);
+    setValue('');
+    if (failed === 0) {
+      onDone();
+    } else {
+      setMsg(`Applied to ${ok}; ${failed} could not be saved.`);
+      onDone();
+    }
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: '1rem', borderColor: 'var(--vault-gold)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', paddingBottom: 6 }}>
+          {selectedIds.length} SELECTED
+        </span>
+        <div>
+          <label className="font-mono" style={labelStyle}>Kind</label>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as MediaProvenanceTagKind)}
+            className="font-ui"
+            style={{ ...inputStyle, marginTop: 4, width: 'auto' }}
+          >
+            {BATCH_TAG_KINDS.map((k) => (
+              <option key={k.kind} value={k.kind}>{k.label}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <label className="font-mono" style={labelStyle}>Value</label>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="font-ui"
+            style={{ ...inputStyle, marginTop: 4 }}
+            placeholder="e.g. 2019"
+          />
+        </div>
+        <button type="button" disabled={busy} onClick={apply} style={btnStyle(busy)}>
+          {busy ? 'Applying…' : `Apply to ${selectedIds.length}`}
+        </button>
+        <button type="button" disabled={busy} onClick={onClear} style={btnStyle(busy)}>
+          Clear
+        </button>
+      </div>
+      {msg && (
+        <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem', marginTop: 6 }}>
+          {msg}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function EntryCard({
   entry,
   members,
+  selectable,
+  selected,
+  onToggleSelect,
 }: {
   entry: IngestEntry;
   members: IngestMember[];
+  selectable: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const router = useRouter();
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -613,8 +766,17 @@ function EntryCard({
   }
 
   return (
-    <article style={{ ...cardStyle, opacity: entry.withdrawn ? 0.6 : 1 }}>
+    <article style={{ ...cardStyle, opacity: entry.withdrawn ? 0.6 : 1, outline: selected ? '1px solid var(--vault-gold)' : 'none' }}>
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+        {selectable && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            aria-label="Select for batch tagging"
+            style={{ marginTop: 4, width: 16, height: 16, accentColor: 'var(--vault-gold)', cursor: 'pointer', flexShrink: 0 }}
+          />
+        )}
         <div
           style={{
             width: 120,
