@@ -16,7 +16,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient, createAdminClient } from '@/lib/supabase/server';
 import { isLeagueCommissioner } from '@/lib/av-room';
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/lib/av-room-limits';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
 import type { Database, MediaKind } from '@/lib/supabase/types';
 
 export const runtime = 'nodejs';
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   // boundary so non-commissioners learn nothing about the route.
   if (file.size > MAX_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: `This file is ${formatMb(file.size)}; the storage limit is ${MAX_UPLOAD_MB} MB.` },
+      { error: `This file is ${formatSize(file.size)}; the storage limit is ${MAX_UPLOAD_LABEL}.` },
       { status: 413 },
     );
   }
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       msg.includes('exceeded');
     if (isSizeCap) {
       return NextResponse.json(
-        { error: `The storage limit (${MAX_UPLOAD_MB} MB) rejected this file. Choose a smaller file.` },
+        { error: `The storage limit (${MAX_UPLOAD_LABEL}) rejected this file. Choose a smaller file.` },
         { status: 413 },
       );
     }

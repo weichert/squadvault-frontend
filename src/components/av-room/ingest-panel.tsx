@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/lib/av-room-limits';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
 
 export type IngestTag = {
   id: string;
@@ -269,7 +269,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
     }
     if (oversized) {
       // Defensive: the button is already disabled when oversized, so no request fires.
-      setError(`This file is ${formatMb(file.size)}; the limit is ${MAX_UPLOAD_MB} MB.`);
+      setError(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
       return;
     }
     setBusy(true);
@@ -326,7 +326,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
         )}
         {oversized && file && (
           <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
-            This file is {formatMb(file.size)}; the limit is {MAX_UPLOAD_MB} MB. Choose a smaller file.
+            This file is {formatSize(file.size)}; the limit is {MAX_UPLOAD_LABEL}. Choose a smaller file.
           </p>
         )}
         <div>

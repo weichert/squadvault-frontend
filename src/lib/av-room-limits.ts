@@ -1,22 +1,24 @@
 // src/lib/av-room-limits.ts
 // Single source of truth for the A/V Room upload-size ceiling. Both the client
-// pre-check (ingest panel) and the server upload route import this, so they always
-// report the SAME number - no drift between "the button refused it" and "the route
-// rejected it". This module is intentionally dependency-free (no server/Supabase
-// imports) so a client component can import it safely.
+// pre-check (ingest panel) and the server grant route import this, so they always
+// report the SAME number. Dependency-free (no server/Supabase imports) so a client
+// component can import it safely.
 //
-// The ceiling is Supabase Storage's global per-file cap (50 MB), which is the real
-// wall the spec-5.1 passthrough hits today (a real-corpus .MOV 400'd above it).
-// This constant makes that cap HONEST - pre-checked client-side, explained
-// server-side; it does NOT raise it. Raising the true ceiling is decision-gate
-// D-W1-V1 (founder call: raise the storage cap, or move to client-direct upload),
-// not a code change here.
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+// Ceiling = 1 GB, matching the raised Supabase Storage per-file cap (Pro plan, set
+// 2026-06-10). Under D-W1-V1 remedy B (Spec 5.1 Amendment 1) the original flows
+// CLIENT-DIRECT to Storage under a server-minted grant, so this ceiling is no longer
+// bounded by the serverless function's 4.5 MB body limit - the bytes never transit
+// the function. See _observations/OBSERVATIONS_2026_06_10_DW1V1_RULING_REMEDY_B.md.
+export const MAX_UPLOAD_BYTES = 1073741824; // 1 GiB
 
-// Whole-MB form for the limit, for human-facing copy ("the limit is 50 MB").
+// Whole-MB form (1024), kept for any MB-granular arithmetic.
 export const MAX_UPLOAD_MB = Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024));
 
-// One-decimal MB rendering of an arbitrary byte count, for "this file is 73.4 MB".
-export function formatMb(bytes: number): string {
+// Human-facing label for the ceiling, for copy ("the limit is 1 GB").
+export const MAX_UPLOAD_LABEL = '1 GB';
+
+// Human size for an arbitrary byte count: GB at/above 1 GiB, else one-decimal MB.
+export function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
