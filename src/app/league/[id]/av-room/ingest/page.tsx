@@ -49,6 +49,17 @@ export default async function AvRoomIngestPage({ params }: Props) {
   const admin = createAdminClient();
   const room = await loadRoomState(admin, league.id, { includeWithdrawn: true });
 
+  // Which video entries already carry a poster still (D0). Auto-extraction is
+  // best-effort and silent for codecs the upload browser cannot decode, so the panel
+  // surfaces a "set poster" affordance honestly where one is missing.
+  const videoHasPoster = new Map<string, boolean>();
+  for (const re of room.entries) {
+    if (re.entry.media_kind !== 'video') continue;
+    const folder = re.entry.storage_path.slice(0, re.entry.storage_path.lastIndexOf('/'));
+    const { data: listed } = await admin.storage.from('league-media').list(folder);
+    videoHasPoster.set(re.entry.id, !!listed?.some((o) => o.name === 'poster.jpg'));
+  }
+
   // Franchise members with a resolvable identity, plus their current 2a grant
   // state (shown read-only beside member-identification tagging).
   const { data: memberRows } = (await admin
@@ -88,6 +99,7 @@ export default async function AvRoomIngestPage({ params }: Props) {
     uploadNote: re.entry.upload_note,
     createdAt: re.entry.created_at,
     withdrawn: re.withdrawn,
+    hasPoster: re.entry.media_kind === 'video' ? (videoHasPoster.get(re.entry.id) ?? false) : false,
     tags: [
       ...re.tagsByKind.contributor,
       ...re.tagsByKind.date,
@@ -102,6 +114,11 @@ export default async function AvRoomIngestPage({ params }: Props) {
       taggedMemberUserId: t.tagged_member_user_id,
     })),
   }));
+
+  // D4: the working tool puts the just-added item under your hands - the INGEST list
+  // is newest-first (created_at DESC, deterministic). The ROOM stays oldest-first (a
+  // founder taste call: an archive reads forward through time; W.2 owns presentation).
+  entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <main style={{ background: 'var(--vault-bg)', minHeight: '100vh' }}>

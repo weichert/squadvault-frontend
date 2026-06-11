@@ -7,7 +7,7 @@
 // read-only 2a grant state shown beside member identification (W.6 5), correction-
 // by-supersession, item withdrawal, and room ratification. All writes POST to the
 // /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
@@ -27,6 +27,7 @@ export type IngestEntry = {
   uploadNote: string | null;
   createdAt: string;
   withdrawn: boolean;
+  hasPoster: boolean;
   tags: IngestTag[];
 };
 
@@ -97,6 +98,24 @@ export function IngestPanel({
   entries: IngestEntry[];
   members: IngestMember[];
 }) {
+  const router = useRouter();
+  // D2: batch tagging - selection lifted here so one tag applies across many items.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelected(new Set());
+  }
+  // Keep selection from going stale across refreshes: only ids still present remain.
+  const presentIds = new Set(entries.map((e) => e.id));
+  const selectedIds = Array.from(selected).filter((id) => presentIds.has(id));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <RoomRatification leagueId={leagueId} ratified={ratified} />
@@ -114,6 +133,16 @@ export function IngestPanel({
             VIEW THE ROOM →
           </a>
         </div>
+        {selectedIds.length > 0 && (
+          <BatchTagBar
+            selectedIds={selectedIds}
+            onDone={() => {
+              clearSelection();
+              router.refresh();
+            }}
+            onClear={clearSelection}
+          />
+        )}
         {entries.length === 0 ? (
           <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
             Nothing has been added yet. Upload the first photograph above.
@@ -121,7 +150,14 @@ export function IngestPanel({
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {entries.map((e) => (
-              <EntryCard key={e.id} entry={e} members={members} />
+              <EntryCard
+                key={e.id}
+                entry={e}
+                members={members}
+                selectable={!e.withdrawn}
+                selected={selected.has(e.id)}
+                onToggleSelect={() => toggleSelect(e.id)}
+              />
             ))}
           </div>
         )}
@@ -205,7 +241,11 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
     let settled = false;
-    const timeout = setTimeout(() => finish(null), 5000);
+    // A generous window: a large local video can take several seconds to demux far
+    // enough to seek. If decode never gets there (e.g. a codec the browser cannot
+    // play, like iPhone HEVC in Chrome), this resolves null and the commissioner
+    // sets a poster by hand (D0) - the failure is surfaced, never silent.
+    const timeout = setTimeout(() => finish(null), 12000);
     function finish(blob: Blob | null) {
       if (settled) return;
       settled = true;
@@ -228,6 +268,7 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
       }
     }
     video.muted = true;
+    video.playsInline = true;
     video.preload = 'auto';
     video.onerror = () => finish(null);
     video.onloadeddata = () => {
@@ -244,99 +285,149 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
   });
 }
 
+// D6 HEIC honesty (module-level so single + queue paths share it). iPhone photos
+// default to HEIC/HEIF, which browsers can't render in an <img>, so storing one only
+// yields a broken thumbnail. Some browsers leave file.type empty, so also sniff ext.
+function isHeicFile(file: File): boolean {
+  return (
+    file.type === 'image/heic' ||
+    file.type === 'image/heif' ||
+    /\.(heic|heif)$/i.test(file.name)
+  );
+}
+
+function mediaKindFor(file: File): MediaKind | null {
+  if (file.type.startsWith('image/')) return 'photo';
+  if (file.type.startsWith('video/')) return 'video';
+  return null;
+}
+
+// Upload one file through the remedy-B flow (grant -> client-direct -> finalize),
+// with the honest per-file pre-checks (D6/D1). Throws an Error whose message is the
+// human reason on any failure, so the queue can isolate it per file (D1).
+async function uploadOneFile(file: File, leagueId: string, note: string): Promise<void> {
+  const kind = mediaKindFor(file);
+  if (!kind) throw new Error('Unsupported file type — choose an image or video.');
+  if (isHeicFile(file)) {
+    throw new Error('HEIC is not supported. Export the photo as JPEG and upload that.');
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
+  }
+
+  const grantRes = await fetch('/api/av-room/upload/grant', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ leagueId, media_kind: kind, mime: file.type, size: file.size }),
+  });
+  if (!grantRes.ok) {
+    const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(j.error ?? 'Could not start the upload.');
+  }
+  const { mediaEntryId, path, token } = (await grantRes.json()) as {
+    mediaEntryId: string;
+    path: string;
+    token: string;
+  };
+
+  const supabase = createClient();
+  const { error: upErr } = await supabase.storage
+    .from('league-media')
+    .uploadToSignedUrl(path, token, file, { contentType: file.type });
+  if (upErr) {
+    const msg = (upErr.message ?? '').toLowerCase();
+    if (msg.includes('exceeded') || msg.includes('maximum allowed size') || msg.includes('payload too large')) {
+      throw new Error(`The storage limit (${MAX_UPLOAD_LABEL}) rejected this file.`);
+    }
+    throw new Error(`The file could not be uploaded (${upErr.message || 'storage error'}).`);
+  }
+
+  const finalizeForm = new FormData();
+  finalizeForm.set('mediaEntryId', mediaEntryId);
+  finalizeForm.set('leagueId', leagueId);
+  finalizeForm.set('media_kind', kind);
+  finalizeForm.set('mime', file.type);
+  if (note.trim()) finalizeForm.set('upload_note', note.trim());
+  if (kind === 'video') {
+    const poster = await extractPosterBlob(file);
+    if (poster) finalizeForm.set('poster', poster, 'poster.jpg');
+  }
+  const finRes = await fetch('/api/av-room/upload/finalize', { method: 'POST', body: finalizeForm });
+  if (!finRes.ok) {
+    const j = (await finRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(j.error ?? 'Upload could not be finalized.');
+  }
+}
+
+type QueueItem = {
+  id: string;
+  name: string;
+  status: 'queued' | 'uploading' | 'done' | 'failed';
+  reason?: string;
+};
+
+const UPLOAD_CONCURRENCY = 3;
+
 function UploadForm({ leagueId }: { leagueId: string }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [dragOver, setDragOver] = useState(false);
 
-  const kind: MediaKind | null = file
-    ? file.type.startsWith('image/')
-      ? 'photo'
-      : file.type.startsWith('video/')
-        ? 'video'
-        : null
-    : null;
+  // Refs the worker pool reads synchronously: the live queue (file + claim) and a
+  // single-runner guard. State mirrors them for rendering. Claiming via the ref
+  // prevents two workers grabbing the same item before a re-render lands.
+  const queueRef = useRef<{ id: string; file: File }[]>([]);
+  const claimedRef = useRef<Set<string>>(new Set());
+  const runningRef = useRef(false);
+  const noteRef = useRef('');
+  noteRef.current = note;
 
-  // Fail fast before any round-trip: a file over the storage ceiling is refused
-  // here, with the exact size and limit, and never leaves the browser (D1).
-  const oversized = !!file && file.size > MAX_UPLOAD_BYTES;
-
-  async function submit() {
-    if (!file || !kind) {
-      setError('Choose an image or video file.');
-      return;
-    }
-    if (oversized) {
-      // Defensive: the button is already disabled when oversized, so no request fires.
-      setError(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      // 1) Mint a grant: commissioner-scoped, single-use, server-chosen path. The
-      //    bytes do NOT transit the function (Spec 5.1 Amendment 1).
-      const grantRes = await fetch('/api/av-room/upload/grant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, media_kind: kind, mime: file.type, size: file.size }),
-      });
-      if (!grantRes.ok) {
-        const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
-        setError(j.error ?? 'Could not start the upload.');
-        return;
-      }
-      const { mediaEntryId, path, token } = (await grantRes.json()) as {
-        mediaEntryId: string;
-        path: string;
-        token: string;
-      };
-
-      // 2) Upload the original CLIENT-DIRECT to Storage under the grant - this is the
-      //    path that lifts the 4.5 MB function-body ceiling (photos and video alike).
-      const supabase = createClient();
-      const { error: upErr } = await supabase.storage
-        .from('league-media')
-        .uploadToSignedUrl(path, token, file, { contentType: file.type });
-      if (upErr) {
-        const msg = (upErr.message ?? '').toLowerCase();
-        if (msg.includes('exceeded') || msg.includes('maximum allowed size') || msg.includes('payload too large')) {
-          setError(`The storage limit (${MAX_UPLOAD_LABEL}) rejected this file. Choose a smaller file.`);
-        } else {
-          setError(`The file could not be uploaded (${upErr.message || 'storage error'}).`);
-        }
-        return;
-      }
-
-      // 3) Finalize the record server-side (insert-after-upload). For a video, attach
-      //    a best-effort poster still (D3); the original is already stored unchanged.
-      const finalizeForm = new FormData();
-      finalizeForm.set('mediaEntryId', mediaEntryId);
-      finalizeForm.set('leagueId', leagueId);
-      finalizeForm.set('media_kind', kind);
-      finalizeForm.set('mime', file.type);
-      if (note.trim()) finalizeForm.set('upload_note', note.trim());
-      if (kind === 'video') {
-        const poster = await extractPosterBlob(file);
-        if (poster) finalizeForm.set('poster', poster, 'poster.jpg');
-      }
-      const finRes = await fetch('/api/av-room/upload/finalize', { method: 'POST', body: finalizeForm });
-      if (!finRes.ok) {
-        const j = (await finRes.json().catch(() => ({}))) as { error?: string };
-        setError(j.error ?? 'Upload could not be finalized.');
-        return;
-      }
-      setFile(null);
-      setNote('');
-      router.refresh();
-    } catch {
-      setError('Upload failed.');
-    } finally {
-      setBusy(false);
-    }
+  function setItem(id: string, patch: Partial<QueueItem>) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
+
+  function addFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const additions = Array.from(fileList).map((file) => ({ id: crypto.randomUUID(), file }));
+    queueRef.current.push(...additions);
+    setItems((prev) => [
+      ...prev,
+      ...additions.map((a) => ({ id: a.id, name: a.file.name, status: 'queued' as const })),
+    ]);
+    void ensureRunning();
+  }
+
+  async function ensureRunning() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+
+    const worker = async () => {
+      for (;;) {
+        const next = queueRef.current.find((q) => !claimedRef.current.has(q.id));
+        if (!next) break;
+        claimedRef.current.add(next.id);
+        setItem(next.id, { status: 'uploading' });
+        try {
+          await uploadOneFile(next.file, leagueId, noteRef.current);
+          setItem(next.id, { status: 'done' });
+        } catch (e) {
+          setItem(next.id, { status: 'failed', reason: (e as Error).message });
+        } finally {
+          // Drop from the live queue either way; failures stay in `items` for display.
+          queueRef.current = queueRef.current.filter((q) => q.id !== next.id);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, () => worker()));
+    runningRef.current = false;
+    // Successes are now corpus rows; clear them and reveal the new entries.
+    setItems((prev) => prev.filter((it) => it.status !== 'done'));
+    router.refresh();
+  }
+
+  const active = items.some((it) => it.status === 'queued' || it.status === 'uploading');
 
   return (
     <section style={cardStyle}>
@@ -344,29 +435,48 @@ function UploadForm({ leagueId }: { leagueId: string }) {
         ADD TO THE RECORD
       </h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 460 }}>
-        <input
-          type="file"
-          accept="image/*,video/*"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null);
-            setError(null);
+        {/* D1: drag-drop N files (or click to choose). Each is queued through the
+            remedy-B flow with bounded concurrency and per-file failure isolation. */}
+        <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            addFiles(e.dataTransfer.files);
           }}
           className="font-ui"
-          style={{ ...inputStyle, padding: '0.4rem' }}
-        />
-        {file && (
-          <p className="font-mono" style={{ ...labelStyle, color: kind && !oversized ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
-            {kind ? `${kind.toUpperCase()} · ${file.name}` : 'UNSUPPORTED FILE TYPE'}
-          </p>
-        )}
-        {oversized && file && (
-          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
-            This file is {formatSize(file.size)}; the limit is {MAX_UPLOAD_LABEL}. Choose a smaller file.
-          </p>
-        )}
+          style={{
+            display: 'block',
+            border: `1px dashed ${dragOver ? 'var(--vault-gold)' : 'var(--vault-border)'}`,
+            borderRadius: 6,
+            padding: '1.25rem',
+            textAlign: 'center',
+            color: 'var(--vault-text2)',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            background: dragOver ? 'var(--vault-s2)' : 'transparent',
+          }}
+        >
+          Drop photos or video here, or click to choose. You can add several at once.
+          <input
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = '';
+            }}
+            style={{ display: 'none' }}
+          />
+        </label>
+
         <div>
           <label className="font-mono" style={labelStyle}>
-            Note (optional)
+            Note (optional, applied to this batch)
           </label>
           <input
             type="text"
@@ -377,12 +487,48 @@ function UploadForm({ leagueId }: { leagueId: string }) {
             style={{ ...inputStyle, marginTop: 4 }}
           />
         </div>
-        <button type="button" disabled={busy || !file || !kind || oversized} onClick={submit} style={btnStyle(busy || !file || !kind || oversized)}>
-          {busy ? 'Uploading…' : 'Upload'}
-        </button>
-        {error && (
-          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
-            {error}
+
+        {items.length > 0 && (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {items.map((it) => (
+              <li
+                key={it.id}
+                className="font-ui"
+                style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.8rem' }}
+              >
+                <span style={{ color: 'var(--vault-text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {it.name}
+                </span>
+                <span
+                  className="font-mono"
+                  style={{
+                    flexShrink: 0,
+                    fontSize: '10px',
+                    letterSpacing: '0.08em',
+                    color:
+                      it.status === 'failed'
+                        ? 'var(--vault-withheld)'
+                        : it.status === 'done'
+                          ? 'var(--vault-gold)'
+                          : 'var(--vault-text3)',
+                  }}
+                >
+                  {it.status === 'queued'
+                    ? 'QUEUED'
+                    : it.status === 'uploading'
+                      ? 'UPLOADING…'
+                      : it.status === 'done'
+                        ? 'DONE'
+                        : `FAILED — ${it.reason ?? 'error'}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {active && (
+          <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text3)' }}>
+            UPLOADING…
           </p>
         )}
       </div>
@@ -390,17 +536,165 @@ function UploadForm({ leagueId }: { leagueId: string }) {
   );
 }
 
+// D2: batch tagging is restricted to the value-bearing provenance kinds; date needs
+// a precision and member_identification needs a per-item subject, so neither is a
+// sensible bulk apply. No new tag kinds - each application is an ordinary tag event.
+const BATCH_TAG_KINDS: { kind: MediaProvenanceTagKind; label: string }[] = [
+  { kind: 'contributor', label: 'Contributor' },
+  { kind: 'season', label: 'Season' },
+  { kind: 'event', label: 'Event' },
+];
+
+function BatchTagBar({
+  selectedIds,
+  onDone,
+  onClear,
+}: {
+  selectedIds: string[];
+  onDone: () => void;
+  onClear: () => void;
+}) {
+  const [kind, setKind] = useState<MediaProvenanceTagKind>('season');
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function apply() {
+    if (!value.trim()) {
+      setMsg('Enter a value to apply.');
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    let ok = 0;
+    let failed = 0;
+    // One ordinary tag event PER ITEM via the same route - append-only, attributed
+    // to the acting commissioner. A UI convenience, not a new fact shape. Sequential
+    // keeps it simple and bounded (a handful at a time is the real use).
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch('/api/av-room/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mediaEntryId: id,
+            tag_kind: kind,
+            tag_value: value.trim(),
+            date_precision: null,
+            tagged_member_user_id: null,
+            note: null,
+            supersedes: null,
+          }),
+        });
+        if (res.ok) ok++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+    setBusy(false);
+    setValue('');
+    if (failed === 0) {
+      onDone();
+    } else {
+      setMsg(`Applied to ${ok}; ${failed} could not be saved.`);
+      onDone();
+    }
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: '1rem', borderColor: 'var(--vault-gold)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', paddingBottom: 6 }}>
+          {selectedIds.length} SELECTED
+        </span>
+        <div>
+          <label className="font-mono" style={labelStyle}>Kind</label>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as MediaProvenanceTagKind)}
+            className="font-ui"
+            style={{ ...inputStyle, marginTop: 4, width: 'auto' }}
+          >
+            {BATCH_TAG_KINDS.map((k) => (
+              <option key={k.kind} value={k.kind}>{k.label}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <label className="font-mono" style={labelStyle}>Value</label>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="font-ui"
+            style={{ ...inputStyle, marginTop: 4 }}
+            placeholder="e.g. 2019"
+          />
+        </div>
+        <button type="button" disabled={busy} onClick={apply} style={btnStyle(busy)}>
+          {busy ? 'Applying…' : `Apply to ${selectedIds.length}`}
+        </button>
+        <button type="button" disabled={busy} onClick={onClear} style={btnStyle(busy)}>
+          Clear
+        </button>
+      </div>
+      {msg && (
+        <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem', marginTop: 6 }}>
+          {msg}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function EntryCard({
   entry,
   members,
+  selectable,
+  selected,
+  onToggleSelect,
 }: {
   entry: IngestEntry;
   members: IngestMember[];
+  selectable: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const router = useRouter();
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // D0: commissioner set/replace poster for a video (the honest fallback when
+  // auto-extraction could not decode the file).
+  const [posterBusy, setPosterBusy] = useState(false);
+  const [posterMsg, setPosterMsg] = useState<string | null>(null);
+
+  // D3: the edit affordances (tag form + poster) collapse behind a toggle so a large
+  // corpus stays scannable; the default row is thumbnail + current tags + actions.
+  const [expanded, setExpanded] = useState(false);
+
+  async function setPoster(img: File) {
+    setPosterBusy(true);
+    setPosterMsg(null);
+    try {
+      const fd = new FormData();
+      fd.set('mediaEntryId', entry.id);
+      fd.set('poster', img);
+      const res = await fetch('/api/av-room/poster', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setPosterMsg(j.error ?? 'Could not save the poster.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setPosterMsg('Could not save the poster.');
+    } finally {
+      setPosterBusy(false);
+    }
+  }
 
   // Tag-form state.
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
@@ -510,7 +804,31 @@ function EntryCard({
     }
   }
 
+  async function reinstate() {
+    if (!confirm('Reinstate this item to display? It will show in the room again.')) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/reinstate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not reinstate.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not reinstate.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function correct(tag: IngestTag) {
+    setExpanded(true); // D3: Correct on a collapsed row reveals the form.
     setTagKind(tag.tagKind);
     setSupersedes(tag.id);
     setError(null);
@@ -533,8 +851,17 @@ function EntryCard({
   }
 
   return (
-    <article style={{ ...cardStyle, opacity: entry.withdrawn ? 0.6 : 1 }}>
+    <article style={{ ...cardStyle, opacity: entry.withdrawn ? 0.6 : 1, outline: selected ? '1px solid var(--vault-gold)' : 'none' }}>
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+        {selectable && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            aria-label="Select for batch tagging"
+            style={{ marginTop: 4, width: 16, height: 16, accentColor: 'var(--vault-gold)', cursor: 'pointer', flexShrink: 0 }}
+          />
+        )}
         <div
           style={{
             width: 120,
@@ -565,7 +892,11 @@ function EntryCard({
               {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
               {entry.withdrawn ? ' · WITHDRAWN' : ''}
             </span>
-            {!entry.withdrawn && (
+            {entry.withdrawn ? (
+              <button type="button" disabled={busy} onClick={reinstate} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
+                Reinstate
+              </button>
+            ) : (
               <button type="button" disabled={busy} onClick={withdraw} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
                 Withdraw
               </button>
@@ -600,9 +931,52 @@ function EntryCard({
         </div>
       </div>
 
-      {/* Tag form */}
+      {/* D3: the edit affordances collapse behind this toggle. */}
       {!entry.withdrawn && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="font-mono"
+          style={{ ...btnStyle(false), marginTop: '0.75rem', padding: '0.3rem 0.6rem' }}
+        >
+          {expanded ? 'Done editing' : 'Tag / edit'}
+        </button>
+      )}
+      {!entry.withdrawn && expanded && (
         <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.9rem' }}>
+          {/* D0: video poster - set/replace by hand when auto-extraction could not
+              read the file. Honest gap: a missing poster says so, not nothing. */}
+          {entry.mediaKind === 'video' && (
+            <div style={{ marginBottom: '0.9rem' }}>
+              <p
+                className="font-ui"
+                style={{ fontSize: '0.78rem', color: entry.hasPoster ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
+              >
+                {entry.hasPoster
+                  ? 'Poster still set — the room shows it for this video.'
+                  : 'No still yet — the room shows a placeholder. Auto-extraction could not read this video; set a still by hand.'}
+              </p>
+              <label className="font-mono" style={{ ...btnStyle(posterBusy), display: 'inline-block', marginTop: 6 }}>
+                {posterBusy ? 'Saving…' : entry.hasPoster ? 'Replace poster' : 'Set poster'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={posterBusy}
+                  onChange={(e) => {
+                    const img = e.target.files?.[0];
+                    if (img) void setPoster(img);
+                    e.target.value = '';
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {posterMsg && (
+                <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
+                  {posterMsg}
+                </p>
+              )}
+            </div>
+          )}
           {supersedes && (
             <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', marginBottom: 6 }}>
               CORRECTING AN EARLIER TAG — this supersedes it

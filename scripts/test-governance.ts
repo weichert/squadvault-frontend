@@ -843,6 +843,34 @@ async function g16() {
   // and the founder click-through covers the authed-route path.
 }
 
+// ── G17: media_display_reinstatements is commissioner-write + append-only
+//        (RLS, W.1 D5) ───────────────────────────────────────────────────
+async function g17() {
+  console.log('\nG17 — media_display_reinstatements is commissioner-write + append-only (RLS, W.1 D5)');
+
+  // Probe existence via service role; skip (not false-pass) if migration 012 is not
+  // yet applied to this environment.
+  const { error: probeErr } = await serviceClient
+    .from('media_display_reinstatements')
+    .select('id')
+    .limit(1);
+  if (probeErr) {
+    console.log('     (skip G17: media_display_reinstatements not present — apply migration 012)');
+    return;
+  }
+
+  // Anon cannot INSERT. Data-independent: WITH CHECK requires commissioner/admin,
+  // which anon is not; RLS WITH CHECK is evaluated before the row's FK constraints,
+  // so bogus ids still surface as a 42501 policy denial rather than an FK error.
+  const { error: insErr } = await anonClient.from('media_display_reinstatements').insert({
+    league_id: DEMO_LEAGUE_ID,
+    media_entry_id: '00000000-0000-0000-0000-0000000000aa',
+    withdrawal_id: '00000000-0000-0000-0000-0000000000bb',
+    reinstated_by: '00000000-0000-0000-0000-0000000000cc',
+  });
+  assertRlsInsertDenied('G17', 'media_display_reinstatements', insErr);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -863,6 +891,7 @@ async function main() {
   await g14();
   await g15();
   await g16();
+  await g17();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);

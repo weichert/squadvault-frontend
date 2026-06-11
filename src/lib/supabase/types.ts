@@ -346,6 +346,21 @@ export interface MediaDisplayWithdrawal {
   recorded_at: string;
 }
 
+// Reinstatement of a withdrawn item (spec 5.5 / D5). Append-only sibling of the
+// withdrawal: a new event that reverses a specific prior withdrawal. The read-model
+// treats an item as withdrawn iff its latest withdrawal postdates its latest
+// reinstatement. media_entry_id nullable (Increment 2 reuse); league_id explicit
+// for RLS; withdrawal_id names the withdrawal being reversed.
+export interface MediaDisplayReinstatement {
+  id: string;
+  league_id: string;
+  media_entry_id: string | null;
+  withdrawal_id: string;
+  reinstated_by: string;
+  note: string | null;
+  recorded_at: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -400,6 +415,7 @@ export type Database = {
       media_provenance_tag_events: { Row: MediaProvenanceTagEvent; Insert: Omit<MediaProvenanceTagEvent, 'id' | 'recorded_at'>; Update: never };
       room_ratification_events: { Row: RoomRatificationEvent; Insert: Omit<RoomRatificationEvent, 'id' | 'recorded_at'>; Update: never };
       media_display_withdrawals: { Row: MediaDisplayWithdrawal; Insert: Omit<MediaDisplayWithdrawal, 'id' | 'recorded_at'>; Update: never };
+      media_display_reinstatements: { Row: MediaDisplayReinstatement; Insert: Omit<MediaDisplayReinstatement, 'id' | 'recorded_at'>; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };

@@ -169,15 +169,41 @@ export async function loadRoomState(
 
   const entryIds = entries.map((e) => e.id);
 
-  // Standing withdrawals (item-level). A row here = the item is withdrawn from
-  // forward display, effective at insert (carry-forward note 3).
+  // Display state is DERIVED from two append-only logs (D5): an item is withdrawn
+  // iff its LATEST withdrawal postdates its LATEST reinstatement. A withdrawal with
+  // no later reinstatement stands; a reinstatement after the latest withdrawal
+  // restores the item; a fresh withdrawal after that withdraws it again. The full
+  // history stays in the logs - nothing is edited. (The reinstatements table is
+  // graceful-absent: before migration 012 is applied the query yields nothing and
+  // behaviour matches the prior withdrawal-only model.)
   const { data: withdrawalRows } = (await admin
     .from('media_display_withdrawals')
-    .select('media_entry_id')
-    .in('media_entry_id', entryIds)) as { data: { media_entry_id: string | null }[] | null };
-  const withdrawn = new Set(
-    (withdrawalRows ?? []).map((w) => w.media_entry_id).filter((id): id is string => !!id),
-  );
+    .select('media_entry_id, recorded_at')
+    .in('media_entry_id', entryIds)) as {
+    data: { media_entry_id: string | null; recorded_at: string }[] | null;
+  };
+  const { data: reinstateRows } = (await admin
+    .from('media_display_reinstatements')
+    .select('media_entry_id, recorded_at')
+    .in('media_entry_id', entryIds)) as {
+    data: { media_entry_id: string | null; recorded_at: string }[] | null;
+  };
+  const latestAt = (rows: { media_entry_id: string | null; recorded_at: string }[] | null) => {
+    const m = new Map<string, string>();
+    for (const r of rows ?? []) {
+      if (!r.media_entry_id) continue;
+      const prev = m.get(r.media_entry_id);
+      if (!prev || r.recorded_at > prev) m.set(r.media_entry_id, r.recorded_at);
+    }
+    return m;
+  };
+  const latestWithdrawal = latestAt(withdrawalRows);
+  const latestReinstatement = latestAt(reinstateRows);
+  const withdrawn = new Set<string>();
+  latestWithdrawal.forEach((wAt, id) => {
+    const rAt = latestReinstatement.get(id);
+    if (!rAt || wAt > rAt) withdrawn.add(id);
+  });
 
   const { data: tagRows } = (await admin
     .from('media_provenance_tag_events')
