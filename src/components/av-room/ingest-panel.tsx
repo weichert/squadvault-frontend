@@ -86,6 +86,52 @@ function btnStyle(disabled: boolean) {
   };
 }
 
+// D3 (round 2): find-without-scrolling. Deterministic filters only - exact-match
+// selectors (kind, season, event, withdrawn-state) compose by AND, and a plain
+// case-insensitive substring over note + tag values. No ranking, no relevance
+// ordering: the corpus order is never disturbed (constitutional line).
+type WithdrawnFilter = 'all' | 'live' | 'withdrawn';
+
+type CorpusFilterState = {
+  kind: 'all' | MediaKind;
+  season: string;
+  event: string;
+  withdrawn: WithdrawnFilter;
+  text: string;
+};
+
+const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '' };
+
+// Distinct values for a tag kind, sorted only to order the SELECTOR options - this
+// orders the dropdown, never the corpus.
+function distinctTagValues(entries: IngestEntry[], kind: MediaProvenanceTagKind): string[] {
+  const seen = new Set<string>();
+  for (const e of entries) {
+    for (const t of e.tags) {
+      if (t.tagKind === kind && t.tagValue) seen.add(t.tagValue);
+    }
+  }
+  return Array.from(seen).sort((a, b) => a.localeCompare(b));
+}
+
+function matchesFilters(entry: IngestEntry, f: CorpusFilterState): boolean {
+  if (f.kind !== 'all' && entry.mediaKind !== f.kind) return false;
+  if (f.withdrawn === 'live' && entry.withdrawn) return false;
+  if (f.withdrawn === 'withdrawn' && !entry.withdrawn) return false;
+  if (f.season && !entry.tags.some((t) => t.tagKind === 'season' && t.tagValue === f.season)) return false;
+  if (f.event && !entry.tags.some((t) => t.tagKind === 'event' && t.tagValue === f.event)) return false;
+  const needle = f.text.trim().toLowerCase();
+  if (needle) {
+    const hay = [entry.uploadNote ?? '', ...entry.tags.map((t) => t.tagValue ?? '')].join(' ').toLowerCase();
+    if (!hay.includes(needle)) return false;
+  }
+  return true;
+}
+
+function filtersActive(f: CorpusFilterState): boolean {
+  return f.kind !== 'all' || f.withdrawn !== 'all' || !!f.season || !!f.event || !!f.text.trim();
+}
+
 export function IngestPanel({
   leagueId,
   canonicalId,
@@ -113,8 +159,15 @@ export function IngestPanel({
   function clearSelection() {
     setSelected(new Set());
   }
-  // Keep selection from going stale across refreshes: only ids still present remain.
-  const presentIds = new Set(entries.map((e) => e.id));
+  // D3: deterministic filters narrow the corpus before render. Selectors derive
+  // their options from what the corpus actually carries.
+  const [filters, setFilters] = useState<CorpusFilterState>(EMPTY_FILTERS);
+  const seasons = distinctTagValues(entries, 'season');
+  const events = distinctTagValues(entries, 'event');
+  const visibleEntries = entries.filter((e) => matchesFilters(e, filters));
+  // Keep selection from going stale: batch tagging only acts on items in view, so
+  // an item filtered off-screen is not silently tagged.
+  const presentIds = new Set(visibleEntries.map((e) => e.id));
   const selectedIds = Array.from(selected).filter((id) => presentIds.has(id));
 
   return (
@@ -124,7 +177,7 @@ export function IngestPanel({
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
           <h2 className="font-mono" style={labelStyle}>
-            THE CORPUS ({entries.length})
+            THE CORPUS ({filtersActive(filters) ? `${visibleEntries.length} OF ${entries.length}` : entries.length})
           </h2>
           <a
             href={`/league/${canonicalId}/av-room`}
@@ -134,6 +187,15 @@ export function IngestPanel({
             VIEW THE ROOM →
           </a>
         </div>
+        {entries.length > 0 && (
+          <CorpusFilters
+            filters={filters}
+            seasons={seasons}
+            events={events}
+            onChange={setFilters}
+            onReset={() => setFilters(EMPTY_FILTERS)}
+          />
+        )}
         {selectedIds.length > 0 && (
           <BatchTagBar
             selectedIds={selectedIds}
@@ -148,9 +210,21 @@ export function IngestPanel({
           <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
             Nothing has been added yet. Upload the first photograph above.
           </p>
+        ) : visibleEntries.length === 0 ? (
+          <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
+            No items match these filters.{' '}
+            <button
+              type="button"
+              onClick={() => setFilters(EMPTY_FILTERS)}
+              className="font-mono"
+              style={{ ...btnStyle(false), padding: '0.2rem 0.5rem', marginLeft: 4 }}
+            >
+              Clear filters
+            </button>
+          </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {entries.map((e) => (
+            {visibleEntries.map((e) => (
               <EntryCard
                 key={e.id}
                 entry={e}
@@ -163,6 +237,101 @@ export function IngestPanel({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function CorpusFilters({
+  filters,
+  seasons,
+  events,
+  onChange,
+  onReset,
+}: {
+  filters: CorpusFilterState;
+  seasons: string[];
+  events: string[];
+  onChange: (f: CorpusFilterState) => void;
+  onReset: () => void;
+}) {
+  const selStyle = { ...inputStyle, width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.8rem' };
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '0.5rem',
+        alignItems: 'center',
+        marginBottom: '1rem',
+        padding: '0.6rem 0.7rem',
+        background: 'var(--vault-s1)',
+        border: '1px solid var(--vault-border)',
+        borderRadius: 6,
+      }}
+    >
+      <span className="font-mono" style={labelStyle}>FILTER</span>
+      <select
+        aria-label="Filter by media kind"
+        value={filters.kind}
+        onChange={(e) => onChange({ ...filters, kind: e.target.value as 'all' | MediaKind })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="all">All kinds</option>
+        <option value="photo">Photo</option>
+        <option value="video">Video</option>
+      </select>
+      <select
+        aria-label="Filter by season tag"
+        value={filters.season}
+        onChange={(e) => onChange({ ...filters, season: e.target.value })}
+        className="font-ui"
+        style={selStyle}
+        disabled={seasons.length === 0}
+      >
+        <option value="">All seasons</option>
+        {seasons.map((s) => (
+          <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter by event tag"
+        value={filters.event}
+        onChange={(e) => onChange({ ...filters, event: e.target.value })}
+        className="font-ui"
+        style={selStyle}
+        disabled={events.length === 0}
+      >
+        <option value="">All events</option>
+        {events.map((ev) => (
+          <option key={ev} value={ev}>{ev}</option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter by withdrawn state"
+        value={filters.withdrawn}
+        onChange={(e) => onChange({ ...filters, withdrawn: e.target.value as WithdrawnFilter })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="all">Live + withdrawn</option>
+        <option value="live">Live only</option>
+        <option value="withdrawn">Withdrawn only</option>
+      </select>
+      <input
+        type="text"
+        aria-label="Match note or tag text"
+        value={filters.text}
+        onChange={(e) => onChange({ ...filters, text: e.target.value })}
+        placeholder="Match note or tag text"
+        className="font-ui"
+        style={{ ...selStyle, flex: 1, minWidth: 140 }}
+      />
+      {filtersActive(filters) && (
+        <button type="button" onClick={onReset} className="font-mono" style={{ ...btnStyle(false), padding: '0.35rem 0.6rem' }}>
+          Clear
+        </button>
+      )}
     </div>
   );
 }
