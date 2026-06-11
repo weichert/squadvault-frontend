@@ -93,15 +93,20 @@ function btnStyle(disabled: boolean) {
 // ordering: the corpus order is never disturbed (constitutional line).
 type WithdrawnFilter = 'all' | 'live' | 'withdrawn';
 
+// R4-D5: tag-ABSENCE filter. 'all' = no completeness filter; 'any' = entirely untagged;
+// a kind = lacks a tag of that kind. Deterministic curator tool-state, never member-facing.
+type NeedsFilter = 'all' | 'any' | MediaProvenanceTagKind;
+
 type CorpusFilterState = {
   kind: 'all' | MediaKind;
   season: string;
   event: string;
   withdrawn: WithdrawnFilter;
   text: string;
+  needs: NeedsFilter;
 };
 
-const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '' };
+const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '', needs: 'all' };
 
 // Distinct values for a tag kind, sorted only to order the SELECTOR options - this
 // orders the dropdown, never the corpus.
@@ -121,6 +126,9 @@ function matchesFilters(entry: IngestEntry, f: CorpusFilterState): boolean {
   if (f.withdrawn === 'withdrawn' && !entry.withdrawn) return false;
   if (f.season && !entry.tags.some((t) => t.tagKind === 'season' && t.tagValue === f.season)) return false;
   if (f.event && !entry.tags.some((t) => t.tagKind === 'event' && t.tagValue === f.event)) return false;
+  // R4-D5: tag-absence. 'any' = no tags at all; a kind = no tag of that kind.
+  if (f.needs === 'any' && entry.tags.length > 0) return false;
+  if (f.needs !== 'all' && f.needs !== 'any' && entry.tags.some((t) => t.tagKind === f.needs)) return false;
   const needle = f.text.trim().toLowerCase();
   if (needle) {
     const hay = [entry.uploadNote ?? '', ...entry.tags.map((t) => t.tagValue ?? '')].join(' ').toLowerCase();
@@ -130,7 +138,7 @@ function matchesFilters(entry: IngestEntry, f: CorpusFilterState): boolean {
 }
 
 function filtersActive(f: CorpusFilterState): boolean {
-  return f.kind !== 'all' || f.withdrawn !== 'all' || !!f.season || !!f.event || !!f.text.trim();
+  return f.kind !== 'all' || f.withdrawn !== 'all' || !!f.season || !!f.event || !!f.text.trim() || f.needs !== 'all';
 }
 
 export function IngestPanel({
@@ -171,6 +179,10 @@ export function IngestPanel({
   const presentIds = new Set(visibleEntries.map((e) => e.id));
   const selectedIds = Array.from(selected).filter((id) => presentIds.has(id));
 
+  // R4-D5: the untagged work queue's quiet count - entries carrying no tags at all.
+  // Deterministic, commissioner-only tool-state; no streaks, no progress mechanics.
+  const untaggedCount = entries.filter((e) => e.tags.length === 0).length;
+
   // R4-D1 quick-look: an index INTO the filtered list (so arrow-keys walk exactly what
   // the commissioner is looking at). Opening resolves the row's id to its filtered index.
   const [quickLook, setQuickLook] = useState<number | null>(null);
@@ -188,13 +200,27 @@ export function IngestPanel({
           <h2 className="font-mono" style={labelStyle}>
             THE CORPUS ({filtersActive(filters) ? `${visibleEntries.length} OF ${entries.length}` : entries.length})
           </h2>
-          <a
-            href={`/league/${canonicalId}/av-room`}
-            className="font-mono"
-            style={{ ...labelStyle, color: 'var(--vault-text2)', textDecoration: 'none' }}
-          >
-            VIEW THE ROOM →
-          </a>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
+            {untaggedCount > 0 && (
+              // R4-D5: a quiet count that doubles as a jump to the work queue. No badge,
+              // no progress bar - plain muted text.
+              <button
+                type="button"
+                onClick={() => setFilters({ ...filters, needs: 'any' })}
+                className="font-mono"
+                style={{ ...labelStyle, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--vault-text3)' }}
+              >
+                {untaggedCount} UNTAGGED
+              </button>
+            )}
+            <a
+              href={`/league/${canonicalId}/av-room`}
+              className="font-mono"
+              style={{ ...labelStyle, color: 'var(--vault-text2)', textDecoration: 'none' }}
+            >
+              VIEW THE ROOM →
+            </a>
+          </div>
         </div>
         {entries.length > 0 && (
           <CorpusFilters
@@ -406,6 +432,20 @@ function CorpusFilters({
         <option value="all">Live + withdrawn</option>
         <option value="live">Live only</option>
         <option value="withdrawn">Withdrawn only</option>
+      </select>
+      {/* R4-D5: the untagged work queue - filter by what an item still NEEDS. */}
+      <select
+        aria-label="Filter by what an item still needs tagged"
+        value={filters.needs}
+        onChange={(e) => onChange({ ...filters, needs: e.target.value as NeedsFilter })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="all">Any tagging</option>
+        <option value="any">Needs any tag</option>
+        {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
+          <option key={k} value={k}>Needs {TAG_KIND_LABEL[k].toLowerCase()}</option>
+        ))}
       </select>
       <input
         type="text"
