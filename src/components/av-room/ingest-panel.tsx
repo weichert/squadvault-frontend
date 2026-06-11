@@ -419,18 +419,27 @@ function ThumbnailBackfill({ leagueId, onDone }: { leagueId: string; onDone: () 
         setMsg(j.error ?? 'Could not check thumbnails.');
         return;
       }
-      const { targets } = (await res.json()) as { targets: { mediaEntryId: string; originalUrl: string }[] };
+      const { targets } = (await res.json()) as {
+        targets: { mediaEntryId: string; originalUrl: string; note: string | null; createdAt: string }[];
+      };
       if (targets.length === 0) {
         setMsg('Every photo already has a thumbnail.');
         return;
       }
       let done = 0;
-      let failed = 0;
+      // Name each item that fails to read: an unreadable, untagged item is otherwise
+      // unidentifiable in the UI (short id + its note or ingest date).
+      const failures: string[] = [];
+      const label = (t: { mediaEntryId: string; note: string | null; createdAt: string }) => {
+        const idPart = t.mediaEntryId.slice(0, 8);
+        const detail = t.note?.trim() || new Date(t.createdAt).toISOString().slice(0, 10);
+        return `${idPart} (${detail})`;
+      };
       for (const t of targets) {
-        setMsg(`Generating thumbnails… ${done + failed}/${targets.length}`);
+        setMsg(`Generating thumbnails… ${done + failures.length}/${targets.length}`);
         const blob = await imageToThumbBlob(t.originalUrl);
         if (!blob) {
-          failed += 1;
+          failures.push(label(t));
           continue;
         }
         const form = new FormData();
@@ -438,9 +447,10 @@ function ThumbnailBackfill({ leagueId, onDone }: { leagueId: string; onDone: () 
         form.set('thumb', blob, 'thumb.jpg');
         const up = await fetch('/api/av-room/thumb', { method: 'POST', body: form });
         if (up.ok) done += 1;
-        else failed += 1;
+        else failures.push(label(t));
       }
-      setMsg(`Generated ${done} thumbnail${done === 1 ? '' : 's'}${failed ? `, ${failed} could not be read` : ''}.`);
+      const tail = failures.length ? ` ${failures.length} could not be read: ${failures.join('; ')}.` : '';
+      setMsg(`Generated ${done} thumbnail${done === 1 ? '' : 's'}.${tail}`);
       if (done > 0) onDone();
     } catch {
       setMsg('Could not generate thumbnails.');

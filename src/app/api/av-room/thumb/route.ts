@@ -51,11 +51,15 @@ export async function GET(req: NextRequest) {
 
   const { data: photos } = (await admin
     .from('media_entries')
-    .select('id, storage_path')
+    .select('id, storage_path, upload_note, created_at')
     .eq('league_id', leagueId)
-    .eq('media_kind', 'photo')) as { data: { id: string; storage_path: string }[] | null };
+    .eq('media_kind', 'photo')) as {
+    data: { id: string; storage_path: string; upload_note: string | null; created_at: string }[] | null;
+  };
 
-  const targets: { mediaEntryId: string; originalUrl: string }[] = [];
+  // note + createdAt travel with each target so the client can NAME an item that fails
+  // to read (an unreadable, untagged item is otherwise unidentifiable in the UI).
+  const targets: { mediaEntryId: string; originalUrl: string; note: string | null; createdAt: string }[] = [];
   for (const p of photos ?? []) {
     const folder = p.storage_path.slice(0, p.storage_path.lastIndexOf('/'));
     const { data: listed } = await admin.storage.from('league-media').list(folder);
@@ -63,7 +67,9 @@ export async function GET(req: NextRequest) {
     const { data: signed } = await admin.storage
       .from('league-media')
       .createSignedUrl(p.storage_path, ORIGINAL_TTL_SECONDS);
-    if (signed) targets.push({ mediaEntryId: p.id, originalUrl: signed.signedUrl });
+    if (signed) {
+      targets.push({ mediaEntryId: p.id, originalUrl: signed.signedUrl, note: p.upload_note, createdAt: p.created_at });
+    }
   }
 
   return NextResponse.json({ targets });
