@@ -74,26 +74,29 @@ Done + still open:
   D3 compact rows; D4 newest-first ingest; D5 reinstate (migration 012 applied, G17);
   D6 HEIC honesty. Merged `c82bd5f` (PR #11); migration 012 live (governance 113/0);
   posters confirmed on prod. Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ERGONOMICS.md`.
-- **Ingest ergonomics round 2 — DONE on branch, in PR #13; DISCHARGE HELD pending
-  founder click-through.** D1 ingest thumbnails use the set poster (`ea63a51`); D2
-  compact rows + detail behind per-item expand (`8ffe2c1`); D3 deterministic
-  find-without-scrolling filters — kind/season/event/withdrawn + substring, compose by
-  AND, no ranking (`b2acded`). Branch `feat/w1-ingest-ergonomics-r2` off `b5f5bf6`.
+- **Ingest ergonomics round 2 — DONE + DISCHARGED 2026-06-11.** D1 ingest thumbnails use
+  the set poster (`ea63a51`); D2 compact rows + detail behind per-item expand (`8ffe2c1`);
+  D3 deterministic find-without-scrolling filters — kind/season/event/withdrawn +
+  substring, compose by AND, no ranking (`b2acded`). Merged `4c3251f` (PR #13).
   Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ERGONOMICS_ROUND_2.md`.
-  Discharges once the founder click-through passes (poster thumbnails on ingest,
-  expand/collapse density, filter to a single item two ways).
-- **Ingest round 3 (performance at scale) — DONE on branch, in PR #14 (stacked on
-  #13); DISCHARGE HELD pending founder click-through.** R3-D1 photo thumbnail renditions —
-  lists serve thumb.jpg/poster.jpg, never the original; client-side canvas at upload +
-  backfill + new `/api/av-room/thumb` (`6794744`). R3-D2 batch signing — one
-  `createSignedUrls` round-trip per page, not N (`8e5db41`). R3-D3 list virtualization —
+- **Ingest round 3 (performance at scale) — DONE + DISCHARGED 2026-06-11.** R3-D1 photo
+  thumbnail renditions — lists serve thumb.jpg/poster.jpg, never the original; client-side
+  canvas at upload + backfill + new `/api/av-room/thumb` (`6794744`). R3-D2 batch signing —
+  one `createSignedUrls` round-trip per page, not N (`8e5db41`). R3-D3 list virtualization —
   `@tanstack/react-virtual` windows the DOM, filters operate on the full set; dev-only
   `?synthetic=N` harness (`dc06f11`). R3-D4 mobile function-at-width — explicit viewport,
-  tap-to-choose upload, responsive tag form (`295844c`). Stacked on the r2 branch (depends
-  on r2-D1/r2-D3); merge #13 before this. No new table; governance 113/0.
-  Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_3.md`. Discharges once
-  the founder click-through passes (backfill + thumbs render; ?synthetic=1000 scroll;
-  iPhone upload+tag on prod).
+  tap-to-choose upload, responsive tag form (`295844c`). Backfill names unreadable items
+  (`609398e`). Merged `e684292` (PR #15; replaced #14, auto-closed when its stacked base
+  branch was deleted on #13's merge). No new table; governance 113/0.
+  Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_3.md`.
+  Click-through finding folded to R4-D3: a HEIC/HEVC file renamed `.jpg` bypasses the
+  extension-based D6 gate — fix is magic-byte content sniffing (memo
+  `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_R3_CLICKTHROUGH_HEIC_GATE.md`).
+- **Ingest round 4 (the curator's bench) — IN PROGRESS on `feat/w1-ingest-round4`.**
+  R4-D1 quick-look, R4-D2 download original, R4-D3 deterministic duplicate detection
+  (migration 013 content_hash) + HEIC content-sniff, R4-D4 tag autocomplete (own ratified
+  values only), R4-D5 untagged work queue, R4-D6 keyboard-first flow, R4-D7 retry-failed,
+  R4-D8 select-all-in-filter. Bright lines: no AI tagging/ranking, no gamification.
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
   design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
   work (chat/Fable) — the next DECIDE moment. Shares the **attestation class + 2b
