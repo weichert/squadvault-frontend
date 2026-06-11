@@ -871,6 +871,46 @@ async function g17() {
   assertRlsInsertDenied('G17', 'media_display_reinstatements', insErr);
 }
 
+// ── G18: media_entries is append-only — there is NO UPDATE policy, so no non-service
+// client can mutate a row (RLS filters it: zero rows, null error). This turns the R4-D3
+// backfill accident into a permanent assertion: an authed UPDATE silently matched zero
+// rows, which is exactly why the backfill hash write must use the admin (service) client.
+async function g18() {
+  console.log('\nG18 — media_entries is append-only: no UPDATE for any non-service client (RLS, W.1 011)');
+
+  // Need a REAL row to prove RLS *denies the update* (vs. merely matching nothing).
+  // Probe via service role; skip if media_entries is empty/absent in this environment.
+  const { data: rows, error: probeErr } = await serviceClient
+    .from('media_entries')
+    .select('id, upload_note')
+    .limit(1);
+  if (probeErr) {
+    console.log('     (skip G18: media_entries not present — apply migration 011)');
+    return;
+  }
+  if (!rows || rows.length === 0) {
+    console.log('     (skip G18: no media_entries row to probe against)');
+    return;
+  }
+  const target = rows[0] as { id: string; upload_note: string | null };
+  const sentinel = `g18-rls-probe-${randomUUID()}`;
+
+  // Anon has no UPDATE policy; RLS filters the row out -> zero rows updated, error null.
+  const { data: updated } = await anonClient
+    .from('media_entries')
+    .update({ upload_note: sentinel })
+    .eq('id', target.id)
+    .select('id');
+
+  if (updated && updated.length > 0) {
+    fail('G18', 'A non-service UPDATE on media_entries affected a row — APPEND-ONLY / RLS FAILURE');
+    // Defensive restore via service role so the probe never persists a change.
+    await serviceClient.from('media_entries').update({ upload_note: target.upload_note }).eq('id', target.id);
+  } else {
+    pass('G18: Non-service UPDATE on media_entries is denied (append-only; RLS filters the row)');
+  }
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -892,6 +932,7 @@ async function main() {
   await g15();
   await g16();
   await g17();
+  await g18();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);

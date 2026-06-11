@@ -98,15 +98,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 });
   }
 
-  const { error: upErr } = await supabase
+  // The hash write uses the ADMIN client, deliberately. content_hash is a derived,
+  // regenerable CONVENIENCE (migration 013's own argument - the thumbnail/poster family,
+  // not the fact/provenance family). The append-only law protects the RECORD (facts);
+  // writing this column is rendition maintenance, exactly like the poster.jpg / thumb.jpg
+  // upserts, which also go admin. media_entries has NO UPDATE policy (011 append-only,
+  // RLS default-deny) and gains NONE here: an authed UPDATE silently matches zero rows
+  // under RLS - that accident is precisely what shipped the original no-op backfill. The
+  // commissioner check above is the authorization boundary; a column-scoped UPDATE grant
+  // would widen the audited surface for one maintenance path, so we do not add one.
+  const { data: updated, error: upErr } = (await admin
     .from('media_entries')
     .update({ content_hash: hash } as never)
-    .eq('id', mediaEntryId);
-  if (upErr && (upErr as { code?: string }).code === '42703') {
+    .eq('id', mediaEntryId)
+    .select('id')) as { data: { id: string }[] | null; error: { code?: string } | null };
+  if (upErr && upErr.code === '42703') {
     return NextResponse.json({ ok: false, inactive: true });
   }
   if (upErr) {
     return NextResponse.json({ error: 'The hash could not be saved' }, { status: 502 });
+  }
+  // De-silence: a write that affected zero rows must NEVER report success (the original
+  // bug - RLS-denied UPDATE returns zero rows with a null error, which read as "ok").
+  if (!updated || updated.length === 0) {
+    return NextResponse.json({ error: 'The hash write affected no row' }, { status: 502 });
   }
   return NextResponse.json({ ok: true });
 }
