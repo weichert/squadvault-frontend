@@ -102,21 +102,28 @@ Done + still open:
     entries / 0 NULLs; cross-kind + against-withdrawn matching; control upload prepends).
     Memos: `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_4_R4D3.md`,
     `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_R4D3_HASH_BACKFILL_RLS_FIX.md`.
-  - **Continuation batch 1 — DONE on `feat/w1-ingest-round4-cont`, in PR #18; DISCHARGE
-    HELD pending click-through.** R4-D1 quick-look (`a6aef39` — full original signed on
-    demand; video = poster + attestation placeholder, no player; unreadable original falls
-    back to an open-original link; shared EntryDetailPanel for the tag panel), R4-D2
-    download original (`7d01097` — commissioner retrieval of the full-res original, any
-    kind, withdrawn included), R4-D5 untagged work queue (`f2cf807` — tag-absence filter +
-    quiet count), R4-D8 select-all-in-filter (`6393b2a`), override-prepend fix (`2ef04bb` —
-    the narrowed #16 finding). Governance 114/0.
-  - **Continuation batch 2 (pending, same branch or next):** R4-D4 tag autocomplete (own
-    ratified values only) + the D4 ordering assertion, R4-D6 keyboard-first flow, R4-D7
-    retry-failed, the **jump-to-item link** (D1 owes it), and the **derived duplicate
-    indicator** (read-model derives "DUPLICATE of <item>" from content_hash equality, all
-    but the earliest per hash; reuses D1's jump-to-item; adds a "duplicates" filter; NO
-    migration / NO tag kind / NO stored state — adjudicated Fable 2026-06-11). Full brief:
+  - **Continuation batch 1 — DONE + DISCHARGED 2026-06-11** (merged `a97fd15`, PR #18;
+    founder click-through PASSED in full). R4-D1 quick-look (`a6aef39`), R4-D2 download
+    original (`7d01097`), R4-D5 untagged work queue (`f2cf807`), R4-D8 select-all-in-filter
+    (`6393b2a`), override-prepend fix (`2ef04bb`). Governance 114/0.
+  - **Continuation batch 2 (in progress, `feat/w1-ingest-round4-cont-b2`):** R4-D4 tag
+    autocomplete (own ratified values only) + the D4 ordering assertion, R4-D6 keyboard-first
+    flow, R4-D7 retry-failed, the **jump-to-item link** (D1 owes it), and the **derived
+    duplicate indicator** (read-model derives "DUPLICATE of <item>" from content_hash
+    equality, all but the earliest per hash; reuses D1's jump-to-item; adds a "duplicates"
+    filter; NO migration / NO tag kind / NO stored state — adjudicated Fable 2026-06-11),
+    THEN **media expungement** as its own commit series (or separate PR). Full brief:
     `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_ROUND_4_CONTINUATION_QUEUE.md`.
+  - **D-W1-E1 media EXPUNGEMENT class — ADMITTED 2026-06-11** (founder, Fable chat; Spec 5.2
+    Amendment 1 ratified verbatim). Append-only, commissioner-ratified, reason-required
+    expungement event that DELETES the stored bytes (original + renditions) and tombstones
+    the entry (row never deleted; log testifies it existed and was expunged). Terminal (no
+    reinstatement); content_hash survives so re-upload surfaces as duplicate-of-expunged.
+    Build last in batch 2: migration 014 `media_expungement_events` (sibling pattern + new
+    G-test), expunge route (authed-insert event + admin byte-delete), "Expunged" filter +
+    tombstone, Expunge action behind a required-reason confirm. Post-E2.3 consent dimension
+    deferred to Inc 2. Ruling memo
+    `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_DW1E1_EXPUNGEMENT_RULING.md`.
   - Bright lines: no AI tagging/face-detection/AI-search; no gamification/streaks/nudges;
     no relevance ranking — filters/matches stay deterministic.
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
