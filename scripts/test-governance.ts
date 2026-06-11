@@ -39,6 +39,26 @@ function fail(test: string, detail: string) {
   failed++;
 }
 
+// Assert an anon INSERT was denied by RLS specifically (Postgres 42501,
+// "new row violates row-level security policy"), NOT by some incidental
+// constraint (FK 23503, NOT NULL 23502, CHECK 23514). RLS WITH CHECK is
+// evaluated before the row's constraints, so a genuine policy denial always
+// surfaces as 42501 even with bogus FK ids — asserting the code keeps an
+// unrelated schema error from masquerading as a passing governance test.
+function assertRlsInsertDenied(
+  label: string,
+  table: string,
+  err: { code?: string } | null,
+) {
+  if (err?.code === '42501') {
+    pass(`${label}: Anon cannot insert ${table} (RLS denial 42501)`);
+  } else if (err) {
+    fail(label, `Insert into ${table} was denied by ${err.code}, not RLS 42501 — assertion too weak / wrong cause`);
+  } else {
+    fail(label, `Anon inserted a ${table} row — RLS FAILURE`);
+  }
+}
+
 // ── G1: Member query cannot retrieve unapproved artifacts ──────────────
 async function g1() {
   console.log('\nG1 — Member query cannot retrieve unapproved artifacts');
@@ -487,11 +507,7 @@ async function g12() {
     uploaded_by: '00000000-0000-0000-0000-0000000000ff',
     upload_note: 'governance_test',
   });
-  if (insErr) {
-    pass('G12: Anon cannot insert media_entries (commissioner-only INSERT)');
-  } else {
-    fail('G12', 'Anon inserted a media_entries row — RLS FAILURE');
-  }
+  assertRlsInsertDenied('G12', 'media_entries', insErr);
 
   const fr = await resolveMember();
   if (!fr) {
@@ -556,11 +572,7 @@ async function g13() {
     tag_value: 'governance_test',
     ratified_by: '00000000-0000-0000-0000-0000000000ff',
   });
-  if (insErr) {
-    pass('G13: Anon cannot insert media_provenance_tag_events (commissioner-only INSERT)');
-  } else {
-    fail('G13', 'Anon inserted a media_provenance_tag_events row — RLS FAILURE');
-  }
+  assertRlsInsertDenied('G13', 'media_provenance_tag_events', insErr);
 
   const fr = await resolveMember();
   if (!fr) {
@@ -653,11 +665,7 @@ async function g14() {
     ratified_by: '00000000-0000-0000-0000-0000000000ff',
     scope_note: 'governance_test',
   });
-  if (insErr) {
-    pass('G14: Anon cannot insert room_ratification_events (commissioner-only INSERT)');
-  } else {
-    fail('G14', 'Anon inserted a room_ratification_events row — RLS FAILURE');
-  }
+  assertRlsInsertDenied('G14', 'room_ratification_events', insErr);
 
   const fr = await resolveMember();
   if (!fr) {
@@ -718,11 +726,7 @@ async function g15() {
     requested_by: '00000000-0000-0000-0000-0000000000ff',
     note: 'governance_test',
   });
-  if (insErr) {
-    pass('G15: Anon cannot insert media_display_withdrawals (commissioner-only INSERT)');
-  } else {
-    fail('G15', 'Anon inserted a media_display_withdrawals row — RLS FAILURE');
-  }
+  assertRlsInsertDenied('G15', 'media_display_withdrawals', insErr);
 
   const fr = await resolveMember();
   if (!fr) {

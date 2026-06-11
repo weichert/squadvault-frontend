@@ -1,0 +1,606 @@
+// src/components/av-room/ingest-panel.tsx
+'use client';
+
+// W.1 A/V Room ingest panel (spec 5.7) - the commissioner's management surface.
+// Upload (photo-first), provenance tagging across the five kinds with a no-vacuous-
+// tag guard (contributor/season/event require a value - carry-forward note 2), the
+// read-only 2a grant state shown beside member identification (W.6 5), correction-
+// by-supersession, item withdrawal, and room ratification. All writes POST to the
+// /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
+
+export type IngestTag = {
+  id: string;
+  tagKind: MediaProvenanceTagKind;
+  tagValue: string | null;
+  datePrecision: MediaDatePrecision | null;
+  taggedMemberUserId: string | null;
+};
+
+export type IngestEntry = {
+  id: string;
+  mediaKind: MediaKind;
+  uploadNote: string | null;
+  createdAt: string;
+  withdrawn: boolean;
+  tags: IngestTag[];
+};
+
+export type IngestMember = {
+  memberUserId: string;
+  displayName: string;
+  granted2a: boolean;
+};
+
+const TAG_KIND_LABEL: Record<MediaProvenanceTagKind, string> = {
+  contributor: 'Contributor',
+  date: 'Date',
+  season: 'Season',
+  event: 'Event',
+  member_identification: 'Member identification',
+};
+
+const VALUE_REQUIRED: MediaProvenanceTagKind[] = ['contributor', 'season', 'event'];
+const DATE_PRECISIONS: MediaDatePrecision[] = ['exact', 'year', 'season'];
+
+const labelStyle = {
+  fontSize: '10px',
+  letterSpacing: '0.12em',
+  color: 'var(--vault-text2)',
+  textTransform: 'uppercase' as const,
+};
+const inputStyle = {
+  width: '100%',
+  background: 'var(--vault-s2)',
+  border: '1px solid var(--vault-border)',
+  borderRadius: 4,
+  color: 'var(--vault-text)',
+  padding: '0.5rem 0.6rem',
+  fontSize: '0.85rem',
+};
+const cardStyle = {
+  background: 'var(--vault-s1)',
+  border: '1px solid var(--vault-border)',
+  borderRadius: 6,
+  padding: '1rem',
+};
+
+function btnStyle(disabled: boolean) {
+  return {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '10px',
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase' as const,
+    padding: '0.5rem 0.9rem',
+    borderRadius: 4,
+    border: '1px solid var(--vault-border)',
+    background: 'var(--vault-s2)',
+    color: disabled ? 'var(--vault-text3)' : 'var(--vault-text)',
+    cursor: disabled ? 'default' : 'pointer',
+  };
+}
+
+export function IngestPanel({
+  leagueId,
+  canonicalId,
+  ratified,
+  entries,
+  members,
+}: {
+  leagueId: string;
+  canonicalId: string;
+  ratified: boolean;
+  entries: IngestEntry[];
+  members: IngestMember[];
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <RoomRatification leagueId={leagueId} ratified={ratified} />
+      <UploadForm leagueId={leagueId} />
+      <section>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
+          <h2 className="font-mono" style={labelStyle}>
+            THE CORPUS ({entries.length})
+          </h2>
+          <a
+            href={`/league/${canonicalId}/av-room`}
+            className="font-mono"
+            style={{ ...labelStyle, color: 'var(--vault-text2)', textDecoration: 'none' }}
+          >
+            VIEW THE ROOM →
+          </a>
+        </div>
+        {entries.length === 0 ? (
+          <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
+            Nothing has been added yet. Upload the first photograph above.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {entries.map((e) => (
+              <EntryCard key={e.id} entry={e} members={members} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function RoomRatification({ leagueId, ratified }: { leagueId: string; ratified: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function ratify() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, scope_note: 'Room shared with the league.' }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not ratify the room.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not ratify the room.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section style={cardStyle}>
+      <h2 className="font-mono" style={{ ...labelStyle, marginBottom: '0.5rem' }}>
+        ROOM STATUS
+      </h2>
+      {ratified ? (
+        <p className="font-ui" style={{ color: 'var(--vault-text)', fontSize: '0.85rem' }}>
+          This room is ratified and visible to the league. Items you add appear once tagged;
+          withdrawn items stop showing.
+        </p>
+      ) : (
+        <>
+          <p
+            className="font-ui"
+            style={{ color: 'var(--vault-text2)', fontSize: '0.85rem', marginBottom: '0.75rem' }}
+          >
+            The room is not yet shared. Until you ratify it, the league sees nothing here.
+            Add and tag what you like first; ratify when it is ready.
+          </p>
+          <button type="button" disabled={busy} onClick={ratify} style={btnStyle(busy)}>
+            {busy ? 'Ratifying…' : 'Ratify and share the room'}
+          </button>
+        </>
+      )}
+      {error && (
+        <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function UploadForm({ leagueId }: { leagueId: string }) {
+  const router = useRouter();
+  const [file, setFile] = useState<File | null>(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const kind: MediaKind | null = file
+    ? file.type.startsWith('image/')
+      ? 'photo'
+      : file.type.startsWith('video/')
+        ? 'video'
+        : null
+    : null;
+
+  async function submit() {
+    if (!file || !kind) {
+      setError('Choose an image or video file.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set('file', file);
+      form.set('leagueId', leagueId);
+      form.set('media_kind', kind);
+      if (note.trim()) form.set('upload_note', note.trim());
+      const res = await fetch('/api/av-room/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Upload failed.');
+        return;
+      }
+      setFile(null);
+      setNote('');
+      router.refresh();
+    } catch {
+      setError('Upload failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section style={cardStyle}>
+      <h2 className="font-mono" style={{ ...labelStyle, marginBottom: '0.75rem' }}>
+        ADD TO THE RECORD
+      </h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 460 }}>
+        <input
+          type="file"
+          accept="image/*,video/*"
+          onChange={(e) => {
+            setFile(e.target.files?.[0] ?? null);
+            setError(null);
+          }}
+          className="font-ui"
+          style={{ ...inputStyle, padding: '0.4rem' }}
+        />
+        {file && (
+          <p className="font-mono" style={{ ...labelStyle, color: kind ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
+            {kind ? `${kind.toUpperCase()} · ${file.name}` : 'UNSUPPORTED FILE TYPE'}
+          </p>
+        )}
+        <div>
+          <label className="font-mono" style={labelStyle}>
+            Note (optional)
+          </label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. From the 1998 draft night"
+            className="font-ui"
+            style={{ ...inputStyle, marginTop: 4 }}
+          />
+        </div>
+        <button type="button" disabled={busy || !file || !kind} onClick={submit} style={btnStyle(busy || !file || !kind)}>
+          {busy ? 'Uploading…' : 'Upload'}
+        </button>
+        {error && (
+          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
+            {error}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function EntryCard({
+  entry,
+  members,
+}: {
+  entry: IngestEntry;
+  members: IngestMember[];
+}) {
+  const router = useRouter();
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Tag-form state.
+  const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
+  const [tagValue, setTagValue] = useState('');
+  const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
+  const [taggedMember, setTaggedMember] = useState('');
+  const [tagNote, setTagNote] = useState('');
+  const [supersedes, setSupersedes] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const res = await fetch('/api/av-room/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mediaEntryId: entry.id }),
+        });
+        if (!res.ok) return;
+        const j = (await res.json()) as { url?: string };
+        if (active && j.url) setMediaUrl(j.url);
+      } catch {
+        /* preview is best-effort; tagging does not depend on it */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [entry.id]);
+
+  const memberName = (uid: string | null) =>
+    members.find((m) => m.memberUserId === uid)?.displayName ?? 'Unknown member';
+  const selectedMember = members.find((m) => m.memberUserId === taggedMember) ?? null;
+
+  function resetTagForm() {
+    setTagValue('');
+    setDatePrecision('exact');
+    setTaggedMember('');
+    setTagNote('');
+    setSupersedes(null);
+  }
+
+  async function submitTag() {
+    setError(null);
+    // No-vacuous-tag guard, mirrored from the write path (note 2).
+    if (VALUE_REQUIRED.includes(tagKind) && !tagValue.trim()) {
+      setError(`${TAG_KIND_LABEL[tagKind]} needs a value.`);
+      return;
+    }
+    if (tagKind === 'date' && !tagValue.trim()) {
+      setError('A date needs a value.');
+      return;
+    }
+    if (tagKind === 'member_identification' && !taggedMember) {
+      setError('Choose the member to identify.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/av-room/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mediaEntryId: entry.id,
+          tag_kind: tagKind,
+          tag_value: tagKind === 'member_identification' ? null : tagValue.trim() || null,
+          date_precision: tagKind === 'date' ? datePrecision : null,
+          tagged_member_user_id: tagKind === 'member_identification' ? taggedMember : null,
+          note: tagNote.trim() || null,
+          supersedes,
+        }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not save the tag.');
+        return;
+      }
+      resetTagForm();
+      router.refresh();
+    } catch {
+      setError('Could not save the tag.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function withdraw() {
+    if (!confirm('Withdraw this item from display? The record stands; it stops showing.')) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not withdraw.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not withdraw.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function correct(tag: IngestTag) {
+    setTagKind(tag.tagKind);
+    setSupersedes(tag.id);
+    setError(null);
+    if (tag.tagKind === 'member_identification') {
+      setTaggedMember(tag.taggedMemberUserId ?? '');
+    } else {
+      setTagValue(tag.tagValue ?? '');
+      if (tag.tagKind === 'date' && tag.datePrecision) setDatePrecision(tag.datePrecision);
+    }
+  }
+
+  function describeTag(t: IngestTag): string {
+    if (t.tagKind === 'member_identification') {
+      const m = members.find((x) => x.memberUserId === t.taggedMemberUserId);
+      const grant = m ? (m.granted2a ? 'shown' : 'silent — no appearance grant') : 'silent';
+      return `${memberName(t.taggedMemberUserId)} (${grant})`;
+    }
+    if (t.tagKind === 'date') return `${t.tagValue} (${t.datePrecision})`;
+    return t.tagValue ?? '';
+  }
+
+  return (
+    <article style={{ ...cardStyle, opacity: entry.withdrawn ? 0.6 : 1 }}>
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+        <div
+          style={{
+            width: 120,
+            height: 90,
+            flexShrink: 0,
+            background: 'var(--vault-s3)',
+            borderRadius: 4,
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {entry.mediaKind === 'photo' && mediaUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mediaUrl} alt={entry.uploadNote ?? 'Archival photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : entry.mediaKind === 'video' && mediaUrl ? (
+            <video src={mediaUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text3)' }}>
+              {entry.mediaKind.toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span className="font-mono" style={labelStyle}>
+              {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
+              {entry.withdrawn ? ' · WITHDRAWN' : ''}
+            </span>
+            {!entry.withdrawn && (
+              <button type="button" disabled={busy} onClick={withdraw} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
+                Withdraw
+              </button>
+            )}
+          </div>
+          {entry.uploadNote && (
+            <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.82rem', marginTop: 4 }}>
+              {entry.uploadNote}
+            </p>
+          )}
+
+          {/* Current provenance, grouped. Honest gaps: kinds with no tag are absent. */}
+          {entry.tags.length > 0 && (
+            <ul style={{ listStyle: 'none', padding: 0, margin: '0.6rem 0 0' }}>
+              {entry.tags.map((t) => (
+                <li
+                  key={t.id}
+                  className="font-ui"
+                  style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.8rem', padding: '0.2rem 0', color: 'var(--vault-text2)' }}
+                >
+                  <span>
+                    <span style={{ color: 'var(--vault-text3)' }}>{TAG_KIND_LABEL[t.tagKind]}: </span>
+                    <span style={{ color: 'var(--vault-text)' }}>{describeTag(t)}</span>
+                  </span>
+                  <button type="button" onClick={() => correct(t)} style={{ ...btnStyle(false), padding: '0.1rem 0.4rem' }}>
+                    Correct
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Tag form */}
+      {!entry.withdrawn && (
+        <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.9rem' }}>
+          {supersedes && (
+            <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', marginBottom: 6 }}>
+              CORRECTING AN EARLIER TAG — this supersedes it
+            </p>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+            <div>
+              <label className="font-mono" style={labelStyle}>Kind</label>
+              <select
+                value={tagKind}
+                onChange={(e) => {
+                  setTagKind(e.target.value as MediaProvenanceTagKind);
+                  setSupersedes(null);
+                }}
+                className="font-ui"
+                style={{ ...inputStyle, marginTop: 4 }}
+              >
+                {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
+                  <option key={k} value={k}>{TAG_KIND_LABEL[k]}</option>
+                ))}
+              </select>
+            </div>
+
+            {tagKind === 'member_identification' ? (
+              <div>
+                <label className="font-mono" style={labelStyle}>Member</label>
+                <select
+                  value={taggedMember}
+                  onChange={(e) => setTaggedMember(e.target.value)}
+                  className="font-ui"
+                  style={{ ...inputStyle, marginTop: 4 }}
+                >
+                  <option value="">Choose…</option>
+                  {members.map((m) => (
+                    <option key={m.memberUserId} value={m.memberUserId}>{m.displayName}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="font-mono" style={labelStyle}>
+                  {tagKind === 'date' ? 'Date value' : 'Value'}
+                </label>
+                <input
+                  type="text"
+                  value={tagValue}
+                  onChange={(e) => setTagValue(e.target.value)}
+                  placeholder={tagKind === 'date' ? 'e.g. 1998 or 1998-09-04' : ''}
+                  className="font-ui"
+                  style={{ ...inputStyle, marginTop: 4 }}
+                />
+              </div>
+            )}
+
+            {tagKind === 'date' && (
+              <div>
+                <label className="font-mono" style={labelStyle}>Precision</label>
+                <select
+                  value={datePrecision}
+                  onChange={(e) => setDatePrecision(e.target.value as MediaDatePrecision)}
+                  className="font-ui"
+                  style={{ ...inputStyle, marginTop: 4 }}
+                >
+                  {DATE_PRECISIONS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="font-mono" style={labelStyle}>Note (optional)</label>
+              <input
+                type="text"
+                value={tagNote}
+                onChange={(e) => setTagNote(e.target.value)}
+                className="font-ui"
+                style={{ ...inputStyle, marginTop: 4 }}
+              />
+            </div>
+          </div>
+
+          {/* Read-only 2a grant state beside member identification (W.6 5). */}
+          {tagKind === 'member_identification' && selectedMember && (
+            <p className="font-ui" style={{ fontSize: '0.78rem', marginTop: 6, color: selectedMember.granted2a ? 'var(--vault-gold)' : 'var(--vault-text2)' }}>
+              {selectedMember.granted2a
+                ? 'This member has granted appearance — the identification will show in the room.'
+                : 'This member has not granted appearance — the identification is recorded but stays silent in the room until they grant it.'}
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem' }}>
+            <button type="button" disabled={busy} onClick={submitTag} style={btnStyle(busy)}>
+              {busy ? 'Saving…' : supersedes ? 'Save correction' : 'Add tag'}
+            </button>
+            {supersedes && (
+              <button type="button" disabled={busy} onClick={resetTagForm} style={btnStyle(busy)}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+          {error}
+        </p>
+      )}
+    </article>
+  );
+}
