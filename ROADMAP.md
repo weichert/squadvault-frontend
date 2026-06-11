@@ -93,10 +93,18 @@ Done + still open:
   extension-based D6 gate — fix is magic-byte content sniffing (memo
   `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_R3_CLICKTHROUGH_HEIC_GATE.md`).
 - **Ingest round 4 (the curator's bench) — IN PROGRESS on `feat/w1-ingest-round4`.**
-  R4-D1 quick-look, R4-D2 download original, R4-D3 deterministic duplicate detection
-  (migration 013 content_hash) + HEIC content-sniff, R4-D4 tag autocomplete (own ratified
-  values only), R4-D5 untagged work queue, R4-D6 keyboard-first flow, R4-D7 retry-failed,
-  R4-D8 select-all-in-filter. Bright lines: no AI tagging/ranking, no gamification.
+  - **R4-D3 deterministic duplicate detection + HEIC content-sniff — DONE on branch, in
+    PR #16; DISCHARGE HELD pending migration 013 apply + click-through** (`15fa5c1`).
+    Migration 013 (`content_hash`, a convenience not provenance) needs the dashboard apply
+    (012 rhythm), then "Backfill content hashes". Closes the R3 renamed-HEIC hole by
+    content. No new table; governance 113/0.
+    Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_4_R4D3.md`.
+  - **PENDING (next session, off main after #16):** R4-D1 quick-look, R4-D2 download
+    original, R4-D4 tag autocomplete (own ratified values only), R4-D5 untagged work
+    queue, R4-D6 keyboard-first flow, R4-D7 retry-failed, R4-D8 select-all-in-filter.
+  - Bright lines: no AI tagging/face-detection/AI-search; no gamification/streaks/nudges;
+    no relevance ranking — filters/matches stay deterministic. Known follow-up: duplicate
+    refusal names the item's date but a jump-to-item link is deferred (virtualization).
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
   design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
   work (chat/Fable) — the next DECIDE moment. Shares the **attestation class + 2b
