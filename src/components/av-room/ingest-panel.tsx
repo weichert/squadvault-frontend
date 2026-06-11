@@ -7,7 +7,7 @@
 // read-only 2a grant state shown beside member identification (W.6 5), correction-
 // by-supersession, item withdrawal, and room ratification. All writes POST to the
 // /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
@@ -28,6 +28,7 @@ export type IngestEntry = {
   createdAt: string;
   withdrawn: boolean;
   hasPoster: boolean;
+  thumbUrl: string | null;
   tags: IngestTag[];
 };
 
@@ -85,6 +86,52 @@ function btnStyle(disabled: boolean) {
   };
 }
 
+// D3 (round 2): find-without-scrolling. Deterministic filters only - exact-match
+// selectors (kind, season, event, withdrawn-state) compose by AND, and a plain
+// case-insensitive substring over note + tag values. No ranking, no relevance
+// ordering: the corpus order is never disturbed (constitutional line).
+type WithdrawnFilter = 'all' | 'live' | 'withdrawn';
+
+type CorpusFilterState = {
+  kind: 'all' | MediaKind;
+  season: string;
+  event: string;
+  withdrawn: WithdrawnFilter;
+  text: string;
+};
+
+const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '' };
+
+// Distinct values for a tag kind, sorted only to order the SELECTOR options - this
+// orders the dropdown, never the corpus.
+function distinctTagValues(entries: IngestEntry[], kind: MediaProvenanceTagKind): string[] {
+  const seen = new Set<string>();
+  for (const e of entries) {
+    for (const t of e.tags) {
+      if (t.tagKind === kind && t.tagValue) seen.add(t.tagValue);
+    }
+  }
+  return Array.from(seen).sort((a, b) => a.localeCompare(b));
+}
+
+function matchesFilters(entry: IngestEntry, f: CorpusFilterState): boolean {
+  if (f.kind !== 'all' && entry.mediaKind !== f.kind) return false;
+  if (f.withdrawn === 'live' && entry.withdrawn) return false;
+  if (f.withdrawn === 'withdrawn' && !entry.withdrawn) return false;
+  if (f.season && !entry.tags.some((t) => t.tagKind === 'season' && t.tagValue === f.season)) return false;
+  if (f.event && !entry.tags.some((t) => t.tagKind === 'event' && t.tagValue === f.event)) return false;
+  const needle = f.text.trim().toLowerCase();
+  if (needle) {
+    const hay = [entry.uploadNote ?? '', ...entry.tags.map((t) => t.tagValue ?? '')].join(' ').toLowerCase();
+    if (!hay.includes(needle)) return false;
+  }
+  return true;
+}
+
+function filtersActive(f: CorpusFilterState): boolean {
+  return f.kind !== 'all' || f.withdrawn !== 'all' || !!f.season || !!f.event || !!f.text.trim();
+}
+
 export function IngestPanel({
   leagueId,
   canonicalId,
@@ -112,8 +159,15 @@ export function IngestPanel({
   function clearSelection() {
     setSelected(new Set());
   }
-  // Keep selection from going stale across refreshes: only ids still present remain.
-  const presentIds = new Set(entries.map((e) => e.id));
+  // D3: deterministic filters narrow the corpus before render. Selectors derive
+  // their options from what the corpus actually carries.
+  const [filters, setFilters] = useState<CorpusFilterState>(EMPTY_FILTERS);
+  const seasons = distinctTagValues(entries, 'season');
+  const events = distinctTagValues(entries, 'event');
+  const visibleEntries = entries.filter((e) => matchesFilters(e, filters));
+  // Keep selection from going stale: batch tagging only acts on items in view, so
+  // an item filtered off-screen is not silently tagged.
+  const presentIds = new Set(visibleEntries.map((e) => e.id));
   const selectedIds = Array.from(selected).filter((id) => presentIds.has(id));
 
   return (
@@ -123,7 +177,7 @@ export function IngestPanel({
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
           <h2 className="font-mono" style={labelStyle}>
-            THE CORPUS ({entries.length})
+            THE CORPUS ({filtersActive(filters) ? `${visibleEntries.length} OF ${entries.length}` : entries.length})
           </h2>
           <a
             href={`/league/${canonicalId}/av-room`}
@@ -133,6 +187,15 @@ export function IngestPanel({
             VIEW THE ROOM →
           </a>
         </div>
+        {entries.length > 0 && (
+          <CorpusFilters
+            filters={filters}
+            seasons={seasons}
+            events={events}
+            onChange={setFilters}
+            onReset={() => setFilters(EMPTY_FILTERS)}
+          />
+        )}
         {selectedIds.length > 0 && (
           <BatchTagBar
             selectedIds={selectedIds}
@@ -147,9 +210,21 @@ export function IngestPanel({
           <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
             Nothing has been added yet. Upload the first photograph above.
           </p>
+        ) : visibleEntries.length === 0 ? (
+          <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.85rem' }}>
+            No items match these filters.{' '}
+            <button
+              type="button"
+              onClick={() => setFilters(EMPTY_FILTERS)}
+              className="font-mono"
+              style={{ ...btnStyle(false), padding: '0.2rem 0.5rem', marginLeft: 4 }}
+            >
+              Clear filters
+            </button>
+          </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {entries.map((e) => (
+            {visibleEntries.map((e) => (
               <EntryCard
                 key={e.id}
                 entry={e}
@@ -162,6 +237,101 @@ export function IngestPanel({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function CorpusFilters({
+  filters,
+  seasons,
+  events,
+  onChange,
+  onReset,
+}: {
+  filters: CorpusFilterState;
+  seasons: string[];
+  events: string[];
+  onChange: (f: CorpusFilterState) => void;
+  onReset: () => void;
+}) {
+  const selStyle = { ...inputStyle, width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.8rem' };
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '0.5rem',
+        alignItems: 'center',
+        marginBottom: '1rem',
+        padding: '0.6rem 0.7rem',
+        background: 'var(--vault-s1)',
+        border: '1px solid var(--vault-border)',
+        borderRadius: 6,
+      }}
+    >
+      <span className="font-mono" style={labelStyle}>FILTER</span>
+      <select
+        aria-label="Filter by media kind"
+        value={filters.kind}
+        onChange={(e) => onChange({ ...filters, kind: e.target.value as 'all' | MediaKind })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="all">All kinds</option>
+        <option value="photo">Photo</option>
+        <option value="video">Video</option>
+      </select>
+      <select
+        aria-label="Filter by season tag"
+        value={filters.season}
+        onChange={(e) => onChange({ ...filters, season: e.target.value })}
+        className="font-ui"
+        style={selStyle}
+        disabled={seasons.length === 0}
+      >
+        <option value="">All seasons</option>
+        {seasons.map((s) => (
+          <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter by event tag"
+        value={filters.event}
+        onChange={(e) => onChange({ ...filters, event: e.target.value })}
+        className="font-ui"
+        style={selStyle}
+        disabled={events.length === 0}
+      >
+        <option value="">All events</option>
+        {events.map((ev) => (
+          <option key={ev} value={ev}>{ev}</option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter by withdrawn state"
+        value={filters.withdrawn}
+        onChange={(e) => onChange({ ...filters, withdrawn: e.target.value as WithdrawnFilter })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="all">Live + withdrawn</option>
+        <option value="live">Live only</option>
+        <option value="withdrawn">Withdrawn only</option>
+      </select>
+      <input
+        type="text"
+        aria-label="Match note or tag text"
+        value={filters.text}
+        onChange={(e) => onChange({ ...filters, text: e.target.value })}
+        placeholder="Match note or tag text"
+        className="font-ui"
+        style={{ ...selStyle, flex: 1, minWidth: 140 }}
+      />
+      {filtersActive(filters) && (
+        <button type="button" onClick={onReset} className="font-mono" style={{ ...btnStyle(false), padding: '0.35rem 0.6rem' }}>
+          Clear
+        </button>
+      )}
     </div>
   );
 }
@@ -662,7 +832,6 @@ function EntryCard({
   onToggleSelect: () => void;
 }) {
   const router = useRouter();
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -704,26 +873,6 @@ function EntryCard({
   const [tagNote, setTagNote] = useState('');
   const [supersedes, setSupersedes] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const res = await fetch('/api/av-room/sign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mediaEntryId: entry.id }),
-        });
-        if (!res.ok) return;
-        const j = (await res.json()) as { url?: string };
-        if (active && j.url) setMediaUrl(j.url);
-      } catch {
-        /* preview is best-effort; tagging does not depend on it */
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [entry.id]);
 
   const memberName = (uid: string | null) =>
     members.find((m) => m.memberUserId === uid)?.displayName ?? 'Unknown member';
@@ -851,21 +1000,23 @@ function EntryCard({
   }
 
   return (
-    <article style={{ ...cardStyle, opacity: entry.withdrawn ? 0.6 : 1, outline: selected ? '1px solid var(--vault-gold)' : 'none' }}>
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+    <article style={{ ...cardStyle, padding: '0.55rem 0.7rem', opacity: entry.withdrawn ? 0.6 : 1, outline: selected ? '1px solid var(--vault-gold)' : 'none' }}>
+      {/* D2 (round 2): compact default row - thumbnail + title/note + kind/date ONLY.
+          All tag detail and the tag form live behind the per-item expand. */}
+      <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center' }}>
         {selectable && (
           <input
             type="checkbox"
             checked={selected}
             onChange={onToggleSelect}
             aria-label="Select for batch tagging"
-            style={{ marginTop: 4, width: 16, height: 16, accentColor: 'var(--vault-gold)', cursor: 'pointer', flexShrink: 0 }}
+            style={{ width: 16, height: 16, accentColor: 'var(--vault-gold)', cursor: 'pointer', flexShrink: 0 }}
           />
         )}
         <div
           style={{
-            width: 120,
-            height: 90,
+            width: 52,
+            height: 52,
             flexShrink: 0,
             background: 'var(--vault-s3)',
             borderRadius: 4,
@@ -875,42 +1026,62 @@ function EntryCard({
             justifyContent: 'center',
           }}
         >
-          {entry.mediaKind === 'photo' && mediaUrl ? (
+          {entry.thumbUrl ? (
+            // Photo -> its original; video -> the SAME poster the room reads. Image-only.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={mediaUrl} alt={entry.uploadNote ?? 'Archival photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : entry.mediaKind === 'video' && mediaUrl ? (
-            <video src={mediaUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={entry.thumbUrl} alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text3)' }}>
+            <span className="font-mono" style={{ fontSize: '9px', letterSpacing: '0.1em', color: 'var(--vault-text3)' }}>
               {entry.mediaKind.toUpperCase()}
             </span>
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-            <span className="font-mono" style={labelStyle}>
-              {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
-              {entry.withdrawn ? ' · WITHDRAWN' : ''}
-            </span>
-            {entry.withdrawn ? (
-              <button type="button" disabled={busy} onClick={reinstate} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
-                Reinstate
-              </button>
-            ) : (
-              <button type="button" disabled={busy} onClick={withdraw} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
-                Withdraw
-              </button>
-            )}
+          <div className="font-mono" style={labelStyle}>
+            {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
+            {entry.tags.length > 0 ? ` · ${entry.tags.length} tag${entry.tags.length === 1 ? '' : 's'}` : ''}
+            {entry.withdrawn ? ' · WITHDRAWN' : ''}
           </div>
           {entry.uploadNote && (
-            <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.82rem', marginTop: 4 }}>
+            <p
+              className="font-ui"
+              title={entry.uploadNote}
+              style={{ color: 'var(--vault-text2)', fontSize: '0.82rem', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
               {entry.uploadNote}
             </p>
           )}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {entry.withdrawn ? (
+            <button type="button" disabled={busy} onClick={reinstate} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
+              Reinstate
+            </button>
+          ) : (
+            <button type="button" disabled={busy} onClick={withdraw} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
+              Withdraw
+            </button>
+          )}
+          <button type="button" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>
+            {expanded ? 'Hide' : 'Details'}
+          </button>
+        </div>
+      </div>
 
+      {/* D2 (round 2): expand reveals the full provenance + (for live items) the edit
+          affordances. Available for withdrawn items too, so their tags stay viewable. */}
+      {expanded && (
+        <div style={{ marginTop: '0.7rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.7rem' }}>
+          {/* D2 (round 2): the compact row ellipsizes the note; restore it in full here
+              so a long note stays readable, not just hover-able. */}
+          {entry.uploadNote && (
+            <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.82rem', margin: '0 0 0.6rem' }}>
+              {entry.uploadNote}
+            </p>
+          )}
           {/* Current provenance, grouped. Honest gaps: kinds with no tag are absent. */}
-          {entry.tags.length > 0 && (
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0.6rem 0 0' }}>
+          {entry.tags.length > 0 ? (
+            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.6rem' }}>
               {entry.tags.map((t) => (
                 <li
                   key={t.id}
@@ -921,163 +1092,157 @@ function EntryCard({
                     <span style={{ color: 'var(--vault-text3)' }}>{TAG_KIND_LABEL[t.tagKind]}: </span>
                     <span style={{ color: 'var(--vault-text)' }}>{describeTag(t)}</span>
                   </span>
-                  <button type="button" onClick={() => correct(t)} style={{ ...btnStyle(false), padding: '0.1rem 0.4rem' }}>
-                    Correct
-                  </button>
+                  {!entry.withdrawn && (
+                    <button type="button" onClick={() => correct(t)} style={{ ...btnStyle(false), padding: '0.1rem 0.4rem' }}>
+                      Correct
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
+          ) : (
+            <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.78rem', margin: '0 0 0.6rem' }}>
+              No tags yet.
+            </p>
           )}
-        </div>
-      </div>
-
-      {/* D3: the edit affordances collapse behind this toggle. */}
-      {!entry.withdrawn && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="font-mono"
-          style={{ ...btnStyle(false), marginTop: '0.75rem', padding: '0.3rem 0.6rem' }}
-        >
-          {expanded ? 'Done editing' : 'Tag / edit'}
-        </button>
-      )}
-      {!entry.withdrawn && expanded && (
-        <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.9rem' }}>
-          {/* D0: video poster - set/replace by hand when auto-extraction could not
-              read the file. Honest gap: a missing poster says so, not nothing. */}
-          {entry.mediaKind === 'video' && (
-            <div style={{ marginBottom: '0.9rem' }}>
-              <p
-                className="font-ui"
-                style={{ fontSize: '0.78rem', color: entry.hasPoster ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
-              >
-                {entry.hasPoster
-                  ? 'Poster still set — the room shows it for this video.'
-                  : 'No still yet — the room shows a placeholder. Auto-extraction could not read this video; set a still by hand.'}
-              </p>
-              <label className="font-mono" style={{ ...btnStyle(posterBusy), display: 'inline-block', marginTop: 6 }}>
-                {posterBusy ? 'Saving…' : entry.hasPoster ? 'Replace poster' : 'Set poster'}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  disabled={posterBusy}
-                  onChange={(e) => {
-                    const img = e.target.files?.[0];
-                    if (img) void setPoster(img);
-                    e.target.value = '';
-                  }}
-                  style={{ display: 'none' }}
-                />
-              </label>
-              {posterMsg && (
-                <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
-                  {posterMsg}
+          {!entry.withdrawn && (
+            <>
+              {/* D0: video poster - set/replace by hand when auto-extraction could not
+                  read the file. Honest gap: a missing poster says so, not nothing. */}
+              {entry.mediaKind === 'video' && (
+                <div style={{ marginBottom: '0.9rem' }}>
+                  <p
+                    className="font-ui"
+                    style={{ fontSize: '0.78rem', color: entry.hasPoster ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
+                  >
+                    {entry.hasPoster
+                      ? 'Poster still set — the room shows it for this video.'
+                      : 'No still yet — the room shows a placeholder. Auto-extraction could not read this video; set a still by hand.'}
+                  </p>
+                  <label className="font-mono" style={{ ...btnStyle(posterBusy), display: 'inline-block', marginTop: 6 }}>
+                    {posterBusy ? 'Saving…' : entry.hasPoster ? 'Replace poster' : 'Set poster'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={posterBusy}
+                      onChange={(e) => {
+                        const img = e.target.files?.[0];
+                        if (img) void setPoster(img);
+                        e.target.value = '';
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  {posterMsg && (
+                    <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
+                      {posterMsg}
+                    </p>
+                  )}
+                </div>
+              )}
+              {supersedes && (
+                <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', marginBottom: 6 }}>
+                  CORRECTING AN EARLIER TAG — this supersedes it
                 </p>
               )}
-            </div>
-          )}
-          {supersedes && (
-            <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', marginBottom: 6 }}>
-              CORRECTING AN EARLIER TAG — this supersedes it
-            </p>
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-            <div>
-              <label className="font-mono" style={labelStyle}>Kind</label>
-              <select
-                value={tagKind}
-                onChange={(e) => {
-                  setTagKind(e.target.value as MediaProvenanceTagKind);
-                  setSupersedes(null);
-                }}
-                className="font-ui"
-                style={{ ...inputStyle, marginTop: 4 }}
-              >
-                {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
-                  <option key={k} value={k}>{TAG_KIND_LABEL[k]}</option>
-                ))}
-              </select>
-            </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                <div>
+                  <label className="font-mono" style={labelStyle}>Kind</label>
+                  <select
+                    value={tagKind}
+                    onChange={(e) => {
+                      setTagKind(e.target.value as MediaProvenanceTagKind);
+                      setSupersedes(null);
+                    }}
+                    className="font-ui"
+                    style={{ ...inputStyle, marginTop: 4 }}
+                  >
+                    {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
+                      <option key={k} value={k}>{TAG_KIND_LABEL[k]}</option>
+                    ))}
+                  </select>
+                </div>
 
-            {tagKind === 'member_identification' ? (
-              <div>
-                <label className="font-mono" style={labelStyle}>Member</label>
-                <select
-                  value={taggedMember}
-                  onChange={(e) => setTaggedMember(e.target.value)}
-                  className="font-ui"
-                  style={{ ...inputStyle, marginTop: 4 }}
-                >
-                  <option value="">Choose…</option>
-                  {members.map((m) => (
-                    <option key={m.memberUserId} value={m.memberUserId}>{m.displayName}</option>
-                  ))}
-                </select>
+                {tagKind === 'member_identification' ? (
+                  <div>
+                    <label className="font-mono" style={labelStyle}>Member</label>
+                    <select
+                      value={taggedMember}
+                      onChange={(e) => setTaggedMember(e.target.value)}
+                      className="font-ui"
+                      style={{ ...inputStyle, marginTop: 4 }}
+                    >
+                      <option value="">Choose…</option>
+                      {members.map((m) => (
+                        <option key={m.memberUserId} value={m.memberUserId}>{m.displayName}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="font-mono" style={labelStyle}>
+                      {tagKind === 'date' ? 'Date value' : 'Value'}
+                    </label>
+                    <input
+                      type="text"
+                      value={tagValue}
+                      onChange={(e) => setTagValue(e.target.value)}
+                      placeholder={tagKind === 'date' ? 'e.g. 1998 or 1998-09-04' : ''}
+                      className="font-ui"
+                      style={{ ...inputStyle, marginTop: 4 }}
+                    />
+                  </div>
+                )}
+
+                {tagKind === 'date' && (
+                  <div>
+                    <label className="font-mono" style={labelStyle}>Precision</label>
+                    <select
+                      value={datePrecision}
+                      onChange={(e) => setDatePrecision(e.target.value as MediaDatePrecision)}
+                      className="font-ui"
+                      style={{ ...inputStyle, marginTop: 4 }}
+                    >
+                      {DATE_PRECISIONS.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label className="font-mono" style={labelStyle}>Note (optional)</label>
+                  <input
+                    type="text"
+                    value={tagNote}
+                    onChange={(e) => setTagNote(e.target.value)}
+                    className="font-ui"
+                    style={{ ...inputStyle, marginTop: 4 }}
+                  />
+                </div>
               </div>
-            ) : (
-              <div>
-                <label className="font-mono" style={labelStyle}>
-                  {tagKind === 'date' ? 'Date value' : 'Value'}
-                </label>
-                <input
-                  type="text"
-                  value={tagValue}
-                  onChange={(e) => setTagValue(e.target.value)}
-                  placeholder={tagKind === 'date' ? 'e.g. 1998 or 1998-09-04' : ''}
-                  className="font-ui"
-                  style={{ ...inputStyle, marginTop: 4 }}
-                />
+
+              {/* Read-only 2a grant state beside member identification (W.6 5). */}
+              {tagKind === 'member_identification' && selectedMember && (
+                <p className="font-ui" style={{ fontSize: '0.78rem', marginTop: 6, color: selectedMember.granted2a ? 'var(--vault-gold)' : 'var(--vault-text2)' }}>
+                  {selectedMember.granted2a
+                    ? 'This member has granted appearance — the identification will show in the room.'
+                    : 'This member has not granted appearance — the identification is recorded but stays silent in the room until they grant it.'}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem' }}>
+                <button type="button" disabled={busy} onClick={submitTag} style={btnStyle(busy)}>
+                  {busy ? 'Saving…' : supersedes ? 'Save correction' : 'Add tag'}
+                </button>
+                {supersedes && (
+                  <button type="button" disabled={busy} onClick={resetTagForm} style={btnStyle(busy)}>
+                    Cancel
+                  </button>
+                )}
               </div>
-            )}
-
-            {tagKind === 'date' && (
-              <div>
-                <label className="font-mono" style={labelStyle}>Precision</label>
-                <select
-                  value={datePrecision}
-                  onChange={(e) => setDatePrecision(e.target.value as MediaDatePrecision)}
-                  className="font-ui"
-                  style={{ ...inputStyle, marginTop: 4 }}
-                >
-                  {DATE_PRECISIONS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label className="font-mono" style={labelStyle}>Note (optional)</label>
-              <input
-                type="text"
-                value={tagNote}
-                onChange={(e) => setTagNote(e.target.value)}
-                className="font-ui"
-                style={{ ...inputStyle, marginTop: 4 }}
-              />
-            </div>
-          </div>
-
-          {/* Read-only 2a grant state beside member identification (W.6 5). */}
-          {tagKind === 'member_identification' && selectedMember && (
-            <p className="font-ui" style={{ fontSize: '0.78rem', marginTop: 6, color: selectedMember.granted2a ? 'var(--vault-gold)' : 'var(--vault-text2)' }}>
-              {selectedMember.granted2a
-                ? 'This member has granted appearance — the identification will show in the room.'
-                : 'This member has not granted appearance — the identification is recorded but stays silent in the room until they grant it.'}
-            </p>
+            </>
           )}
-
-          <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem' }}>
-            <button type="button" disabled={busy} onClick={submitTag} style={btnStyle(busy)}>
-              {busy ? 'Saving…' : supersedes ? 'Save correction' : 'Add tag'}
-            </button>
-            {supersedes && (
-              <button type="button" disabled={busy} onClick={resetTagForm} style={btnStyle(busy)}>
-                Cancel
-              </button>
-            )}
-          </div>
         </div>
       )}
 
