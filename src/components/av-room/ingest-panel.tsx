@@ -433,6 +433,10 @@ function EntryCard({
   const [posterBusy, setPosterBusy] = useState(false);
   const [posterMsg, setPosterMsg] = useState<string | null>(null);
 
+  // D3: the edit affordances (tag form + poster) collapse behind a toggle so a large
+  // corpus stays scannable; the default row is thumbnail + current tags + actions.
+  const [expanded, setExpanded] = useState(false);
+
   async function setPoster(img: File) {
     setPosterBusy(true);
     setPosterMsg(null);
@@ -586,6 +590,7 @@ function EntryCard({
   }
 
   function correct(tag: IngestTag) {
+    setExpanded(true); // D3: Correct on a collapsed row reveals the form.
     setTagKind(tag.tagKind);
     setSupersedes(tag.id);
     setError(null);
@@ -676,11 +681,26 @@ function EntryCard({
               ))}
             </ul>
           )}
+        </div>
+      </div>
 
+      {/* D3: the edit affordances collapse behind this toggle. */}
+      {!entry.withdrawn && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="font-mono"
+          style={{ ...btnStyle(false), marginTop: '0.75rem', padding: '0.3rem 0.6rem' }}
+        >
+          {expanded ? 'Done editing' : 'Tag / edit'}
+        </button>
+      )}
+      {!entry.withdrawn && expanded && (
+        <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.9rem' }}>
           {/* D0: video poster - set/replace by hand when auto-extraction could not
               read the file. Honest gap: a missing poster says so, not nothing. */}
           {entry.mediaKind === 'video' && (
-            <div style={{ marginTop: '0.6rem' }}>
+            <div style={{ marginBottom: '0.9rem' }}>
               <p
                 className="font-ui"
                 style={{ fontSize: '0.78rem', color: entry.hasPoster ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
@@ -710,12 +730,6 @@ function EntryCard({
               )}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Tag form */}
-      {!entry.withdrawn && (
-        <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.9rem' }}>
           {supersedes && (
             <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-gold)', marginBottom: 6 }}>
               CORRECTING AN EARLIER TAG — this supersedes it
