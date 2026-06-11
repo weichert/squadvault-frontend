@@ -985,9 +985,14 @@ function UploadForm({ leagueId }: { leagueId: string }) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
 
-  function addFiles(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return;
-    const additions = Array.from(fileList).map((file) => ({ id: crypto.randomUUID(), file }));
+  // The single enqueue path: every upload - first-time OR an override resubmit - becomes
+  // a FRESH queue item (new id, appended) and runs through the same pool, so the override
+  // can never diverge from the normal path. On completion both call router.refresh(), and
+  // the new row arrives at the top from the server's newest-first sort (R4 override-prepend
+  // fix - the override used to reuse the failed row in place and landed mid-list).
+  function enqueue(toAdd: { file: File; allowDuplicate?: boolean }[]) {
+    if (toAdd.length === 0) return;
+    const additions = toAdd.map((a) => ({ id: crypto.randomUUID(), file: a.file, allowDuplicate: a.allowDuplicate }));
     queueRef.current.push(...additions);
     setItems((prev) => [
       ...prev,
@@ -996,14 +1001,17 @@ function UploadForm({ leagueId }: { leagueId: string }) {
     void ensureRunning();
   }
 
-  // R4-D3: explicit override for a duplicate refusal - resubmit the SAME file with the
-  // duplicate check bypassed. Replaces the failed row in place.
+  function addFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    enqueue(Array.from(fileList).map((file) => ({ file })));
+  }
+
+  // R4-D3 override: resubmit the SAME file with the duplicate check bypassed. Drop the
+  // failed row and re-enqueue as a fresh upload - identical to the normal path.
   function uploadAnyway(item: QueueItem) {
     if (!item.file) return;
-    queueRef.current.push({ id: item.id, file: item.file, allowDuplicate: true });
-    claimedRef.current.delete(item.id);
-    setItem(item.id, { status: 'queued', reason: undefined, duplicateOf: undefined });
-    void ensureRunning();
+    setItems((prev) => prev.filter((it) => it.id !== item.id));
+    enqueue([{ file: item.file, allowDuplicate: true }]);
   }
 
   async function ensureRunning() {
