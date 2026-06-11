@@ -7,7 +7,7 @@
 // read-only 2a grant state shown beside member identification (W.6 5), correction-
 // by-supersession, item withdrawal, and room ratification. All writes POST to the
 // /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
@@ -285,114 +285,149 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
   });
 }
 
+// D6 HEIC honesty (module-level so single + queue paths share it). iPhone photos
+// default to HEIC/HEIF, which browsers can't render in an <img>, so storing one only
+// yields a broken thumbnail. Some browsers leave file.type empty, so also sniff ext.
+function isHeicFile(file: File): boolean {
+  return (
+    file.type === 'image/heic' ||
+    file.type === 'image/heif' ||
+    /\.(heic|heif)$/i.test(file.name)
+  );
+}
+
+function mediaKindFor(file: File): MediaKind | null {
+  if (file.type.startsWith('image/')) return 'photo';
+  if (file.type.startsWith('video/')) return 'video';
+  return null;
+}
+
+// Upload one file through the remedy-B flow (grant -> client-direct -> finalize),
+// with the honest per-file pre-checks (D6/D1). Throws an Error whose message is the
+// human reason on any failure, so the queue can isolate it per file (D1).
+async function uploadOneFile(file: File, leagueId: string, note: string): Promise<void> {
+  const kind = mediaKindFor(file);
+  if (!kind) throw new Error('Unsupported file type — choose an image or video.');
+  if (isHeicFile(file)) {
+    throw new Error('HEIC is not supported. Export the photo as JPEG and upload that.');
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
+  }
+
+  const grantRes = await fetch('/api/av-room/upload/grant', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ leagueId, media_kind: kind, mime: file.type, size: file.size }),
+  });
+  if (!grantRes.ok) {
+    const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(j.error ?? 'Could not start the upload.');
+  }
+  const { mediaEntryId, path, token } = (await grantRes.json()) as {
+    mediaEntryId: string;
+    path: string;
+    token: string;
+  };
+
+  const supabase = createClient();
+  const { error: upErr } = await supabase.storage
+    .from('league-media')
+    .uploadToSignedUrl(path, token, file, { contentType: file.type });
+  if (upErr) {
+    const msg = (upErr.message ?? '').toLowerCase();
+    if (msg.includes('exceeded') || msg.includes('maximum allowed size') || msg.includes('payload too large')) {
+      throw new Error(`The storage limit (${MAX_UPLOAD_LABEL}) rejected this file.`);
+    }
+    throw new Error(`The file could not be uploaded (${upErr.message || 'storage error'}).`);
+  }
+
+  const finalizeForm = new FormData();
+  finalizeForm.set('mediaEntryId', mediaEntryId);
+  finalizeForm.set('leagueId', leagueId);
+  finalizeForm.set('media_kind', kind);
+  finalizeForm.set('mime', file.type);
+  if (note.trim()) finalizeForm.set('upload_note', note.trim());
+  if (kind === 'video') {
+    const poster = await extractPosterBlob(file);
+    if (poster) finalizeForm.set('poster', poster, 'poster.jpg');
+  }
+  const finRes = await fetch('/api/av-room/upload/finalize', { method: 'POST', body: finalizeForm });
+  if (!finRes.ok) {
+    const j = (await finRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(j.error ?? 'Upload could not be finalized.');
+  }
+}
+
+type QueueItem = {
+  id: string;
+  name: string;
+  status: 'queued' | 'uploading' | 'done' | 'failed';
+  reason?: string;
+};
+
+const UPLOAD_CONCURRENCY = 3;
+
 function UploadForm({ leagueId }: { leagueId: string }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [dragOver, setDragOver] = useState(false);
 
-  const kind: MediaKind | null = file
-    ? file.type.startsWith('image/')
-      ? 'photo'
-      : file.type.startsWith('video/')
-        ? 'video'
-        : null
-    : null;
+  // Refs the worker pool reads synchronously: the live queue (file + claim) and a
+  // single-runner guard. State mirrors them for rendering. Claiming via the ref
+  // prevents two workers grabbing the same item before a re-render lands.
+  const queueRef = useRef<{ id: string; file: File }[]>([]);
+  const claimedRef = useRef<Set<string>>(new Set());
+  const runningRef = useRef(false);
+  const noteRef = useRef('');
+  noteRef.current = note;
 
-  // Fail fast before any round-trip: a file over the storage ceiling is refused
-  // here, with the exact size and limit, and never leaves the browser (D1).
-  const oversized = !!file && file.size > MAX_UPLOAD_BYTES;
-
-  // D6 HEIC honesty: iPhone photos default to HEIC/HEIF, which browsers can't render
-  // in an <img>, so storing one would only yield a broken thumbnail. Refuse it here
-  // with an explicit instruction rather than letting it look accepted and fail at the
-  // grant route. (Some browsers leave file.type empty for HEIC, so also sniff the
-  // extension.) Conversion is deliberately out of scope.
-  const isHeic =
-    !!file &&
-    (file.type === 'image/heic' ||
-      file.type === 'image/heif' ||
-      /\.(heic|heif)$/i.test(file.name));
-
-  async function submit() {
-    if (!file || !kind) {
-      setError('Choose an image or video file.');
-      return;
-    }
-    if (isHeic) {
-      setError('HEIC photos are not supported. On your phone, export or share the photo as JPEG, then upload that.');
-      return;
-    }
-    if (oversized) {
-      // Defensive: the button is already disabled when oversized, so no request fires.
-      setError(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      // 1) Mint a grant: commissioner-scoped, single-use, server-chosen path. The
-      //    bytes do NOT transit the function (Spec 5.1 Amendment 1).
-      const grantRes = await fetch('/api/av-room/upload/grant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, media_kind: kind, mime: file.type, size: file.size }),
-      });
-      if (!grantRes.ok) {
-        const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
-        setError(j.error ?? 'Could not start the upload.');
-        return;
-      }
-      const { mediaEntryId, path, token } = (await grantRes.json()) as {
-        mediaEntryId: string;
-        path: string;
-        token: string;
-      };
-
-      // 2) Upload the original CLIENT-DIRECT to Storage under the grant - this is the
-      //    path that lifts the 4.5 MB function-body ceiling (photos and video alike).
-      const supabase = createClient();
-      const { error: upErr } = await supabase.storage
-        .from('league-media')
-        .uploadToSignedUrl(path, token, file, { contentType: file.type });
-      if (upErr) {
-        const msg = (upErr.message ?? '').toLowerCase();
-        if (msg.includes('exceeded') || msg.includes('maximum allowed size') || msg.includes('payload too large')) {
-          setError(`The storage limit (${MAX_UPLOAD_LABEL}) rejected this file. Choose a smaller file.`);
-        } else {
-          setError(`The file could not be uploaded (${upErr.message || 'storage error'}).`);
-        }
-        return;
-      }
-
-      // 3) Finalize the record server-side (insert-after-upload). For a video, attach
-      //    a best-effort poster still (D3); the original is already stored unchanged.
-      const finalizeForm = new FormData();
-      finalizeForm.set('mediaEntryId', mediaEntryId);
-      finalizeForm.set('leagueId', leagueId);
-      finalizeForm.set('media_kind', kind);
-      finalizeForm.set('mime', file.type);
-      if (note.trim()) finalizeForm.set('upload_note', note.trim());
-      if (kind === 'video') {
-        const poster = await extractPosterBlob(file);
-        if (poster) finalizeForm.set('poster', poster, 'poster.jpg');
-      }
-      const finRes = await fetch('/api/av-room/upload/finalize', { method: 'POST', body: finalizeForm });
-      if (!finRes.ok) {
-        const j = (await finRes.json().catch(() => ({}))) as { error?: string };
-        setError(j.error ?? 'Upload could not be finalized.');
-        return;
-      }
-      setFile(null);
-      setNote('');
-      router.refresh();
-    } catch {
-      setError('Upload failed.');
-    } finally {
-      setBusy(false);
-    }
+  function setItem(id: string, patch: Partial<QueueItem>) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
+
+  function addFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const additions = Array.from(fileList).map((file) => ({ id: crypto.randomUUID(), file }));
+    queueRef.current.push(...additions);
+    setItems((prev) => [
+      ...prev,
+      ...additions.map((a) => ({ id: a.id, name: a.file.name, status: 'queued' as const })),
+    ]);
+    void ensureRunning();
+  }
+
+  async function ensureRunning() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+
+    const worker = async () => {
+      for (;;) {
+        const next = queueRef.current.find((q) => !claimedRef.current.has(q.id));
+        if (!next) break;
+        claimedRef.current.add(next.id);
+        setItem(next.id, { status: 'uploading' });
+        try {
+          await uploadOneFile(next.file, leagueId, noteRef.current);
+          setItem(next.id, { status: 'done' });
+        } catch (e) {
+          setItem(next.id, { status: 'failed', reason: (e as Error).message });
+        } finally {
+          // Drop from the live queue either way; failures stay in `items` for display.
+          queueRef.current = queueRef.current.filter((q) => q.id !== next.id);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, () => worker()));
+    runningRef.current = false;
+    // Successes are now corpus rows; clear them and reveal the new entries.
+    setItems((prev) => prev.filter((it) => it.status !== 'done'));
+    router.refresh();
+  }
+
+  const active = items.some((it) => it.status === 'queued' || it.status === 'uploading');
 
   return (
     <section style={cardStyle}>
@@ -400,34 +435,48 @@ function UploadForm({ leagueId }: { leagueId: string }) {
         ADD TO THE RECORD
       </h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 460 }}>
-        <input
-          type="file"
-          accept="image/*,video/*"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null);
-            setError(null);
+        {/* D1: drag-drop N files (or click to choose). Each is queued through the
+            remedy-B flow with bounded concurrency and per-file failure isolation. */}
+        <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            addFiles(e.dataTransfer.files);
           }}
           className="font-ui"
-          style={{ ...inputStyle, padding: '0.4rem' }}
-        />
-        {file && (
-          <p className="font-mono" style={{ ...labelStyle, color: kind && !oversized && !isHeic ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
-            {kind ? `${kind.toUpperCase()} · ${file.name}` : 'UNSUPPORTED FILE TYPE'}
-          </p>
-        )}
-        {isHeic && file && (
-          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
-            HEIC photos are not supported. On your phone, export or share the photo as JPEG, then upload that.
-          </p>
-        )}
-        {oversized && file && !isHeic && (
-          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
-            This file is {formatSize(file.size)}; the limit is {MAX_UPLOAD_LABEL}. Choose a smaller file.
-          </p>
-        )}
+          style={{
+            display: 'block',
+            border: `1px dashed ${dragOver ? 'var(--vault-gold)' : 'var(--vault-border)'}`,
+            borderRadius: 6,
+            padding: '1.25rem',
+            textAlign: 'center',
+            color: 'var(--vault-text2)',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            background: dragOver ? 'var(--vault-s2)' : 'transparent',
+          }}
+        >
+          Drop photos or video here, or click to choose. You can add several at once.
+          <input
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = '';
+            }}
+            style={{ display: 'none' }}
+          />
+        </label>
+
         <div>
           <label className="font-mono" style={labelStyle}>
-            Note (optional)
+            Note (optional, applied to this batch)
           </label>
           <input
             type="text"
@@ -438,12 +487,48 @@ function UploadForm({ leagueId }: { leagueId: string }) {
             style={{ ...inputStyle, marginTop: 4 }}
           />
         </div>
-        <button type="button" disabled={busy || !file || !kind || oversized || isHeic} onClick={submit} style={btnStyle(busy || !file || !kind || oversized || isHeic)}>
-          {busy ? 'Uploading…' : 'Upload'}
-        </button>
-        {error && (
-          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
-            {error}
+
+        {items.length > 0 && (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {items.map((it) => (
+              <li
+                key={it.id}
+                className="font-ui"
+                style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.8rem' }}
+              >
+                <span style={{ color: 'var(--vault-text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {it.name}
+                </span>
+                <span
+                  className="font-mono"
+                  style={{
+                    flexShrink: 0,
+                    fontSize: '10px',
+                    letterSpacing: '0.08em',
+                    color:
+                      it.status === 'failed'
+                        ? 'var(--vault-withheld)'
+                        : it.status === 'done'
+                          ? 'var(--vault-gold)'
+                          : 'var(--vault-text3)',
+                  }}
+                >
+                  {it.status === 'queued'
+                    ? 'QUEUED'
+                    : it.status === 'uploading'
+                      ? 'UPLOADING…'
+                      : it.status === 'done'
+                        ? 'DONE'
+                        : `FAILED — ${it.reason ?? 'error'}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {active && (
+          <p className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text3)' }}>
+            UPLOADING…
           </p>
         )}
       </div>
