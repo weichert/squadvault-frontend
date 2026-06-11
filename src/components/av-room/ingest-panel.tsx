@@ -39,6 +39,10 @@ export type IngestMember = {
   granted2a: boolean;
 };
 
+// R4-D4: the league's own ratified tag values, offered as autocomplete. Free-text entry
+// of new values stays first-class (a datalist suggests, never constrains).
+type TagVocab = { contributor: string[]; season: string[]; event: string[] };
+
 const TAG_KIND_LABEL: Record<MediaProvenanceTagKind, string> = {
   contributor: 'Contributor',
   date: 'Date',
@@ -173,7 +177,30 @@ export function IngestPanel({
   const [filters, setFilters] = useState<CorpusFilterState>(EMPTY_FILTERS);
   const seasons = distinctTagValues(entries, 'season');
   const events = distinctTagValues(entries, 'event');
+  // R4-D4: autocomplete vocabulary - the league's OWN previously-recorded values, never
+  // invented and never sourced from anywhere but this league's tag history. Prevents
+  // "Draft Day"/"draft day" drift that would silently split the r2-D3 filters.
+  const vocab: TagVocab = {
+    contributor: distinctTagValues(entries, 'contributor'),
+    season: seasons,
+    event: events,
+  };
   const visibleEntries = entries.filter((e) => matchesFilters(e, filters));
+
+  // R4-D4 ordering assertion: the ingest list is newest-first (server sort, D4). A dev
+  // tripwire makes a silent regression of that invariant loud rather than invisible.
+  if (process.env.NODE_ENV !== 'production') {
+    for (let i = 1; i < entries.length; i++) {
+      if (entries[i - 1].createdAt < entries[i].createdAt) {
+        // eslint-disable-next-line no-console
+        console.error('R4-D4 ordering assertion FAILED: ingest entries are not newest-first', {
+          prev: entries[i - 1].id,
+          next: entries[i].id,
+        });
+        break;
+      }
+    }
+  }
   // Keep selection from going stale: batch tagging only acts on items in view, so
   // an item filtered off-screen is not silently tagged.
   const presentIds = new Set(visibleEntries.map((e) => e.id));
@@ -291,6 +318,7 @@ export function IngestPanel({
           <VirtualCorpus
             entries={visibleEntries}
             members={members}
+            vocab={vocab}
             selected={selected}
             onToggleSelect={toggleSelect}
             onOpen={openQuickLook}
@@ -303,6 +331,7 @@ export function IngestPanel({
           entries={visibleEntries}
           index={quickLook}
           members={members}
+          vocab={vocab}
           onIndexChange={setQuickLook}
           onClose={() => setQuickLook(null)}
         />
@@ -321,12 +350,14 @@ export function IngestPanel({
 function VirtualCorpus({
   entries,
   members,
+  vocab,
   selected,
   onToggleSelect,
   onOpen,
 }: {
   entries: IngestEntry[];
   members: IngestMember[];
+  vocab: TagVocab;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
   onOpen: (id: string) => void;
@@ -367,6 +398,7 @@ function VirtualCorpus({
               <EntryCard
                 entry={e}
                 members={members}
+                vocab={vocab}
                 selectable={!e.withdrawn}
                 selected={selected.has(e.id)}
                 onToggleSelect={() => onToggleSelect(e.id)}
@@ -1291,12 +1323,14 @@ function QuickLook({
   entries,
   index,
   members,
+  vocab,
   onIndexChange,
   onClose,
 }: {
   entries: IngestEntry[];
   index: number;
   members: IngestMember[];
+  vocab: TagVocab;
   onIndexChange: (i: number) => void;
   onClose: () => void;
 }) {
@@ -1475,7 +1509,7 @@ function QuickLook({
             padding: '0.9rem',
           }}
         >
-          <EntryDetailPanel entry={entry} members={members} />
+          <EntryDetailPanel entry={entry} members={members} vocab={vocab} />
         </div>
       </div>
     </div>
@@ -1486,7 +1520,7 @@ function QuickLook({
 // form. Rendered both inside the corpus row's expand (EntryCard) AND alongside the full
 // image in quick-look (QuickLook): "you cannot tag what you cannot see." Owns the tag-form
 // and poster/correction writes; the compact row's withdraw/reinstate stay in EntryCard.
-function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: IngestMember[] }) {
+function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; members: IngestMember[]; vocab: TagVocab }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1503,6 +1537,12 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
   const memberName = (uid: string | null) =>
     members.find((m) => m.memberUserId === uid)?.displayName ?? 'Unknown member';
   const selectedMember = members.find((m) => m.memberUserId === taggedMember) ?? null;
+
+  // R4-D4: the league's own ratified values for the active kind, offered as a datalist
+  // (suggests, never constrains - free text stays first-class). Date is open, so no list.
+  const vocabFor =
+    tagKind === 'contributor' || tagKind === 'season' || tagKind === 'event' ? vocab[tagKind] : null;
+  const vocabListId = vocabFor && vocabFor.length > 0 ? `vocab-${entry.id}-${tagKind}` : undefined;
 
   async function setPoster(img: File) {
     setPosterBusy(true);
@@ -1755,9 +1795,17 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
                   value={tagValue}
                   onChange={(e) => setTagValue(e.target.value)}
                   placeholder={tagKind === 'date' ? 'e.g. 1998 or 1998-09-04' : ''}
+                  list={vocabListId}
                   className="font-ui"
                   style={{ ...inputStyle, marginTop: 4 }}
                 />
+                {vocabFor && vocabListId && (
+                  <datalist id={vocabListId}>
+                    {vocabFor.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                )}
               </div>
             )}
 
@@ -1822,6 +1870,7 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
 function EntryCard({
   entry,
   members,
+  vocab,
   selectable,
   selected,
   onToggleSelect,
@@ -1829,6 +1878,7 @@ function EntryCard({
 }: {
   entry: IngestEntry;
   members: IngestMember[];
+  vocab: TagVocab;
   selectable: boolean;
   selected: boolean;
   onToggleSelect: () => void;
@@ -1976,7 +2026,7 @@ function EntryCard({
           affordances. Available for withdrawn items too, so their tags stay viewable. */}
       {expanded && (
         <div style={{ marginTop: '0.7rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.7rem' }}>
-          <EntryDetailPanel entry={entry} members={members} />
+          <EntryDetailPanel entry={entry} members={members} vocab={vocab} />
         </div>
       )}
 
