@@ -304,6 +304,10 @@ export interface MediaEntry {
   uploaded_by: string;
   upload_note: string | null;
   created_at: string;
+  // R4-D3 (migration 013): sha256 hex byte-identity for duplicate detection. A
+  // CONVENIENCE, not provenance; nullable and optional (older rows + pre-backfill rows
+  // read absent). Present in the type ahead of the column so the typed client compiles.
+  content_hash?: string | null;
 }
 
 // Append-only provenance event (spec 5.3). Current tag state for an item =
