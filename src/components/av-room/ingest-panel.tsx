@@ -1420,6 +1420,7 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
   const [error, setError] = useState<string | null>(null);
   const [posterBusy, setPosterBusy] = useState(false);
   const [posterMsg, setPosterMsg] = useState<string | null>(null);
+  const [downloadBusy, setDownloadBusy] = useState(false);
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
   const [tagValue, setTagValue] = useState('');
   const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
@@ -1449,6 +1450,37 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
       setPosterMsg('Could not save the poster.');
     } finally {
       setPosterBusy(false);
+    }
+  }
+
+  // R4-D2: retrieve the full-resolution original (any kind) with a download disposition.
+  // The Permanence moat made tangible. Available even for withdrawn items - withdrawal
+  // governs DISPLAY, not the league's right to retrieve its own record.
+  async function downloadOriginal() {
+    setDownloadBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id, download: true }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not prepare the download.');
+        return;
+      }
+      const { url } = (await res.json()) as { url: string };
+      const a = document.createElement('a');
+      a.href = url;
+      a.rel = 'noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {
+      setError('Could not prepare the download.');
+    } finally {
+      setDownloadBusy(false);
     }
   }
 
@@ -1528,6 +1560,13 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
 
   return (
     <>
+      {/* R4-D2: retrieve the full-resolution original. Always available - retrieval is not
+          display, so it works for withdrawn items too. */}
+      <div style={{ marginBottom: '0.6rem' }}>
+        <button type="button" disabled={downloadBusy} onClick={downloadOriginal} style={{ ...btnStyle(downloadBusy), padding: '0.25rem 0.5rem' }}>
+          {downloadBusy ? 'Preparing…' : 'Download original'}
+        </button>
+      </div>
       {entry.uploadNote && (
         <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.82rem', margin: '0 0 0.6rem' }}>
           {entry.uploadNote}
