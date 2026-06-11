@@ -21,6 +21,7 @@ export const dynamic = 'force-dynamic';
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ synthetic?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -28,8 +29,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `A/V Room ingest · ${id}` };
 }
 
-export default async function AvRoomIngestPage({ params }: Props) {
+export default async function AvRoomIngestPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { synthetic } = await searchParams;
 
   const viewer = await getViewer(id);
   if (!viewer.userId) redirect(`/auth/login?redirect=/league/${id}/av-room/ingest`);
@@ -49,28 +51,47 @@ export default async function AvRoomIngestPage({ params }: Props) {
   const admin = createAdminClient();
   const room = await loadRoomState(admin, league.id, { includeWithdrawn: true });
 
-  // Per-entry thumbnail + poster presence, signed server-side (round 2): a photo signs
-  // its original; a VIDEO signs the SAME poster object the room reads
-  // ({folder}/poster.jpg) - never the video itself (D0). Auto-extraction is best-effort
-  // and silent for codecs the upload browser can't decode, so videoHasPoster also drives
-  // the honest "set poster" affordance where one is missing.
+  // R3-D1: lists serve a small derived rendition, NEVER the full original. A photo
+  // signs its thumb.jpg sibling (~400px, tens of KB); a video signs the SAME poster
+  // the room reads. The original is reserved for quick-look (R4) and downloads.
+  //
+  // R3-D2: ONE signing round-trip for the whole page, not N. We build every sibling
+  // path first, then sign them all in a single createSignedUrls() call - so a 1,000-
+  // item corpus costs one sign call, not 1,000 serial ones. A missing rendition simply
+  // fails to load and the card falls back to a placeholder (onError), never the
+  // original; backfill fills the gap for the existing corpus.
+  //
+  // Videos are still listed per-folder for the honest "no still yet" hint (poster
+  // presence) - that is existence, not signing, and is bounded by video count (a small
+  // minority in a photo-first corpus); the bulk photo path does zero list calls.
   const THUMB_TTL_SECONDS = 300;
   const videoHasPoster = new Map<string, boolean>();
   const thumbUrl = new Map<string, string>();
+  const signPaths: string[] = [];
+  const pathOwner = new Map<string, string>(); // sibling path -> entry id
   for (const re of room.entries) {
     const folder = re.entry.storage_path.slice(0, re.entry.storage_path.lastIndexOf('/'));
     if (re.entry.media_kind === 'photo') {
-      const { data } = await admin.storage.from('league-media').createSignedUrl(re.entry.storage_path, THUMB_TTL_SECONDS);
-      if (data) thumbUrl.set(re.entry.id, data.signedUrl);
+      const p = `${folder}/thumb.jpg`;
+      signPaths.push(p);
+      pathOwner.set(p, re.entry.id);
       continue;
     }
-    // video
+    // video: existence of poster.jpg drives the de-silence hint AND whether to sign it
     const { data: listed } = await admin.storage.from('league-media').list(folder);
     const hasPoster = !!listed?.some((o) => o.name === 'poster.jpg');
     videoHasPoster.set(re.entry.id, hasPoster);
     if (hasPoster) {
-      const { data } = await admin.storage.from('league-media').createSignedUrl(`${folder}/poster.jpg`, THUMB_TTL_SECONDS);
-      if (data) thumbUrl.set(re.entry.id, data.signedUrl);
+      const p = `${folder}/poster.jpg`;
+      signPaths.push(p);
+      pathOwner.set(p, re.entry.id);
+    }
+  }
+  if (signPaths.length > 0) {
+    const { data: signed } = await admin.storage.from('league-media').createSignedUrls(signPaths, THUMB_TTL_SECONDS);
+    for (const s of signed ?? []) {
+      const owner = s.path ? pathOwner.get(s.path) : undefined;
+      if (owner && !s.error && s.signedUrl) thumbUrl.set(owner, s.signedUrl);
     }
   }
 
@@ -134,6 +155,26 @@ export default async function AvRoomIngestPage({ params }: Props) {
   // is newest-first (created_at DESC, deterministic). The ROOM stays oldest-first (a
   // founder taste call: an archive reads forward through time; W.2 owns presentation).
   entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  // R3-D3: dev-only synthetic padding to exercise virtualization at scale (?synthetic=1000).
+  // NEVER in production and never written to the DB - these are render-only rows that
+  // prove the window virtualizer keeps the DOM O(visible). Real prod data is untouched.
+  if (process.env.NODE_ENV !== 'production') {
+    const n = Math.min(2000, Math.max(0, parseInt(synthetic ?? '0', 10) || 0));
+    const base = Date.parse('2000-01-01T00:00:00Z');
+    for (let i = 0; i < n; i++) {
+      entries.push({
+        id: `synthetic-${i}`,
+        mediaKind: 'photo',
+        uploadNote: `Synthetic test row ${i}`,
+        createdAt: new Date(base - i * 1000).toISOString(),
+        withdrawn: false,
+        hasPoster: false,
+        thumbUrl: null,
+        tags: [],
+      });
+    }
+  }
 
   return (
     <main style={{ background: 'var(--vault-bg)', minHeight: '100vh' }}>

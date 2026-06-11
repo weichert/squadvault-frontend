@@ -7,8 +7,9 @@
 // read-only 2a grant state shown beside member identification (W.6 5), correction-
 // by-supersession, item withdrawal, and room ratification. All writes POST to the
 // /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
 import { createClient } from '@/lib/supabase/client';
@@ -196,6 +197,9 @@ export function IngestPanel({
             onReset={() => setFilters(EMPTY_FILTERS)}
           />
         )}
+        {entries.length > 0 && (
+          <ThumbnailBackfill leagueId={leagueId} onDone={() => router.refresh()} />
+        )}
         {selectedIds.length > 0 && (
           <BatchTagBar
             selectedIds={selectedIds}
@@ -223,20 +227,80 @@ export function IngestPanel({
             </button>
           </p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {visibleEntries.map((e) => (
+          <VirtualCorpus
+            entries={visibleEntries}
+            members={members}
+            selected={selected}
+            onToggleSelect={toggleSelect}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
+// R3-D3: list virtualization. The corpus can run to a thousand items; rendering one
+// card per row keeps the DOM (and the signed-image fetches) O(visible), not O(N), so
+// the page stays instant and memory stays flat. Filters (r2-D3) operate on the FULL
+// set upstream - this only windows the already-filtered result. Rows are variable
+// height (compact, or tall when expanded), so the window virtualizer measures each
+// rendered row (measureElement) rather than assuming a fixed size. It virtualizes
+// against the document scroll (no nested scroll container), matching the page layout.
+function VirtualCorpus({
+  entries,
+  members,
+  selected,
+  onToggleSelect,
+}: {
+  entries: IngestEntry[];
+  members: IngestMember[];
+  selected: Set<string>;
+  onToggleSelect: (id: string) => void;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  useLayoutEffect(() => {
+    if (listRef.current) setScrollMargin(listRef.current.offsetTop);
+  }, []);
+
+  const virtualizer = useWindowVirtualizer({
+    count: entries.length,
+    estimateSize: () => 86,
+    overscan: 8,
+    scrollMargin,
+    getItemKey: (i) => entries[i].id,
+  });
+  const rows = virtualizer.getVirtualItems();
+
+  return (
+    <div ref={listRef} style={{ position: 'relative', height: virtualizer.getTotalSize() }}>
+      {rows.map((vrow) => {
+        const e = entries[vrow.index];
+        return (
+          <div
+            key={vrow.key}
+            data-index={vrow.index}
+            ref={virtualizer.measureElement}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${vrow.start - scrollMargin}px)`,
+            }}
+          >
+            <div style={{ paddingBottom: '1rem' }}>
               <EntryCard
-                key={e.id}
                 entry={e}
                 members={members}
                 selectable={!e.withdrawn}
                 selected={selected.has(e.id)}
-                onToggleSelect={() => toggleSelect(e.id)}
+                onToggleSelect={() => onToggleSelect(e.id)}
               />
-            ))}
+            </div>
           </div>
-        )}
-      </section>
+        );
+      })}
     </div>
   );
 }
@@ -331,6 +395,79 @@ function CorpusFilters({
         <button type="button" onClick={onReset} className="font-mono" style={{ ...btnStyle(false), padding: '0.35rem 0.6rem' }}>
           Clear
         </button>
+      )}
+    </div>
+  );
+}
+
+// R3-D1 backfill: generate the missing thumb.jpg renditions for the existing corpus.
+// A one-off commissioner maintenance action - it asks the server which photos lack a
+// thumb (and gets a signed URL of each original), pulls each into a canvas, downscales,
+// and POSTs the small thumb back. Deterministic, bounded, and idempotent: photos that
+// already have a thumb are never revisited.
+function ThumbnailBackfill({ leagueId, onDone }: { leagueId: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setMsg('Checking for photos without a thumbnail…');
+    try {
+      const res = await fetch(`/api/av-room/thumb?leagueId=${encodeURIComponent(leagueId)}`);
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setMsg(j.error ?? 'Could not check thumbnails.');
+        return;
+      }
+      const { targets } = (await res.json()) as {
+        targets: { mediaEntryId: string; originalUrl: string; note: string | null; createdAt: string }[];
+      };
+      if (targets.length === 0) {
+        setMsg('Every photo already has a thumbnail.');
+        return;
+      }
+      let done = 0;
+      // Name each item that fails to read: an unreadable, untagged item is otherwise
+      // unidentifiable in the UI (short id + its note or ingest date).
+      const failures: string[] = [];
+      const label = (t: { mediaEntryId: string; note: string | null; createdAt: string }) => {
+        const idPart = t.mediaEntryId.slice(0, 8);
+        const detail = t.note?.trim() || new Date(t.createdAt).toISOString().slice(0, 10);
+        return `${idPart} (${detail})`;
+      };
+      for (const t of targets) {
+        setMsg(`Generating thumbnails… ${done + failures.length}/${targets.length}`);
+        const blob = await imageToThumbBlob(t.originalUrl);
+        if (!blob) {
+          failures.push(label(t));
+          continue;
+        }
+        const form = new FormData();
+        form.set('mediaEntryId', t.mediaEntryId);
+        form.set('thumb', blob, 'thumb.jpg');
+        const up = await fetch('/api/av-room/thumb', { method: 'POST', body: form });
+        if (up.ok) done += 1;
+        else failures.push(label(t));
+      }
+      const tail = failures.length ? ` ${failures.length} could not be read: ${failures.join('; ')}.` : '';
+      setMsg(`Generated ${done} thumbnail${done === 1 ? '' : 's'}.${tail}`);
+      if (done > 0) onDone();
+    } catch {
+      setMsg('Could not generate thumbnails.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+      <button type="button" disabled={busy} onClick={run} className="font-mono" style={{ ...btnStyle(busy), padding: '0.35rem 0.6rem' }}>
+        {busy ? 'Working…' : 'Generate missing thumbnails'}
+      </button>
+      {msg && (
+        <span className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.78rem' }}>
+          {msg}
+        </span>
       )}
     </div>
   );
@@ -455,6 +592,62 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
   });
 }
 
+// R3-D1: generate a small JPEG thumbnail (~400px long edge) from an image source, in
+// the browser, via canvas. Best-effort and side-effect-free on failure (resolves
+// null). Reused by the upload path (the commissioner's own local file) and by backfill
+// (an existing original pulled from a signed URL). The original is never modified
+// (6.9); the thumb is a derived, regenerable rendition stored beside it as thumb.jpg.
+const THUMB_MAX_EDGE = 400;
+
+function imageToThumbBlob(src: string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined') {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    // Signed Storage URLs are cross-origin; request anonymously so the canvas is not
+    // tainted and toBlob can read it. (For a same-origin object URL this is a no-op.)
+    img.crossOrigin = 'anonymous';
+    let settled = false;
+    const timeout = setTimeout(() => finish(null), 12000);
+    function finish(blob: Blob | null) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(blob);
+    }
+    img.onerror = () => finish(null);
+    img.onload = () => {
+      try {
+        const { naturalWidth: w0, naturalHeight: h0 } = img;
+        if (!w0 || !h0) return finish(null);
+        const scale = Math.min(1, THUMB_MAX_EDGE / Math.max(w0, h0));
+        const w = Math.max(1, Math.round(w0 * scale));
+        const h = Math.max(1, Math.round(h0 * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return finish(null);
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((b) => finish(b), 'image/jpeg', 0.78);
+      } catch {
+        finish(null);
+      }
+    };
+    img.src = src;
+  });
+}
+
+function fileToThumbBlob(file: File): Promise<Blob | null> {
+  const url = URL.createObjectURL(file);
+  return imageToThumbBlob(url).then((b) => {
+    URL.revokeObjectURL(url);
+    return b;
+  });
+}
+
 // D6 HEIC honesty (module-level so single + queue paths share it). iPhone photos
 // default to HEIC/HEIF, which browsers can't render in an <img>, so storing one only
 // yields a broken thumbnail. Some browsers leave file.type empty, so also sniff ext.
@@ -521,6 +714,12 @@ async function uploadOneFile(file: File, leagueId: string, note: string): Promis
   if (kind === 'video') {
     const poster = await extractPosterBlob(file);
     if (poster) finalizeForm.set('poster', poster, 'poster.jpg');
+  } else {
+    // R3-D1: a photo carries its own small thumb rendition, generated from the local
+    // file (no second round-trip for the original). Best-effort: if it fails, the
+    // record still finalizes and backfill can generate the thumb later.
+    const thumb = await fileToThumbBlob(file);
+    if (thumb) finalizeForm.set('thumb', thumb, 'thumb.jpg');
   }
   const finRes = await fetch('/api/av-room/upload/finalize', { method: 'POST', body: finalizeForm });
   if (!finRes.ok) {
@@ -606,7 +805,9 @@ function UploadForm({ leagueId }: { leagueId: string }) {
       </h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 460 }}>
         {/* D1: drag-drop N files (or click to choose). Each is queued through the
-            remedy-B flow with bounded concurrency and per-file failure isolation. */}
+            remedy-B flow with bounded concurrency and per-file failure isolation.
+            R3-D4: drag-drop does not exist on phones, so the label is also a tap target
+            and its <input multiple> lets iOS Safari pick several from the library. */}
         <label
           onDragOver={(e) => {
             e.preventDefault();
@@ -631,7 +832,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
             background: dragOver ? 'var(--vault-s2)' : 'transparent',
           }}
         >
-          Drop photos or video here, or click to choose. You can add several at once.
+          Drop photos or video here, or tap to choose. You can add several at once.
           <input
             type="file"
             accept="image/*,video/*"
@@ -843,6 +1044,9 @@ function EntryCard({
   // D3: the edit affordances (tag form + poster) collapse behind a toggle so a large
   // corpus stays scannable; the default row is thumbnail + current tags + actions.
   const [expanded, setExpanded] = useState(false);
+  // R3-D1: a thumb URL that fails to load (no rendition yet) falls back to the
+  // placeholder - never to the full original.
+  const [thumbFailed, setThumbFailed] = useState(false);
 
   async function setPoster(img: File) {
     setPosterBusy(true);
@@ -1026,10 +1230,16 @@ function EntryCard({
             justifyContent: 'center',
           }}
         >
-          {entry.thumbUrl ? (
-            // Photo -> its original; video -> the SAME poster the room reads. Image-only.
+          {entry.thumbUrl && !thumbFailed ? (
+            // Photo -> its thumb.jpg rendition; video -> the SAME poster the room reads.
+            // Image-only, and never the full original (R3-D1).
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={entry.thumbUrl} alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img
+              src={entry.thumbUrl}
+              alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`}
+              onError={() => setThumbFailed(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           ) : (
             <span className="font-mono" style={{ fontSize: '9px', letterSpacing: '0.1em', color: 'var(--vault-text3)' }}>
               {entry.mediaKind.toUpperCase()}
@@ -1145,7 +1355,9 @@ function EntryCard({
                   CORRECTING AN EARLIER TAG — this supersedes it
                 </p>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+              {/* R3-D4: auto-fit collapses the form to a single column on a phone
+                  (no media query needed - intrinsic sizing), two columns where it fits. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.6rem' }}>
                 <div>
                   <label className="font-mono" style={labelStyle}>Kind</label>
                   <select
