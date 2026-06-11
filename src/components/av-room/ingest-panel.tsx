@@ -795,7 +795,9 @@ function UploadForm({ leagueId }: { leagueId: string }) {
       </h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 460 }}>
         {/* D1: drag-drop N files (or click to choose). Each is queued through the
-            remedy-B flow with bounded concurrency and per-file failure isolation. */}
+            remedy-B flow with bounded concurrency and per-file failure isolation.
+            R3-D4: drag-drop does not exist on phones, so the label is also a tap target
+            and its <input multiple> lets iOS Safari pick several from the library. */}
         <label
           onDragOver={(e) => {
             e.preventDefault();
@@ -820,7 +822,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
             background: dragOver ? 'var(--vault-s2)' : 'transparent',
           }}
         >
-          Drop photos or video here, or click to choose. You can add several at once.
+          Drop photos or video here, or tap to choose. You can add several at once.
           <input
             type="file"
             accept="image/*,video/*"
@@ -1343,7 +1345,9 @@ function EntryCard({
                   CORRECTING AN EARLIER TAG — this supersedes it
                 </p>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+              {/* R3-D4: auto-fit collapses the form to a single column on a phone
+                  (no media query needed - intrinsic sizing), two columns where it fits. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.6rem' }}>
                 <div>
                   <label className="font-mono" style={labelStyle}>Kind</label>
                   <select
