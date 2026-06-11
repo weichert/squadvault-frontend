@@ -63,16 +63,21 @@ Hardening (no playback) shipped 2026-06-10 — `7601f8c`, `b97b19c`, `99dafc0`:
 - ~~Poster-frame extraction as a derived rendition~~ — done (D3, `99dafc0`;
   original untouched 6.9, image-only, no 2b read).
 
-Still open, sharing the structured **attestation class + 2b playback gate**
-(attestation is its own class, NOT a sixth provenance tag — rationale recorded in
-the click-through memo):
-- **Large-file ingest** — real-corpus `.MOV` hit Supabase's global 50 MB cap (400
-  after ~40s). BLOCKED on decision-gate **D-W1-V1** (founder call: raise the
-  storage cap, or move to client-direct-to-storage upload, which deviates from
-  spec 5.1). D1/D2 make the cap honest; they do not raise it.
-- **Video playback + the voice-attestation class** — the positive design is
-  unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE work
-  (chat/Fable), not a build input.
+Next + still open:
+- **Large-file ingest — UNBLOCKED. D-W1-V1 RULED REMEDY B** (2026-06-10, founder
+  in Fable chat): client-direct upload under a server-minted grant. Remedy A
+  eliminated — the real ceiling is Vercel's unconfigurable 4.5 MB function
+  body limit (413 at the edge), not the Supabase Storage cap (now 1 GB, Pro).
+  **Spec 5.1 Amendment 1** ratified (transport not authority; grant-minted,
+  single-use, server-chosen path, insert-after-upload, 6.9 unchanged). Corollary:
+  production photo uploads >4.5 MB are broken today on the passthrough — B fixes
+  photos and video alike. EXECUTE brief filed:
+  `_observations/session_brief_2026_06_10_w1_large_file_ingest_remedy_b_build.md`;
+  ruling memo `_observations/OBSERVATIONS_2026_06_10_DW1V1_RULING_REMEDY_B.md`.
+- **Video playback + the voice-attestation class** — still BLOCKED; the positive
+  design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
+  work (chat/Fable), not a build input. Shares the **attestation class + 2b playback
+  gate** (attestation is its own class, not a sixth provenance tag).
 
 ### Harden / operate
 - CI live on push/PR (this scaffold).
