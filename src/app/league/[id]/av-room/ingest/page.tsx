@@ -21,6 +21,7 @@ export const dynamic = 'force-dynamic';
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ synthetic?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -28,8 +29,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `A/V Room ingest · ${id}` };
 }
 
-export default async function AvRoomIngestPage({ params }: Props) {
+export default async function AvRoomIngestPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { synthetic } = await searchParams;
 
   const viewer = await getViewer(id);
   if (!viewer.userId) redirect(`/auth/login?redirect=/league/${id}/av-room/ingest`);
@@ -153,6 +155,26 @@ export default async function AvRoomIngestPage({ params }: Props) {
   // is newest-first (created_at DESC, deterministic). The ROOM stays oldest-first (a
   // founder taste call: an archive reads forward through time; W.2 owns presentation).
   entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  // R3-D3: dev-only synthetic padding to exercise virtualization at scale (?synthetic=1000).
+  // NEVER in production and never written to the DB - these are render-only rows that
+  // prove the window virtualizer keeps the DOM O(visible). Real prod data is untouched.
+  if (process.env.NODE_ENV !== 'production') {
+    const n = Math.min(2000, Math.max(0, parseInt(synthetic ?? '0', 10) || 0));
+    const base = Date.parse('2000-01-01T00:00:00Z');
+    for (let i = 0; i < n; i++) {
+      entries.push({
+        id: `synthetic-${i}`,
+        mediaKind: 'photo',
+        uploadNote: `Synthetic test row ${i}`,
+        createdAt: new Date(base - i * 1000).toISOString(),
+        withdrawn: false,
+        hasPoster: false,
+        thumbUrl: null,
+        tags: [],
+      });
+    }
+  }
 
   return (
     <main style={{ background: 'var(--vault-bg)', minHeight: '100vh' }}>

@@ -7,8 +7,9 @@
 // read-only 2a grant state shown beside member identification (W.6 5), correction-
 // by-supersession, item withdrawal, and room ratification. All writes POST to the
 // /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
 import { createClient } from '@/lib/supabase/client';
@@ -226,20 +227,80 @@ export function IngestPanel({
             </button>
           </p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {visibleEntries.map((e) => (
+          <VirtualCorpus
+            entries={visibleEntries}
+            members={members}
+            selected={selected}
+            onToggleSelect={toggleSelect}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
+// R3-D3: list virtualization. The corpus can run to a thousand items; rendering one
+// card per row keeps the DOM (and the signed-image fetches) O(visible), not O(N), so
+// the page stays instant and memory stays flat. Filters (r2-D3) operate on the FULL
+// set upstream - this only windows the already-filtered result. Rows are variable
+// height (compact, or tall when expanded), so the window virtualizer measures each
+// rendered row (measureElement) rather than assuming a fixed size. It virtualizes
+// against the document scroll (no nested scroll container), matching the page layout.
+function VirtualCorpus({
+  entries,
+  members,
+  selected,
+  onToggleSelect,
+}: {
+  entries: IngestEntry[];
+  members: IngestMember[];
+  selected: Set<string>;
+  onToggleSelect: (id: string) => void;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  useLayoutEffect(() => {
+    if (listRef.current) setScrollMargin(listRef.current.offsetTop);
+  }, []);
+
+  const virtualizer = useWindowVirtualizer({
+    count: entries.length,
+    estimateSize: () => 86,
+    overscan: 8,
+    scrollMargin,
+    getItemKey: (i) => entries[i].id,
+  });
+  const rows = virtualizer.getVirtualItems();
+
+  return (
+    <div ref={listRef} style={{ position: 'relative', height: virtualizer.getTotalSize() }}>
+      {rows.map((vrow) => {
+        const e = entries[vrow.index];
+        return (
+          <div
+            key={vrow.key}
+            data-index={vrow.index}
+            ref={virtualizer.measureElement}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${vrow.start - scrollMargin}px)`,
+            }}
+          >
+            <div style={{ paddingBottom: '1rem' }}>
               <EntryCard
-                key={e.id}
                 entry={e}
                 members={members}
                 selectable={!e.withdrawn}
                 selected={selected.has(e.id)}
-                onToggleSelect={() => toggleSelect(e.id)}
+                onToggleSelect={() => onToggleSelect(e.id)}
               />
-            ))}
+            </div>
           </div>
-        )}
-      </section>
+        );
+      })}
     </div>
   );
 }
