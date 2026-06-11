@@ -92,19 +92,29 @@ Done + still open:
   Click-through finding folded to R4-D3: a HEIC/HEVC file renamed `.jpg` bypasses the
   extension-based D6 gate — fix is magic-byte content sniffing (memo
   `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_R3_CLICKTHROUGH_HEIC_GATE.md`).
-- **Ingest round 4 (the curator's bench) — IN PROGRESS on `feat/w1-ingest-round4`.**
-  - **R4-D3 deterministic duplicate detection + HEIC content-sniff — DONE on branch, in
-    PR #16; DISCHARGE HELD pending migration 013 apply + click-through** (`15fa5c1`).
-    Migration 013 (`content_hash`, a convenience not provenance) needs the dashboard apply
-    (012 rhythm), then "Backfill content hashes". Closes the R3 renamed-HEIC hole by
-    content. No new table; governance 113/0.
-    Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_4_R4D3.md`.
-  - **PENDING (next session, off main after #16):** R4-D1 quick-look, R4-D2 download
-    original, R4-D4 tag autocomplete (own ratified values only), R4-D5 untagged work
-    queue, R4-D6 keyboard-first flow, R4-D7 retry-failed, R4-D8 select-all-in-filter.
+- **Ingest round 4 (the curator's bench) — R4-D3 DISCHARGED; continuation OPEN.**
+  - **R4-D3 deterministic duplicate detection + HEIC content-sniff — DONE + DISCHARGED
+    2026-06-11.** Migration 013 (`content_hash`, a convenience not provenance) applied to
+    prod + verified (column present, nullable). Byte-equality duplicate refusal ("already
+    in the record" + override), HEIC-by-content refusal (no override; correct asymmetry),
+    backfill (admin-client write after the silent-RLS-no-op fix), G18 append-only proof.
+    Merged `339b73a` (PR #16). Governance 114/0. Founder click-through ALL PASSED (10
+    entries / 0 NULLs; cross-kind + against-withdrawn matching; control upload prepends).
+    Memos: `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_4_R4D3.md`,
+    `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_R4D3_HASH_BACKFILL_RLS_FIX.md`.
+  - **Continuation queue (next session, off `main` after `339b73a`)** — see
+    `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_ROUND_4_CONTINUATION_QUEUE.md`:
+    R4-D1 quick-look (must attempt originals the canvas can't thumbnail — the 7048e1a0
+    unreadable case stays viewable/identifiable), R4-D2 download original, R4-D4 tag
+    autocomplete (own ratified values only) + the D4 ordering assertion, R4-D5 untagged
+    work queue, R4-D6 keyboard-first flow, R4-D7 retry-failed, R4-D8 select-all-in-filter.
+    Plus: **derived duplicate indicator** (read-model derives "DUPLICATE of <item>" from
+    content_hash equality, all but the earliest per hash; reuses D1's jump-to-item; adds a
+    "duplicates" filter; NO migration / NO tag kind / NO stored state — adjudicated Fable
+    2026-06-11), **jump-to-item link** (D1 owes it), and the **override-path prepend fix**
+    (override insert lands mid-list until refresh; make it prepend like the normal path).
   - Bright lines: no AI tagging/face-detection/AI-search; no gamification/streaks/nudges;
-    no relevance ranking — filters/matches stay deterministic. Known follow-up: duplicate
-    refusal names the item's date but a jump-to-item link is deferred (virtualization).
+    no relevance ranking — filters/matches stay deterministic.
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
   design is unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE
   work (chat/Fable) — the next DECIDE moment. Shares the **attestation class + 2b
