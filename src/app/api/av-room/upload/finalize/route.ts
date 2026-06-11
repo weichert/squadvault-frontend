@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
   const mediaKind = form.get('media_kind');
   const mime = form.get('mime');
   const uploadNoteRaw = form.get('upload_note');
+  const contentHashRaw = form.get('content_hash');
 
   if (typeof mediaEntryId !== 'string' || mediaEntryId.length === 0) {
     return NextResponse.json({ error: 'mediaEntryId is required' }, { status: 400 });
@@ -68,6 +69,9 @@ export async function POST(req: NextRequest) {
     typeof uploadNoteRaw === 'string' && uploadNoteRaw.trim().length > 0
       ? uploadNoteRaw.trim()
       : null;
+  // R4-D3: byte-identity convenience (sha256 hex), validated shape only - not provenance.
+  const contentHash =
+    typeof contentHashRaw === 'string' && /^[0-9a-f]{64}$/.test(contentHashRaw) ? contentHashRaw : null;
 
   const supabase = await createServerClient();
   const {
@@ -95,7 +99,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'The upload was not found; nothing to finalize.' }, { status: 409 });
   }
 
-  const row: MediaEntryInsert & { id: string } = {
+  const row: MediaEntryInsert & { id: string; content_hash?: string | null } = {
     id: mediaEntryId,
     league_id: leagueId,
     media_kind: mediaKind as MediaKind,
@@ -103,8 +107,17 @@ export async function POST(req: NextRequest) {
     mime_type: mime,
     uploaded_by: user.id,
     upload_note: uploadNote,
+    content_hash: contentHash,
   };
-  const { error: insErr } = await supabase.from('media_entries').insert(row as never);
+  let { error: insErr } = await supabase.from('media_entries').insert(row as never);
+  // R4-D3 graceful degrade: if migration 013 is not applied yet, content_hash is an
+  // unknown column (42703). Retry the insert WITHOUT it so uploads keep working - the
+  // hash is a convenience, never load-bearing; backfill picks it up once 013 lands.
+  if (insErr && (insErr as { code?: string }).code === '42703') {
+    const { content_hash: _omit, ...rowNoHash } = row;
+    void _omit;
+    ({ error: insErr } = await supabase.from('media_entries').insert(rowNoHash as never));
+  }
   if (insErr) {
     // A duplicate finalize (record already exists) must NOT reap - the object is
     // legitimately referenced by the existing row. Treat as already-finalized.

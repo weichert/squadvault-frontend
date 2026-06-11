@@ -200,6 +200,9 @@ export function IngestPanel({
         {entries.length > 0 && (
           <ThumbnailBackfill leagueId={leagueId} onDone={() => router.refresh()} />
         )}
+        {entries.length > 0 && (
+          <HashBackfill leagueId={leagueId} onDone={() => router.refresh()} />
+        )}
         {selectedIds.length > 0 && (
           <BatchTagBar
             selectedIds={selectedIds}
@@ -473,6 +476,75 @@ function ThumbnailBackfill({ leagueId, onDone }: { leagueId: string; onDone: () 
   );
 }
 
+// R4-D3 backfill: compute content_hash for the existing corpus (one-off, same shape as
+// the thumbnail backfill). New uploads hash themselves; pre-existing rows need this once.
+function HashBackfill({ leagueId, onDone }: { leagueId: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setMsg('Checking for items without a content hash…');
+    try {
+      const res = await fetch(`/api/av-room/hash?leagueId=${encodeURIComponent(leagueId)}`);
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setMsg(j.error ?? 'Could not check hashes.');
+        return;
+      }
+      const { targets, inactive } = (await res.json()) as {
+        targets: { mediaEntryId: string; originalUrl: string }[];
+        inactive?: boolean;
+      };
+      if (inactive) {
+        setMsg('Duplicate detection is inactive until migration 013 is applied.');
+        return;
+      }
+      if (targets.length === 0) {
+        setMsg('Every item already has a content hash.');
+        return;
+      }
+      let done = 0;
+      let failed = 0;
+      for (const t of targets) {
+        setMsg(`Hashing… ${done + failed}/${targets.length}`);
+        try {
+          const bytes = new Uint8Array(await (await fetch(t.originalUrl)).arrayBuffer());
+          const hash = await sha256Hex(bytes);
+          const up = await fetch('/api/av-room/hash', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mediaEntryId: t.mediaEntryId, hash }),
+          });
+          if (up.ok) done += 1;
+          else failed += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      setMsg(`Hashed ${done} item${done === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}.`);
+      if (done > 0) onDone();
+    } catch {
+      setMsg('Could not compute hashes.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+      <button type="button" disabled={busy} onClick={run} className="font-mono" style={{ ...btnStyle(busy), padding: '0.35rem 0.6rem' }}>
+        {busy ? 'Working…' : 'Backfill content hashes'}
+      </button>
+      {msg && (
+        <span className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.78rem' }}>
+          {msg}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RoomRatification({ leagueId, ratified }: { leagueId: string; ratified: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -648,6 +720,44 @@ function fileToThumbBlob(file: File): Promise<Blob | null> {
   });
 }
 
+// R4-D3: read the file's bytes ONCE and derive both the content hash (sha256 hex, for
+// deterministic duplicate detection) and a magic-byte media check. The R3 click-through
+// found a HEIC/HEVC file renamed `.jpg` slipping past the extension-based gate, then
+// failing thumbnail decode - so HEIC is now caught by CONTENT, not by name. Pure byte
+// work, zero AI.
+const HEIC_BRANDS = new Set(['heic', 'heix', 'hevc', 'heif', 'mif1', 'msf1']);
+
+function isHeicByBytes(bytes: Uint8Array): boolean {
+  // ISO-BMFF: bytes 4..8 are the box type ('ftyp'); the major brand follows at 8..12.
+  if (bytes.length < 12) return false;
+  const ascii = (o: number, n: number) => String.fromCharCode(...Array.from(bytes.subarray(o, o + n)));
+  if (ascii(4, 4) !== 'ftyp') return false;
+  return HEIC_BRANDS.has(ascii(8, 4).toLowerCase());
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as BufferSource);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function inspectFileBytes(file: File): Promise<{ hash: string; heic: boolean }> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return { hash: await sha256Hex(bytes), heic: isHeicByBytes(bytes) };
+}
+
+// Thrown when a file's bytes already exist in the league's record. Carries the existing
+// entry id so the queue can name it and offer an explicit override.
+class DuplicateError extends Error {
+  duplicateOf: string;
+  constructor(message: string, duplicateOf: string) {
+    super(message);
+    this.name = 'DuplicateError';
+    this.duplicateOf = duplicateOf;
+  }
+}
+
 // D6 HEIC honesty (module-level so single + queue paths share it). iPhone photos
 // default to HEIC/HEIF, which browsers can't render in an <img>, so storing one only
 // yields a broken thumbnail. Some browsers leave file.type empty, so also sniff ext.
@@ -668,7 +778,12 @@ function mediaKindFor(file: File): MediaKind | null {
 // Upload one file through the remedy-B flow (grant -> client-direct -> finalize),
 // with the honest per-file pre-checks (D6/D1). Throws an Error whose message is the
 // human reason on any failure, so the queue can isolate it per file (D1).
-async function uploadOneFile(file: File, leagueId: string, note: string): Promise<void> {
+async function uploadOneFile(
+  file: File,
+  leagueId: string,
+  note: string,
+  opts?: { allowDuplicate?: boolean },
+): Promise<void> {
   const kind = mediaKindFor(file);
   if (!kind) throw new Error('Unsupported file type — choose an image or video.');
   if (isHeicFile(file)) {
@@ -676,6 +791,29 @@ async function uploadOneFile(file: File, leagueId: string, note: string): Promis
   }
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
+  }
+
+  // R4-D3: one byte read -> content hash + content-level HEIC check (catches a renamed
+  // HEIC the extension check above missed), then a deterministic duplicate check.
+  const { hash, heic } = await inspectFileBytes(file);
+  if (heic) {
+    throw new Error('This is a HEIC/HEVC photo (by its contents, despite the name). Export it as JPEG and upload that.');
+  }
+  if (!opts?.allowDuplicate) {
+    const dupRes = await fetch('/api/av-room/duplicate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leagueId, hash }),
+    });
+    if (dupRes.ok) {
+      const { duplicate } = (await dupRes.json()) as {
+        duplicate: { id: string; createdAt: string } | null;
+      };
+      if (duplicate) {
+        const when = new Date(duplicate.createdAt).toISOString().slice(0, 10);
+        throw new DuplicateError(`Already in the record (uploaded ${when}).`, duplicate.id);
+      }
+    }
   }
 
   const grantRes = await fetch('/api/av-room/upload/grant', {
@@ -710,6 +848,7 @@ async function uploadOneFile(file: File, leagueId: string, note: string): Promis
   finalizeForm.set('leagueId', leagueId);
   finalizeForm.set('media_kind', kind);
   finalizeForm.set('mime', file.type);
+  finalizeForm.set('content_hash', hash); // R4-D3: stored as a convenience, not provenance
   if (note.trim()) finalizeForm.set('upload_note', note.trim());
   if (kind === 'video') {
     const poster = await extractPosterBlob(file);
@@ -733,6 +872,10 @@ type QueueItem = {
   name: string;
   status: 'queued' | 'uploading' | 'done' | 'failed';
   reason?: string;
+  // R4-D3: a duplicate failure keeps the existing entry id (to name it) and the File
+  // (so "upload anyway" can resubmit with an explicit override).
+  duplicateOf?: string;
+  file?: File;
 };
 
 const UPLOAD_CONCURRENCY = 3;
@@ -746,7 +889,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
   // Refs the worker pool reads synchronously: the live queue (file + claim) and a
   // single-runner guard. State mirrors them for rendering. Claiming via the ref
   // prevents two workers grabbing the same item before a re-render lands.
-  const queueRef = useRef<{ id: string; file: File }[]>([]);
+  const queueRef = useRef<{ id: string; file: File; allowDuplicate?: boolean }[]>([]);
   const claimedRef = useRef<Set<string>>(new Set());
   const runningRef = useRef(false);
   const noteRef = useRef('');
@@ -767,6 +910,16 @@ function UploadForm({ leagueId }: { leagueId: string }) {
     void ensureRunning();
   }
 
+  // R4-D3: explicit override for a duplicate refusal - resubmit the SAME file with the
+  // duplicate check bypassed. Replaces the failed row in place.
+  function uploadAnyway(item: QueueItem) {
+    if (!item.file) return;
+    queueRef.current.push({ id: item.id, file: item.file, allowDuplicate: true });
+    claimedRef.current.delete(item.id);
+    setItem(item.id, { status: 'queued', reason: undefined, duplicateOf: undefined });
+    void ensureRunning();
+  }
+
   async function ensureRunning() {
     if (runningRef.current) return;
     runningRef.current = true;
@@ -778,10 +931,14 @@ function UploadForm({ leagueId }: { leagueId: string }) {
         claimedRef.current.add(next.id);
         setItem(next.id, { status: 'uploading' });
         try {
-          await uploadOneFile(next.file, leagueId, noteRef.current);
+          await uploadOneFile(next.file, leagueId, noteRef.current, { allowDuplicate: next.allowDuplicate });
           setItem(next.id, { status: 'done' });
         } catch (e) {
-          setItem(next.id, { status: 'failed', reason: (e as Error).message });
+          if (e instanceof DuplicateError) {
+            setItem(next.id, { status: 'failed', reason: e.message, duplicateOf: e.duplicateOf, file: next.file });
+          } else {
+            setItem(next.id, { status: 'failed', reason: (e as Error).message });
+          }
         } finally {
           // Drop from the live queue either way; failures stay in `items` for display.
           queueRef.current = queueRef.current.filter((q) => q.id !== next.id);
@@ -892,6 +1049,16 @@ function UploadForm({ leagueId }: { leagueId: string }) {
                         ? 'DONE'
                         : `FAILED — ${it.reason ?? 'error'}`}
                 </span>
+                {it.duplicateOf && it.file && (
+                  <button
+                    type="button"
+                    onClick={() => uploadAnyway(it)}
+                    className="font-mono"
+                    style={{ ...btnStyle(false), flexShrink: 0, padding: '0.1rem 0.4rem' }}
+                  >
+                    Upload anyway
+                  </button>
+                )}
               </li>
             ))}
           </ul>
