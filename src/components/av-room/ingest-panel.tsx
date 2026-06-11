@@ -27,6 +27,7 @@ export type IngestEntry = {
   uploadNote: string | null;
   createdAt: string;
   withdrawn: boolean;
+  hasPoster: boolean;
   tags: IngestTag[];
 };
 
@@ -205,7 +206,11 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
     let settled = false;
-    const timeout = setTimeout(() => finish(null), 5000);
+    // A generous window: a large local video can take several seconds to demux far
+    // enough to seek. If decode never gets there (e.g. a codec the browser cannot
+    // play, like iPhone HEVC in Chrome), this resolves null and the commissioner
+    // sets a poster by hand (D0) - the failure is surfaced, never silent.
+    const timeout = setTimeout(() => finish(null), 12000);
     function finish(blob: Blob | null) {
       if (settled) return;
       settled = true;
@@ -228,6 +233,7 @@ function extractPosterBlob(file: File): Promise<Blob | null> {
       }
     }
     video.muted = true;
+    video.playsInline = true;
     video.preload = 'auto';
     video.onerror = () => finish(null);
     video.onloadeddata = () => {
@@ -401,6 +407,32 @@ function EntryCard({
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // D0: commissioner set/replace poster for a video (the honest fallback when
+  // auto-extraction could not decode the file).
+  const [posterBusy, setPosterBusy] = useState(false);
+  const [posterMsg, setPosterMsg] = useState<string | null>(null);
+
+  async function setPoster(img: File) {
+    setPosterBusy(true);
+    setPosterMsg(null);
+    try {
+      const fd = new FormData();
+      fd.set('mediaEntryId', entry.id);
+      fd.set('poster', img);
+      const res = await fetch('/api/av-room/poster', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setPosterMsg(j.error ?? 'Could not save the poster.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setPosterMsg('Could not save the poster.');
+    } finally {
+      setPosterBusy(false);
+    }
+  }
 
   // Tag-form state.
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
@@ -596,6 +628,40 @@ function EntryCard({
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* D0: video poster - set/replace by hand when auto-extraction could not
+              read the file. Honest gap: a missing poster says so, not nothing. */}
+          {entry.mediaKind === 'video' && (
+            <div style={{ marginTop: '0.6rem' }}>
+              <p
+                className="font-ui"
+                style={{ fontSize: '0.78rem', color: entry.hasPoster ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
+              >
+                {entry.hasPoster
+                  ? 'Poster still set — the room shows it for this video.'
+                  : 'No still yet — the room shows a placeholder. Auto-extraction could not read this video; set a still by hand.'}
+              </p>
+              <label className="font-mono" style={{ ...btnStyle(posterBusy), display: 'inline-block', marginTop: 6 }}>
+                {posterBusy ? 'Saving…' : entry.hasPoster ? 'Replace poster' : 'Set poster'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={posterBusy}
+                  onChange={(e) => {
+                    const img = e.target.files?.[0];
+                    if (img) void setPoster(img);
+                    e.target.value = '';
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {posterMsg && (
+                <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
+                  {posterMsg}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
