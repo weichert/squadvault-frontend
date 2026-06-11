@@ -16,6 +16,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient, createAdminClient } from '@/lib/supabase/server';
 import { isLeagueCommissioner } from '@/lib/av-room';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/lib/av-room-limits';
 import type { Database, MediaKind } from '@/lib/supabase/types';
 
 export const runtime = 'nodejs';
@@ -92,6 +93,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 });
   }
 
+  // Honest cap, enforced server-side (D2). The same ceiling the client pre-checks
+  // (D1) is the wall here too, so an oversized file gets a SPECIFIC reason - the
+  // size and the limit - instead of a bare "failed". Checked after the commissioner
+  // boundary so non-commissioners learn nothing about the route.
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: `This file is ${formatMb(file.size)}; the storage limit is ${MAX_UPLOAD_MB} MB.` },
+      { status: 413 },
+    );
+  }
+
   const mediaEntryId = crypto.randomUUID();
   const storagePath = `${leagueId}/${mediaEntryId}/original.${ext}`;
 
@@ -102,7 +114,28 @@ export async function POST(req: NextRequest) {
     .from('league-media')
     .upload(storagePath, bytes, { contentType: mime, upsert: false });
   if (storageErr) {
-    return NextResponse.json({ error: 'Upload failed' }, { status: 502 });
+    // Distinguish the storage-reported size cap (the cap may sit below our constant
+    // if the project lowers it) from any other storage failure, so the commissioner
+    // sees a reason, not "failed". StorageError carries a message and (on a request
+    // failure) an HTTP statusCode.
+    const sErr = storageErr as { message?: string; statusCode?: string | number };
+    const status = Number(sErr.statusCode ?? 0);
+    const msg = (sErr.message ?? '').toLowerCase();
+    const isSizeCap =
+      status === 413 ||
+      msg.includes('maximum allowed size') ||
+      msg.includes('payload too large') ||
+      msg.includes('exceeded');
+    if (isSizeCap) {
+      return NextResponse.json(
+        { error: `The storage limit (${MAX_UPLOAD_MB} MB) rejected this file. Choose a smaller file.` },
+        { status: 413 },
+      );
+    }
+    return NextResponse.json(
+      { error: `The file could not be stored (${sErr.message || 'storage error'}).` },
+      { status: 502 },
+    );
   }
 
   const row: MediaEntryInsert & { id: string } = {
@@ -118,7 +151,10 @@ export async function POST(req: NextRequest) {
   if (insErr) {
     // Roll back the orphaned object so a failed insert leaves no dangling bytes.
     await supabase.storage.from('league-media').remove([storagePath]);
-    return NextResponse.json({ error: 'Persist failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'The file was stored but its record could not be saved; the upload was rolled back.' },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ id: mediaEntryId, storage_path: storagePath });
