@@ -7,7 +7,7 @@
 // read-only 2a grant state shown beside member identification (W.6 5), correction-
 // by-supersession, item withdrawal, and room ratification. All writes POST to the
 // /api/av-room/* routes; RLS is the real boundary. No counts, no nudges (6.3-6.5).
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, formatSize } from '@/lib/av-room-limits';
@@ -28,6 +28,7 @@ export type IngestEntry = {
   createdAt: string;
   withdrawn: boolean;
   hasPoster: boolean;
+  thumbUrl: string | null;
   tags: IngestTag[];
 };
 
@@ -662,7 +663,6 @@ function EntryCard({
   onToggleSelect: () => void;
 }) {
   const router = useRouter();
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -704,26 +704,6 @@ function EntryCard({
   const [tagNote, setTagNote] = useState('');
   const [supersedes, setSupersedes] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const res = await fetch('/api/av-room/sign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mediaEntryId: entry.id }),
-        });
-        if (!res.ok) return;
-        const j = (await res.json()) as { url?: string };
-        if (active && j.url) setMediaUrl(j.url);
-      } catch {
-        /* preview is best-effort; tagging does not depend on it */
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [entry.id]);
 
   const memberName = (uid: string | null) =>
     members.find((m) => m.memberUserId === uid)?.displayName ?? 'Unknown member';
@@ -875,11 +855,11 @@ function EntryCard({
             justifyContent: 'center',
           }}
         >
-          {entry.mediaKind === 'photo' && mediaUrl ? (
+          {entry.thumbUrl ? (
+            // Photo -> its original; video -> the SAME poster the room reads (D0/round 2).
+            // No <video> element: the ingest thumbnail is image-only, like the room.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={mediaUrl} alt={entry.uploadNote ?? 'Archival photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : entry.mediaKind === 'video' && mediaUrl ? (
-            <video src={mediaUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={entry.thumbUrl} alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text3)' }}>
               {entry.mediaKind.toUpperCase()}

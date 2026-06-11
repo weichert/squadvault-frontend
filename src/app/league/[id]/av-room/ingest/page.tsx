@@ -49,15 +49,29 @@ export default async function AvRoomIngestPage({ params }: Props) {
   const admin = createAdminClient();
   const room = await loadRoomState(admin, league.id, { includeWithdrawn: true });
 
-  // Which video entries already carry a poster still (D0). Auto-extraction is
-  // best-effort and silent for codecs the upload browser cannot decode, so the panel
-  // surfaces a "set poster" affordance honestly where one is missing.
+  // Per-entry thumbnail + poster presence, signed server-side (round 2): a photo signs
+  // its original; a VIDEO signs the SAME poster object the room reads
+  // ({folder}/poster.jpg) - never the video itself (D0). Auto-extraction is best-effort
+  // and silent for codecs the upload browser can't decode, so videoHasPoster also drives
+  // the honest "set poster" affordance where one is missing.
+  const THUMB_TTL_SECONDS = 300;
   const videoHasPoster = new Map<string, boolean>();
+  const thumbUrl = new Map<string, string>();
   for (const re of room.entries) {
-    if (re.entry.media_kind !== 'video') continue;
     const folder = re.entry.storage_path.slice(0, re.entry.storage_path.lastIndexOf('/'));
+    if (re.entry.media_kind === 'photo') {
+      const { data } = await admin.storage.from('league-media').createSignedUrl(re.entry.storage_path, THUMB_TTL_SECONDS);
+      if (data) thumbUrl.set(re.entry.id, data.signedUrl);
+      continue;
+    }
+    // video
     const { data: listed } = await admin.storage.from('league-media').list(folder);
-    videoHasPoster.set(re.entry.id, !!listed?.some((o) => o.name === 'poster.jpg'));
+    const hasPoster = !!listed?.some((o) => o.name === 'poster.jpg');
+    videoHasPoster.set(re.entry.id, hasPoster);
+    if (hasPoster) {
+      const { data } = await admin.storage.from('league-media').createSignedUrl(`${folder}/poster.jpg`, THUMB_TTL_SECONDS);
+      if (data) thumbUrl.set(re.entry.id, data.signedUrl);
+    }
   }
 
   // Franchise members with a resolvable identity, plus their current 2a grant
@@ -100,6 +114,7 @@ export default async function AvRoomIngestPage({ params }: Props) {
     createdAt: re.entry.created_at,
     withdrawn: re.withdrawn,
     hasPoster: re.entry.media_kind === 'video' ? (videoHasPoster.get(re.entry.id) ?? false) : false,
+    thumbUrl: thumbUrl.get(re.entry.id) ?? null,
     tags: [
       ...re.tagsByKind.contributor,
       ...re.tagsByKind.date,
