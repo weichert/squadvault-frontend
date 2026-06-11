@@ -542,6 +542,29 @@ function EntryCard({
     }
   }
 
+  async function reinstate() {
+    if (!confirm('Reinstate this item to display? It will show in the room again.')) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/reinstate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not reinstate.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not reinstate.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function correct(tag: IngestTag) {
     setTagKind(tag.tagKind);
     setSupersedes(tag.id);
@@ -597,7 +620,11 @@ function EntryCard({
               {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
               {entry.withdrawn ? ' · WITHDRAWN' : ''}
             </span>
-            {!entry.withdrawn && (
+            {entry.withdrawn ? (
+              <button type="button" disabled={busy} onClick={reinstate} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
+                Reinstate
+              </button>
+            ) : (
               <button type="button" disabled={busy} onClick={withdraw} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
                 Withdraw
               </button>
