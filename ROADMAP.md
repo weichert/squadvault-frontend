@@ -36,6 +36,7 @@ Trophy Room, members (stub), and the full Commissioner Founding Session.
 | Post-M5 | Deploy recovery + hardening: login Suspense build-fix, CI, `.nvmrc`, `vercel.json` framework guard, continuity scaffold | In progress | `b4219a0`, `397c215`, + this scaffold |
 | W.6 | Member consent (D-V/D-X): `member_consent_events` foundation + member consent panel + write path; `founding_sessions.consent` reinterpreted as league-defaults layer | Done | `d58191b`, `06cf568`, `6c2ed32`, `248895c` |
 | W.1 | A/V Room **Increment 1**: fail-closed room, photo ingest, five-kind provenance tagging, vacuous-tag rejection, correction-by-supersession, ratification, withdrawal, honest gaps; video present-but-not-playable (deferred) | Inc 1 done; video + member-testimony deferred | `c21e858`, `df79a4f`, `c284053`, `7eee29d`, `65da2e6` |
+| W.1 | A/V Room **video-ingest hardening** (no playback): client-side size pre-check (D1), specific upload-failure reasons (D2), poster-frame as a derived rendition (D3, image-only). Makes the 50 MB cap honest; does not raise it (large-file ingest stays blocked on D-W1-V1). | Done | `7601f8c`, `b97b19c`, `99dafc0` |
 
 Milestone numbering past M3 was assigned retroactively (work shipped without
 labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
@@ -55,15 +56,23 @@ labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
   test there). See `_observations/OBSERVATIONS_2026_06_10_AV_ROOM_INCREMENT_1_CLICKTHROUGH.md`.
 
 ### A/V Room — video increment (next, on the proven Inc 1 foundation)
-Queued together because they share the structured **attestation class + 2b
-playback gate** (attestation is its own class, NOT a sixth provenance tag —
-rationale recorded in the click-through memo):
-- Large-file ingest — real-corpus `.MOV` hit Supabase's global 50 MB cap (400
-  after ~40s); needs resumable/direct-to-storage upload or a raised cap.
-- Surface upload-failure reasons to the commissioner (not a generic "failed").
-- Client-side size pre-check (fail fast before the round-trip).
-- Poster-frame extraction as a derived rendition (original untouched, 6.9;
-  image-only, no 2b read).
+Hardening (no playback) shipped 2026-06-10 — `7601f8c`, `b97b19c`, `99dafc0`:
+- ~~Surface upload-failure reasons to the commissioner~~ — done (D2, `b97b19c`).
+- ~~Client-side size pre-check (fail fast before the round-trip)~~ — done
+  (D1, `7601f8c`).
+- ~~Poster-frame extraction as a derived rendition~~ — done (D3, `99dafc0`;
+  original untouched 6.9, image-only, no 2b read).
+
+Still open, sharing the structured **attestation class + 2b playback gate**
+(attestation is its own class, NOT a sixth provenance tag — rationale recorded in
+the click-through memo):
+- **Large-file ingest** — real-corpus `.MOV` hit Supabase's global 50 MB cap (400
+  after ~40s). BLOCKED on decision-gate **D-W1-V1** (founder call: raise the
+  storage cap, or move to client-direct-to-storage upload, which deviates from
+  spec 5.1). D1/D2 make the cap honest; they do not raise it.
+- **Video playback + the voice-attestation class** — the positive design is
+  unspecified (option-3 soft-tag attestation REJECTED 2026-06-10). DECIDE work
+  (chat/Fable), not a build input.
 
 ### Harden / operate
 - CI live on push/PR (this scaffold).

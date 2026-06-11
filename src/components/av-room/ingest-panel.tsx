@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MediaKind, MediaProvenanceTagKind, MediaDatePrecision } from '@/lib/supabase/types';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/lib/av-room-limits';
 
 export type IngestTag = {
   id: string;
@@ -188,6 +189,60 @@ function RoomRatification({ leagueId, ratified }: { leagueId: string; ratified: 
   );
 }
 
+// D3: extract a poster still from a selected video, in the browser, as a JPEG blob.
+// Best-effort and side-effect-free on failure - any error (codec the browser can't
+// decode, a zero-dimension frame, a timeout) resolves to null, and the upload just
+// proceeds without a poster (the room falls back to the plain placeholder). This
+// reads ONLY the commissioner's own selected file; it is not a 2b read and never
+// touches the stored original (6.9 - the original is uploaded unmodified).
+function extractPosterBlob(file: File): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined') {
+      resolve(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    let settled = false;
+    const timeout = setTimeout(() => finish(null), 5000);
+    function finish(blob: Blob | null) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      resolve(blob);
+    }
+    function capture() {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        if (!canvas.width || !canvas.height) return finish(null);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return finish(null);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((b) => finish(b), 'image/jpeg', 0.82);
+      } catch {
+        finish(null);
+      }
+    }
+    video.muted = true;
+    video.preload = 'auto';
+    video.onerror = () => finish(null);
+    video.onloadeddata = () => {
+      // Seek a touch past the start to avoid an all-black first frame.
+      const t = Math.min(0.5, (video.duration || 1) / 2);
+      video.onseeked = capture;
+      try {
+        video.currentTime = t;
+      } catch {
+        capture();
+      }
+    };
+    video.src = url;
+  });
+}
+
 function UploadForm({ leagueId }: { leagueId: string }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
@@ -203,9 +258,18 @@ function UploadForm({ leagueId }: { leagueId: string }) {
         : null
     : null;
 
+  // Fail fast before any round-trip: a file over the storage ceiling is refused
+  // here, with the exact size and limit, and never leaves the browser (D1).
+  const oversized = !!file && file.size > MAX_UPLOAD_BYTES;
+
   async function submit() {
     if (!file || !kind) {
       setError('Choose an image or video file.');
+      return;
+    }
+    if (oversized) {
+      // Defensive: the button is already disabled when oversized, so no request fires.
+      setError(`This file is ${formatMb(file.size)}; the limit is ${MAX_UPLOAD_MB} MB.`);
       return;
     }
     setBusy(true);
@@ -216,6 +280,13 @@ function UploadForm({ leagueId }: { leagueId: string }) {
       form.set('leagueId', leagueId);
       form.set('media_kind', kind);
       if (note.trim()) form.set('upload_note', note.trim());
+      // For a video, attach a poster still as an extra part (D3). Best-effort: if
+      // extraction yields nothing, the upload proceeds and the room uses the
+      // placeholder. The original is sent unchanged regardless.
+      if (kind === 'video') {
+        const poster = await extractPosterBlob(file);
+        if (poster) form.set('poster', poster, 'poster.jpg');
+      }
       const res = await fetch('/api/av-room/upload', { method: 'POST', body: form });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -249,8 +320,13 @@ function UploadForm({ leagueId }: { leagueId: string }) {
           style={{ ...inputStyle, padding: '0.4rem' }}
         />
         {file && (
-          <p className="font-mono" style={{ ...labelStyle, color: kind ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
+          <p className="font-mono" style={{ ...labelStyle, color: kind && !oversized ? 'var(--vault-gold)' : 'var(--vault-withheld)' }}>
             {kind ? `${kind.toUpperCase()} · ${file.name}` : 'UNSUPPORTED FILE TYPE'}
+          </p>
+        )}
+        {oversized && file && (
+          <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.8rem' }}>
+            This file is {formatMb(file.size)}; the limit is {MAX_UPLOAD_MB} MB. Choose a smaller file.
           </p>
         )}
         <div>
@@ -266,7 +342,7 @@ function UploadForm({ leagueId }: { leagueId: string }) {
             style={{ ...inputStyle, marginTop: 4 }}
           />
         </div>
-        <button type="button" disabled={busy || !file || !kind} onClick={submit} style={btnStyle(busy || !file || !kind)}>
+        <button type="button" disabled={busy || !file || !kind || oversized} onClick={submit} style={btnStyle(busy || !file || !kind || oversized)}>
           {busy ? 'Uploading…' : 'Upload'}
         </button>
         {error && (
