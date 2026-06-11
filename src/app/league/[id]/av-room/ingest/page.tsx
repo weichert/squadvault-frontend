@@ -49,34 +49,47 @@ export default async function AvRoomIngestPage({ params }: Props) {
   const admin = createAdminClient();
   const room = await loadRoomState(admin, league.id, { includeWithdrawn: true });
 
-  // Per-entry thumbnail + poster presence, signed server-side (round 2): a photo signs
-  // its original; a VIDEO signs the SAME poster object the room reads
-  // ({folder}/poster.jpg) - never the video itself (D0). Auto-extraction is best-effort
-  // and silent for codecs the upload browser can't decode, so videoHasPoster also drives
-  // the honest "set poster" affordance where one is missing.
   // R3-D1: lists serve a small derived rendition, NEVER the full original. A photo
   // signs its thumb.jpg sibling (~400px, tens of KB); a video signs the SAME poster
-  // the room reads. The original is reserved for quick-look (R4) and downloads. A
-  // missing thumb is not fatal: the signed URL simply fails to load and the card falls
-  // back to a placeholder (onError), never the multi-MB original. Backfill fills the
-  // gap for the existing corpus.
+  // the room reads. The original is reserved for quick-look (R4) and downloads.
+  //
+  // R3-D2: ONE signing round-trip for the whole page, not N. We build every sibling
+  // path first, then sign them all in a single createSignedUrls() call - so a 1,000-
+  // item corpus costs one sign call, not 1,000 serial ones. A missing rendition simply
+  // fails to load and the card falls back to a placeholder (onError), never the
+  // original; backfill fills the gap for the existing corpus.
+  //
+  // Videos are still listed per-folder for the honest "no still yet" hint (poster
+  // presence) - that is existence, not signing, and is bounded by video count (a small
+  // minority in a photo-first corpus); the bulk photo path does zero list calls.
   const THUMB_TTL_SECONDS = 300;
   const videoHasPoster = new Map<string, boolean>();
   const thumbUrl = new Map<string, string>();
+  const signPaths: string[] = [];
+  const pathOwner = new Map<string, string>(); // sibling path -> entry id
   for (const re of room.entries) {
     const folder = re.entry.storage_path.slice(0, re.entry.storage_path.lastIndexOf('/'));
     if (re.entry.media_kind === 'photo') {
-      const { data } = await admin.storage.from('league-media').createSignedUrl(`${folder}/thumb.jpg`, THUMB_TTL_SECONDS);
-      if (data) thumbUrl.set(re.entry.id, data.signedUrl);
+      const p = `${folder}/thumb.jpg`;
+      signPaths.push(p);
+      pathOwner.set(p, re.entry.id);
       continue;
     }
-    // video
+    // video: existence of poster.jpg drives the de-silence hint AND whether to sign it
     const { data: listed } = await admin.storage.from('league-media').list(folder);
     const hasPoster = !!listed?.some((o) => o.name === 'poster.jpg');
     videoHasPoster.set(re.entry.id, hasPoster);
     if (hasPoster) {
-      const { data } = await admin.storage.from('league-media').createSignedUrl(`${folder}/poster.jpg`, THUMB_TTL_SECONDS);
-      if (data) thumbUrl.set(re.entry.id, data.signedUrl);
+      const p = `${folder}/poster.jpg`;
+      signPaths.push(p);
+      pathOwner.set(p, re.entry.id);
+    }
+  }
+  if (signPaths.length > 0) {
+    const { data: signed } = await admin.storage.from('league-media').createSignedUrls(signPaths, THUMB_TTL_SECONDS);
+    for (const s of signed ?? []) {
+      const owner = s.path ? pathOwner.get(s.path) : undefined;
+      if (owner && !s.error && s.signedUrl) thumbUrl.set(owner, s.signedUrl);
     }
   }
 

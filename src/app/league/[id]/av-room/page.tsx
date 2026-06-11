@@ -111,30 +111,31 @@ export default async function AvRoomPage({ params }: Props) {
   const ordered = [...photos, ...videos];
 
   // R3-D1: the room is a list surface, so it serves the small thumb.jpg rendition for
-  // photos - NEVER the full original (that is reserved for quick-look and downloads).
-  // The sibling path is signed unconditionally; a missing rendition simply fails to
-  // load and RoomImage falls back to a placeholder (no per-folder list on the render
-  // path, no broken image, no original).
+  // photos and poster.jpg for videos - NEVER the full original (that is reserved for
+  // quick-look and downloads). A missing rendition simply fails to load and RoomImage
+  // falls back to a placeholder (no broken image, no original).
+  //
+  // R3-D2: one signing round-trip for the whole page. Every sibling path is collected
+  // then signed in a single createSignedUrls() call, not one per item.
   const photoUrl = new Map<string, string>();
-  for (const re of photos) {
-    const sp = re.entry.storage_path;
-    const folder = sp.slice(0, sp.lastIndexOf('/'));
-    const { data } = await admin.storage
-      .from('league-media')
-      .createSignedUrl(`${folder}/thumb.jpg`, PHOTO_URL_TTL_SECONDS);
-    if (data) photoUrl.set(re.entry.id, data.signedUrl);
-  }
-
-  // A video carries a derived poster still ({prefix}/poster.jpg). Sign it the same way;
-  // RoomImage falls back to the honest "playback pending" placeholder when absent.
   const videoPosterUrl = new Map<string, string>();
-  for (const re of videos) {
+  const signPaths: string[] = [];
+  const pathTarget = new Map<string, { id: string; kind: 'photo' | 'video' }>();
+  for (const re of ordered) {
     const sp = re.entry.storage_path;
     const folder = sp.slice(0, sp.lastIndexOf('/'));
-    const { data } = await admin.storage
-      .from('league-media')
-      .createSignedUrl(`${folder}/poster.jpg`, PHOTO_URL_TTL_SECONDS);
-    if (data) videoPosterUrl.set(re.entry.id, data.signedUrl);
+    const p = re.entry.media_kind === 'photo' ? `${folder}/thumb.jpg` : `${folder}/poster.jpg`;
+    signPaths.push(p);
+    pathTarget.set(p, { id: re.entry.id, kind: re.entry.media_kind });
+  }
+  if (signPaths.length > 0) {
+    const { data: signed } = await admin.storage.from('league-media').createSignedUrls(signPaths, PHOTO_URL_TTL_SECONDS);
+    for (const s of signed ?? []) {
+      const target = s.path ? pathTarget.get(s.path) : undefined;
+      if (!target || s.error || !s.signedUrl) continue;
+      if (target.kind === 'photo') photoUrl.set(target.id, s.signedUrl);
+      else videoPosterUrl.set(target.id, s.signedUrl);
+    }
   }
 
   return (
