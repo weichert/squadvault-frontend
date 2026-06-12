@@ -1133,16 +1133,20 @@ async function uploadOneFile(
     const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
     throw new Error(j.error ?? 'Could not start the upload.');
   }
-  const { mediaEntryId, path, token } = (await grantRes.json()) as {
+  const { mediaEntryId, path, token, mime } = (await grantRes.json()) as {
     mediaEntryId: string;
     path: string;
     token: string;
+    mime: string;
   };
 
   const supabase = createClient();
+  // D-W1-A6 (A6-4): some browsers leave file.type empty; fall back to the grant-declared
+  // mime so the stored object ALWAYS has an explicit content-type (the Safari/HEVC header
+  // posture). The grant already validated this mime server-side.
   const { error: upErr } = await supabase.storage
     .from('league-media')
-    .uploadToSignedUrl(path, token, file, { contentType: file.type });
+    .uploadToSignedUrl(path, token, file, { contentType: file.type || mime });
   if (upErr) {
     const msg = (upErr.message ?? '').toLowerCase();
     if (msg.includes('exceeded') || msg.includes('maximum allowed size') || msg.includes('payload too large')) {
@@ -1712,23 +1716,43 @@ function QuickLook({
           flex: 1,
           minHeight: 0,
           display: 'flex',
-          flexWrap: 'wrap',
+          // Batch-2: NO flex-wrap. A fixed full-viewport dialog keeps media + tag panel on a
+          // single line with a DEFINITE cross-size, so the basis-0 media cell bounds to the
+          // row height (wrap made the line cross-size content-driven, inflating portrait
+          // media). The two sides shrink to fit on narrow viewports instead of stacking.
           gap: '1rem',
           padding: '0 0.9rem 0.9rem',
         }}
       >
-        {/* Image side */}
+        {/* Image side. Batch-2 fix: a bounded flex column - the MEDIA cell flexes (1 1 0,
+            min-height 0, object-fit contain) and the affordance strip is flex:none - so the
+            Play button / refusal line can never be pushed below the viewport for a portrait
+            video (hiding the gate's own surface). CSS-only; no logic. */}
         <div
           style={{
             flex: '2 1 360px',
             minWidth: 0,
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
             gap: '0.6rem',
           }}
         >
+          <div
+            style={{
+              // Batch-2 root cause: the overlay row uses flex-wrap, so the line cross-size
+              // is content-driven before stretch. flex-basis 0 (not auto) kills the media's
+              // INTRINSIC height feeding into line sizing - tall portrait media no longer
+              // inflates the line past the viewport. min-height:0 + overflow:hidden bound it.
+              flex: '1 1 0',
+              minHeight: 0,
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
           {playUrl ? (
             // D-W1-A: playback granted by the gate (takes precedence over the poster sign).
             // key={playUrl} forces a clean <video> mount so the src is applied and the
@@ -1739,7 +1763,7 @@ function QuickLook({
               controls
               playsInline
               preload="metadata"
-              style={{ maxWidth: '100%', maxHeight: '100%' }}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : loading ? (
             <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text2)' }}>
@@ -1751,7 +1775,7 @@ function QuickLook({
               src={url}
               alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`}
               onError={() => setImgError(true)}
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : (
             // Honest fallback: a video with no poster, a sign failure, or - the
@@ -1776,13 +1800,15 @@ function QuickLook({
               )}
             </div>
           )}
+          </div>
           {/* D-W1-A: play on intent. The gate is enforced at the route - a click that the
               gate refuses returns a neutral message; a pass swaps the poster for the player.
               FIX 4: when the RENDERED attestation state is member_voice_present we already
               know playback is gated, so show the refusal directly instead of a Play button
-              (using only state the panel already renders; the route gate is untouched). */}
+              (using only state the panel already renders; the route gate is untouched).
+              The strip is flex:none so it is always reserved below the media cell. */}
           {entry.mediaKind === 'video' && !playUrl && (
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ flex: 'none', textAlign: 'center' }}>
               {entry.voiceAttestation?.state === 'member_voice_present' ? (
                 <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', maxWidth: 360 }}>
                   Member voice present — playback gated.
@@ -1812,6 +1838,9 @@ function QuickLook({
           style={{
             flex: '1 1 280px',
             minWidth: 0,
+            // Batch-2: min-height:0 lets the detail column's own content scroll WITHIN the
+            // overlay (overflowY:auto) instead of painting past the fold.
+            minHeight: 0,
             maxWidth: 460,
             overflowY: 'auto',
             background: 'var(--vault-s1)',
@@ -1840,6 +1869,8 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
   const [downloadBusy, setDownloadBusy] = useState(false);
   const [expungeBusy, setExpungeBusy] = useState(false);
   const [attestBusy, setAttestBusy] = useState(false);
+  const [renditionBusy, setRenditionBusy] = useState(false);
+  const [renditionMsg, setRenditionMsg] = useState<string | null>(null);
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
   const [tagValue, setTagValue] = useState('');
   const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
@@ -1934,6 +1965,42 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
       setError('Could not expunge the item.');
     } finally {
       setExpungeBusy(false);
+    }
+  }
+
+  // D-W1-A6: upload a playback rendition (playback.mp4, H.264/AAC) for a video. Client-direct
+  // under a server-minted grant (the bytes never transit a function body); the server names
+  // the path, the upload sets video/mp4 explicitly, and the grant is upsert (a better
+  // rendition replaces an earlier one). A derived sibling - no record, no finalize.
+  async function uploadRendition(file: File) {
+    setRenditionBusy(true);
+    setRenditionMsg(null);
+    try {
+      const grantRes = await fetch('/api/av-room/rendition-grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id }),
+      });
+      if (!grantRes.ok) {
+        const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
+        setRenditionMsg(j.error ?? 'Could not start the rendition upload.');
+        return;
+      }
+      const { path, token } = (await grantRes.json()) as { path: string; token: string };
+      const supabase = createClient();
+      const { error: upErr } = await supabase.storage
+        .from('league-media')
+        .uploadToSignedUrl(path, token, file, { contentType: 'video/mp4' });
+      if (upErr) {
+        setRenditionMsg(`The rendition could not be uploaded (${upErr.message || 'storage error'}).`);
+        return;
+      }
+      setRenditionMsg('Playback rendition uploaded.');
+      router.refresh();
+    } catch {
+      setRenditionMsg('Could not upload the rendition.');
+    } finally {
+      setRenditionBusy(false);
     }
   }
 
@@ -2115,6 +2182,27 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
               {posterMsg && (
                 <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
                   {posterMsg}
+                </p>
+              )}
+              {/* D-W1-A6: upload the H.264/AAC playback rendition (commissioner-side ffmpeg;
+                  client-direct, server-named path, upsert). Web-decodable playback in Chrome. */}
+              <label className="font-mono" style={{ ...btnStyle(renditionBusy), display: 'inline-block', marginTop: 6, marginLeft: 6 }}>
+                {renditionBusy ? 'Uploading…' : 'Upload playback rendition'}
+                <input
+                  type="file"
+                  accept="video/mp4"
+                  disabled={renditionBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadRendition(f);
+                    e.target.value = '';
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {renditionMsg && (
+                <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.78rem', marginTop: 4 }}>
+                  {renditionMsg}
                 </p>
               )}
             </div>

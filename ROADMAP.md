@@ -134,18 +134,30 @@ Done + still open:
     candidate (engine memo `6dce2f6` + STATE.md Deferred line) PARKED -> ADMITTED.
   - Bright lines: no AI tagging/face-detection/AI-search; no gamification/streaks/nudges;
     no relevance ranking — filters/matches stay deterministic.
-- **Video playback + the voice-attestation class (D-W1-A) — DONE on
-  `feat/w1-video-playback-attestation`, in PR #21; DISCHARGE HELD pending migration 015
-  apply + click-through.** DECIDE ruling ratified Fable 2026-06-11 (mechanism spec under
-  5.7; option-3 soft-tag REJECTED 2026-06-10 STANDS). Migration 015 `media_voice_attestations`
-  + G20 (`d63bba7`); route-enforced playback gate (Leg1 attestation OR Leg2 2b-consent, A2a
-  vacuous-truth exclusion, fail-closed; `sign` variant `playback`, TTL 600s, neutral 403);
-  `/api/av-room/attest`; attestation UI + gated player in room + quick-look, no autoplay,
-  zero playback logging. Governance 115/0 (G20 probe-skips until 015; -> 116/0 after).
-  **Migration 015 needs the dashboard apply.** Ruling memo
-  `_observations/OBSERVATIONS_2026_06_11_DW1A_VOICE_ATTESTATION_RULING.md`; build memo
-  `_observations/OBSERVATIONS_2026_06_11_DW1A_VOICE_PLAYBACK_BUILD.md`. 2b/E2.3 leg
-  inert-but-real until members hold `recorded_voice` grants (no schema change then).
+- **Video playback + the voice-attestation class (D-W1-A) — DONE + DISCHARGED 2026-06-11/12**
+  (merged PR #21; migration 015 applied, governance 116/0; gate verified end-to-end - TTL
+  600s on-token, expired-URL rejection observed, supersession gates forward, neutral refusal,
+  no autoplay). DECIDE ruling Fable 2026-06-11 (mechanism spec under 5.7; option-3 REJECTED
+  STANDS). Migration 015 `media_voice_attestations` + G20; route-enforced gate (Leg1
+  attestation OR Leg2 2b-consent, A2a exclusion, fail-closed; `sign` variant `playback`, TTL
+  600s, neutral 403); `/api/av-room/attest`; attestation UI + gated player. Four click-through
+  fixes folded in (player wiring, overlay controls, local date, gated affordance). The one
+  open limitation (corpus is iPhone HEVC; Chrome can't decode) is addressed by D-W1-A6. Memos
+  `…_DW1A_VOICE_ATTESTATION_RULING.md`, `…_DW1A_VOICE_PLAYBACK_BUILD.md`.
+- **D-W1-A6 playback rendition — DONE + DISCHARGED 2026-06-12** (merged PR #22; founder
+  click-through complete). DECIDE ruling Fable 2026-06-12 (mechanism spec under 6.9; the
+  b78070f LEAN precedent). A derived `playback.mp4` (H.264/AAC) sibling in poster.jpg's
+  governance class: the sign route signs rendition-when-present-else-original (`cb04b02`,
+  progressive enhancement, zero regression); client-direct upload via a new commissioner-only
+  `/api/av-room/rendition-grant` (`4509397`, server-named path, video/mp4, upsert, no finalize);
+  empty-file.type contentType guard (`6f2204b`, A6-4); CSP `media-src` fix (`b8c3cd2`) +
+  quick-look portrait height fix (`93db8aa`). Verified end-to-end: rendition leg serves
+  playback.mp4 (picture + sound), refusal cycle both directions, scrub-seek (closes the last
+  D-W1-A flag). Governance 116/0. Memos `…_DW1A6_PLAYBACK_RENDITION_RULING.md`,
+  `…_DW1A6_PLAYBACK_RENDITION_BUILD.md`. **Carry-forward candidates (not built):** a backfill
+  script v2 (per-entry output path; refuse empty HASH; no false PAIRING on SKIP); same-footage-
+  different-bytes duplicates evade the byte-hash detector (accepted limitation); an HDR-to-8-bit
+  recipe v2.
 
 ### Harden / operate
 - CI live on push/PR (this scaffold).
