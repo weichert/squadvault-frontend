@@ -94,4 +94,4 @@ Verified-vs-testimony distinction untouched.
    - `curl -I` a fresh signed URL of `original.mov`, record the Content-Type line verbatim;
    - optional Safari re-check.
 4. Paste the PAIRING lines + observations back for the build-memo close-out commit; merge
-   #PENDING via `gh pr merge`.
+   PR #22 via `gh pr merge`.

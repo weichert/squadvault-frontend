@@ -144,7 +144,7 @@ Done + still open:
   fixes folded in (player wiring, overlay controls, local date, gated affordance). The one
   open limitation (corpus is iPhone HEVC; Chrome can't decode) is addressed by D-W1-A6. Memos
   `…_DW1A_VOICE_ATTESTATION_RULING.md`, `…_DW1A_VOICE_PLAYBACK_BUILD.md`.
-- **D-W1-A6 playback rendition — DONE on `feat/w1-a6-playback-rendition`, in PR #PENDING;
+- **D-W1-A6 playback rendition — DONE on `feat/w1-a6-playback-rendition`, in PR #22;
   DISCHARGE HELD pending rendition backfill + click-through.** DECIDE ruling Fable 2026-06-12
   (mechanism spec under 6.9; the b78070f LEAN precedent). A derived `playback.mp4` (H.264/AAC)
   sibling in poster.jpg's governance class: the sign route signs rendition-when-present-else-
