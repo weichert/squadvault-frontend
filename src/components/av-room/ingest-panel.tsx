@@ -1840,6 +1840,8 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
   const [downloadBusy, setDownloadBusy] = useState(false);
   const [expungeBusy, setExpungeBusy] = useState(false);
   const [attestBusy, setAttestBusy] = useState(false);
+  const [renditionBusy, setRenditionBusy] = useState(false);
+  const [renditionMsg, setRenditionMsg] = useState<string | null>(null);
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
   const [tagValue, setTagValue] = useState('');
   const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
@@ -1934,6 +1936,42 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
       setError('Could not expunge the item.');
     } finally {
       setExpungeBusy(false);
+    }
+  }
+
+  // D-W1-A6: upload a playback rendition (playback.mp4, H.264/AAC) for a video. Client-direct
+  // under a server-minted grant (the bytes never transit a function body); the server names
+  // the path, the upload sets video/mp4 explicitly, and the grant is upsert (a better
+  // rendition replaces an earlier one). A derived sibling - no record, no finalize.
+  async function uploadRendition(file: File) {
+    setRenditionBusy(true);
+    setRenditionMsg(null);
+    try {
+      const grantRes = await fetch('/api/av-room/rendition-grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id }),
+      });
+      if (!grantRes.ok) {
+        const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
+        setRenditionMsg(j.error ?? 'Could not start the rendition upload.');
+        return;
+      }
+      const { path, token } = (await grantRes.json()) as { path: string; token: string };
+      const supabase = createClient();
+      const { error: upErr } = await supabase.storage
+        .from('league-media')
+        .uploadToSignedUrl(path, token, file, { contentType: 'video/mp4' });
+      if (upErr) {
+        setRenditionMsg(`The rendition could not be uploaded (${upErr.message || 'storage error'}).`);
+        return;
+      }
+      setRenditionMsg('Playback rendition uploaded.');
+      router.refresh();
+    } catch {
+      setRenditionMsg('Could not upload the rendition.');
+    } finally {
+      setRenditionBusy(false);
     }
   }
 
@@ -2115,6 +2153,27 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
               {posterMsg && (
                 <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 4 }}>
                   {posterMsg}
+                </p>
+              )}
+              {/* D-W1-A6: upload the H.264/AAC playback rendition (commissioner-side ffmpeg;
+                  client-direct, server-named path, upsert). Web-decodable playback in Chrome. */}
+              <label className="font-mono" style={{ ...btnStyle(renditionBusy), display: 'inline-block', marginTop: 6, marginLeft: 6 }}>
+                {renditionBusy ? 'Uploading…' : 'Upload playback rendition'}
+                <input
+                  type="file"
+                  accept="video/mp4"
+                  disabled={renditionBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadRendition(f);
+                    e.target.value = '';
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {renditionMsg && (
+                <p className="font-ui" style={{ color: 'var(--vault-text2)', fontSize: '0.78rem', marginTop: 4 }}>
+                  {renditionMsg}
                 </p>
               )}
             </div>
