@@ -161,16 +161,42 @@ export function IngestPanel({
   const router = useRouter();
   // D2: batch tagging - selection lifted here so one tag applies across many items.
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  function toggleSelect(id: string) {
+  function clearSelection() {
+    setSelected(new Set());
+  }
+  // R4-D6: shift-click range select. The anchor is the last single toggle; a shift-click
+  // adds every selectable item between the anchor and the clicked row.
+  const lastSelectedIndexRef = useRef<number | null>(null);
+  function selectAt(id: string, index: number, shiftKey: boolean) {
     setSelected((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastSelectedIndexRef.current !== null) {
+        const lo = Math.min(lastSelectedIndexRef.current, index);
+        const hi = Math.max(lastSelectedIndexRef.current, index);
+        for (let i = lo; i <= hi; i++) {
+          const e = visibleEntries[i];
+          if (e && !e.withdrawn) next.add(e.id);
+        }
+      } else if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    lastSelectedIndexRef.current = index;
+  }
+  // R4-D6: keyboard-first. A focused row (J/K), space = quick-look, enter = expand. Expand
+  // state is lifted here so Enter can toggle the focused row's detail.
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
-  function clearSelection() {
-    setSelected(new Set());
   }
   // D3: deterministic filters narrow the corpus before render. Selectors derive
   // their options from what the corpus actually carries.
@@ -234,6 +260,37 @@ export function IngestPanel({
     const i = visibleEntries.findIndex((e) => e.id === id);
     if (i >= 0) setQuickLook(i);
   }
+
+  // R4-D6: global keyboard nav over the corpus. J/K move the focused row, Space opens
+  // quick-look on it, Enter expands it. Ignored while typing in a field or while the
+  // lightbox is open (quick-look owns its own keys). A curator's bench should feel like one.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (quickLook !== null) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const n = visibleEntries.length;
+      if (n === 0) return;
+      if (e.key === 'j' || e.key === 'J') {
+        setFocusedIndex((i) => Math.min(n - 1, i < 0 ? 0 : i + 1));
+      } else if (e.key === 'k' || e.key === 'K') {
+        setFocusedIndex((i) => Math.max(0, i < 0 ? 0 : i - 1));
+      } else if (e.key === ' ') {
+        if (focusedIndex >= 0 && visibleEntries[focusedIndex]) {
+          e.preventDefault();
+          openQuickLook(visibleEntries[focusedIndex].id);
+        }
+      } else if (e.key === 'Enter') {
+        if (focusedIndex >= 0 && visibleEntries[focusedIndex]) {
+          e.preventDefault();
+          toggleExpand(visibleEntries[focusedIndex].id);
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleEntries, focusedIndex, quickLook]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -320,7 +377,10 @@ export function IngestPanel({
             members={members}
             vocab={vocab}
             selected={selected}
-            onToggleSelect={toggleSelect}
+            expandedIds={expandedIds}
+            focusedIndex={focusedIndex}
+            onSelect={selectAt}
+            onToggleExpand={toggleExpand}
             onOpen={openQuickLook}
           />
         )}
@@ -352,14 +412,20 @@ function VirtualCorpus({
   members,
   vocab,
   selected,
-  onToggleSelect,
+  expandedIds,
+  focusedIndex,
+  onSelect,
+  onToggleExpand,
   onOpen,
 }: {
   entries: IngestEntry[];
   members: IngestMember[];
   vocab: TagVocab;
   selected: Set<string>;
-  onToggleSelect: (id: string) => void;
+  expandedIds: Set<string>;
+  focusedIndex: number;
+  onSelect: (id: string, index: number, shiftKey: boolean) => void;
+  onToggleExpand: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -376,6 +442,14 @@ function VirtualCorpus({
     getItemKey: (i) => entries[i].id,
   });
   const rows = virtualizer.getVirtualItems();
+
+  // R4-D6: keep the keyboard-focused row in view as J/K move it.
+  useEffect(() => {
+    if (focusedIndex >= 0 && focusedIndex < entries.length) {
+      virtualizer.scrollToIndex(focusedIndex, { align: 'auto' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedIndex]);
 
   return (
     <div ref={listRef} style={{ position: 'relative', height: virtualizer.getTotalSize() }}>
@@ -401,7 +475,10 @@ function VirtualCorpus({
                 vocab={vocab}
                 selectable={!e.withdrawn}
                 selected={selected.has(e.id)}
-                onToggleSelect={() => onToggleSelect(e.id)}
+                expanded={expandedIds.has(e.id)}
+                focused={vrow.index === focusedIndex}
+                onSelect={(shiftKey) => onSelect(e.id, vrow.index, shiftKey)}
+                onToggleExpand={() => onToggleExpand(e.id)}
                 onOpen={() => onOpen(e.id)}
               />
             </div>
@@ -1912,7 +1989,10 @@ function EntryCard({
   vocab,
   selectable,
   selected,
-  onToggleSelect,
+  expanded,
+  focused,
+  onSelect,
+  onToggleExpand,
   onOpen,
 }: {
   entry: IngestEntry;
@@ -1920,14 +2000,17 @@ function EntryCard({
   vocab: TagVocab;
   selectable: boolean;
   selected: boolean;
-  onToggleSelect: () => void;
+  // R4-D6: expand + focus are controlled by IngestPanel so the keyboard (Enter/J/K) can
+  // drive them. onSelect carries shiftKey for range select.
+  expanded: boolean;
+  focused: boolean;
+  onSelect: (shiftKey: boolean) => void;
+  onToggleExpand: () => void;
   onOpen: () => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // D3: the edit affordances collapse behind a toggle so a large corpus stays scannable.
-  const [expanded, setExpanded] = useState(false);
   // R3-D1: a thumb URL that fails to load (no rendition yet) falls back to the
   // placeholder - never to the full original.
   const [thumbFailed, setThumbFailed] = useState(false);
@@ -1979,7 +2062,16 @@ function EntryCard({
   }
 
   return (
-    <article style={{ ...cardStyle, padding: '0.55rem 0.7rem', opacity: entry.withdrawn ? 0.6 : 1, outline: selected ? '1px solid var(--vault-gold)' : 'none' }}>
+    <article
+      style={{
+        ...cardStyle,
+        padding: '0.55rem 0.7rem',
+        opacity: entry.withdrawn ? 0.6 : 1,
+        outline: selected ? '1px solid var(--vault-gold)' : 'none',
+        // R4-D6: a focus ring for the keyboard-focused row (distinct from the selected outline).
+        boxShadow: focused ? '0 0 0 2px var(--vault-gold)' : 'none',
+      }}
+    >
       {/* D2 (round 2): compact default row - thumbnail + title/note + kind/date ONLY.
           All tag detail and the tag form live behind the per-item expand. */}
       <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center' }}>
@@ -1987,7 +2079,10 @@ function EntryCard({
           <input
             type="checkbox"
             checked={selected}
-            onChange={onToggleSelect}
+            // R4-D6: onClick carries shiftKey for range select; onChange is a no-op so the
+            // controlled checkbox does not warn (the click handles keyboard + mouse toggles).
+            onChange={() => {}}
+            onClick={(e) => onSelect((e as unknown as { shiftKey: boolean }).shiftKey)}
             aria-label="Select for batch tagging"
             style={{ width: 16, height: 16, accentColor: 'var(--vault-gold)', cursor: 'pointer', flexShrink: 0 }}
           />
@@ -2055,7 +2150,7 @@ function EntryCard({
               Withdraw
             </button>
           )}
-          <button type="button" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>
+          <button type="button" aria-expanded={expanded} onClick={onToggleExpand} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>
             {expanded ? 'Hide' : 'Details'}
           </button>
         </div>
