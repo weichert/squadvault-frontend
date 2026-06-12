@@ -1048,6 +1048,16 @@ class DuplicateError extends Error {
   }
 }
 
+// A failure that will fail IDENTICALLY forever (a content refusal: HEIC-by-content, an
+// unsupported type, an over-cap file). Retry is for TRANSIENT failures only - a permanent
+// refusal gets the honest message and NO retry button.
+class PermanentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermanentError';
+  }
+}
+
 // D6 HEIC honesty (module-level so single + queue paths share it). iPhone photos
 // default to HEIC/HEIF, which browsers can't render in an <img>, so storing one only
 // yields a broken thumbnail. Some browsers leave file.type empty, so also sniff ext.
@@ -1075,19 +1085,20 @@ async function uploadOneFile(
   opts?: { allowDuplicate?: boolean },
 ): Promise<void> {
   const kind = mediaKindFor(file);
-  if (!kind) throw new Error('Unsupported file type — choose an image or video.');
+  // These pre-checks are PERMANENT: the same file fails identically forever, so no retry.
+  if (!kind) throw new PermanentError('Unsupported file type — choose an image or video.');
   if (isHeicFile(file)) {
-    throw new Error('HEIC is not supported. Export the photo as JPEG and upload that.');
+    throw new PermanentError('HEIC is not supported. Export the photo as JPEG and upload that.');
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
+    throw new PermanentError(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
   }
 
   // R4-D3: one byte read -> content hash + content-level HEIC check (catches a renamed
   // HEIC the extension check above missed), then a deterministic duplicate check.
   const { hash, heic } = await inspectFileBytes(file);
   if (heic) {
-    throw new Error('This is a HEIC/HEVC photo (by its contents, despite the name). Export it as JPEG and upload that.');
+    throw new PermanentError('This is a HEIC/HEVC photo (by its contents, despite the name). Export it as JPEG and upload that.');
   }
   if (!opts?.allowDuplicate) {
     const dupRes = await fetch('/api/av-room/duplicate', {
@@ -1170,6 +1181,8 @@ type QueueItem = {
   // (so "upload anyway" can resubmit with an explicit override).
   duplicateOf?: string;
   file?: File;
+  // Fix: a permanent failure (content refusal) gets the message only - no retry button.
+  permanent?: boolean;
 };
 
 const UPLOAD_CONCURRENCY = 3;
@@ -1255,8 +1268,11 @@ function UploadForm({ leagueId, onJumpToItem }: { leagueId: string; onJumpToItem
         } catch (e) {
           if (e instanceof DuplicateError) {
             setItem(next.id, { status: 'failed', reason: e.message, duplicateOf: e.duplicateOf, file: next.file });
+          } else if (e instanceof PermanentError) {
+            // Content refusal - fails identically forever. Message only, no retry.
+            setItem(next.id, { status: 'failed', reason: e.message, permanent: true });
           } else {
-            // R4-D7: keep the File on every failure so it can be retried with one click.
+            // R4-D7: a transient failure keeps the File so it can be retried with one click.
             setItem(next.id, { status: 'failed', reason: (e as Error).message, file: next.file });
           }
         } finally {
@@ -1275,7 +1291,7 @@ function UploadForm({ leagueId, onJumpToItem }: { leagueId: string; onJumpToItem
 
   const active = items.some((it) => it.status === 'queued' || it.status === 'uploading');
   // R4-D7: retryable = failed, not a duplicate (those use Upload anyway), file retained.
-  const failedRetryable = items.filter((it) => it.status === 'failed' && !it.duplicateOf && it.file);
+  const failedRetryable = items.filter((it) => it.status === 'failed' && !it.duplicateOf && !it.permanent && it.file);
 
   return (
     <section style={cardStyle}>
@@ -1392,8 +1408,9 @@ function UploadForm({ leagueId, onJumpToItem }: { leagueId: string; onJumpToItem
                     Upload anyway
                   </button>
                 )}
-                {/* R4-D7: a non-duplicate failure is retryable in one click. */}
-                {it.status === 'failed' && !it.duplicateOf && it.file && (
+                {/* R4-D7: only a TRANSIENT failure is retryable. Permanent content
+                    refusals (HEIC-by-content, etc.) get the message only - no retry. */}
+                {it.status === 'failed' && !it.duplicateOf && !it.permanent && it.file && (
                   <button
                     type="button"
                     onClick={() => retry(it)}
@@ -1866,9 +1883,17 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
       setError(`${TAG_KIND_LABEL[tagKind]} needs a value.`);
       return;
     }
-    if (tagKind === 'date' && !tagValue.trim()) {
-      setError('A date needs a value.');
-      return;
+    if (tagKind === 'date') {
+      if (!tagValue.trim()) {
+        setError('A date needs a value.');
+        return;
+      }
+      // Fix: presence alone admitted nonsense (e.g. "Kent") into the date axis. Refuse an
+      // unparseable date client-side - accept YYYY, YYYY-MM, or YYYY-MM-DD only.
+      if (!/^\d{4}(-\d{2}(-\d{2})?)?$/.test(tagValue.trim())) {
+        setError('Enter a date as YYYY, YYYY-MM, or YYYY-MM-DD.');
+        return;
+      }
     }
     if (tagKind === 'member_identification' && !taggedMember) {
       setError('Choose the member to identify.');
@@ -2015,6 +2040,12 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
                 onChange={(e) => {
                   setTagKind(e.target.value as MediaProvenanceTagKind);
                   setSupersedes(null);
+                  // Fix: a value belongs to its kind. Switching kind must NOT carry the
+                  // previous kind's value across (e.g. "Kent" surviving into the date axis).
+                  setTagValue('');
+                  setTaggedMember('');
+                  setDatePrecision('exact');
+                  setError(null);
                 }}
                 className="font-ui"
                 style={{ ...inputStyle, marginTop: 4 }}
