@@ -113,8 +113,13 @@ and is NOT in this PR. **Safari plays HEVC natively and is the interim verificat
 Seek/expiry flag: the **expiry half is now OBSERVED** (expired-token rejection above); the
 **seek half verifies in Safari** post-fix (scrub a playing gate-passed video).
 
-> **Correction (2026-06-12, D-W1-A6 runway).** A missing CSP `media-src` directive (fixed in
-> D-W1-A6) blocked the `<video>` cross-origin fetch entirely - latent here, masked by the
-> HEVC dead-player expectation. The Safari crossed-play glyph is now the SUSPECTED PRIMARY
-> CAUSE (CSP), not content-type; the `curl -I` header read still happens in runway to settle
-> it. See `_observations/OBSERVATIONS_2026_06_12_DW1A6_PLAYBACK_RENDITION_BUILD.md`.
+> **Correction (2026-06-12, D-W1-A6 runway - CONFIRMED).** A missing CSP `media-src`
+> directive (fixed in D-W1-A6, `b8c3cd2`) was the ENTIRE playback blocker, ALL browsers,
+> latent since this PR - the `<video>` cross-origin fetch was refused outright, masked here
+> by the HEVC dead-player expectation. Post-fix the HEVC original played in Chrome-on-macOS
+> with picture AND sound. The content-type theory is DEAD: `curl -I` observed
+> `content-type: video/quicktime` on original.mov - stored originals were correctly typed all
+> along. The Safari crossed-play glyph was CSP, not content-type. The HEVC premise narrows to
+> member reach (mixed-hardware browsers), not the founder's machine. The seek flag CLOSES:
+> scrub-seek observed (multiple 206 range requests). See
+> `_observations/OBSERVATIONS_2026_06_12_DW1A6_PLAYBACK_RENDITION_BUILD.md`.

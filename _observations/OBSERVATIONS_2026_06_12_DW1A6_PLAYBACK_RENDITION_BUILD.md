@@ -4,7 +4,8 @@ Dated 2026-06-12. Session: Claude Code / Opus 4.8 (EXECUTE). Branch
 `feat/w1-a6-playback-rendition` off `main` at `cb3ba97`. Mechanism work under invariant
 6.9 inside the admitted W.1 surface - specification, not amendment (the b78070f LEAN
 precedent). Ruling memo of record = first commit (`1379739`). One PR. Discharge held for
-the founder click-through (rendition backfill + the closing D-W1-A scrub-seek flag).
+the founder click-through (rendition backfill + confirming the Network filename switches to
+playback.mp4). The D-W1-A scrub-seek flag is now CLOSED on the original (batch-2 below).
 
 ## Shipped
 
@@ -64,29 +65,66 @@ the METHOD is pinned, not the bytes.
 | `<entry1>` | `<hash1>` | `<sha1>` |
 | `<entry2>` | `<hash2>` | `<sha2>` |
 
-## Pre-merge defect: CSP blocked video playback (fixed on the PR)
+## Runway venue (recorded honestly)
 
-Runway step-0 on the preview (`089a80d`) OBSERVED: the gate passed and `sign` returned 200
-carrying the **original.mov** URL (rendition absent -> the route fell through to the
-original). **The A6 fallback leg is CONFIRMED** end-to-end. But the mounted `<video>` issued
-NO network request, and the console showed a CSP refusal.
+Batch-2 observations were taken on **local dev at `b8c3cd2` against the REAL Supabase
+project** (signed URLs carry the project ref) - evidence equivalent to the preview for
+CSP/transport purposes.
 
-Root cause: `next.config.js` had `img-src` and `connect-src` for Supabase but **no
-`media-src` directive** - media fell back to `default-src 'self'` and Chrome refused the
-cross-origin fetch. **Latent from D-W1-A** (masked there by the HEVC dead-player expectation;
-it also likely explains Safari's crossed-play glyph, previously attributed to content-type).
+## Pre-merge defect 1: CSP blocked ALL video playback (fixed, `b8c3cd2`) - re-attributed
 
-Fix (this PR, `media-src` added to the CSP array, no other directive change):
-`media-src 'self' https://${SUPABASE_HOSTNAME}`.
+Step-0 OBSERVED: the gate passed and `sign` returned 200 carrying the **original.mov** URL
+(rendition absent -> route fell through to the original). **The A6 fallback leg is
+CONFIRMED.** But the mounted `<video>` issued NO network request; the console showed a CSP
+refusal.
 
-## original.mov content-type (OBSERVED at runway)
+Root cause: `next.config.js` had `img-src`/`connect-src` for Supabase but **no `media-src`**
+- media fell back to `default-src 'self'` and the browser refused the cross-origin fetch.
+Fix (`b8c3cd2`): `media-src 'self' https://${SUPABASE_HOSTNAME}`, no other directive change.
 
-`curl -I` on a fresh signed URL of an original.mov, content-type line verbatim:
-`<PLACEHOLDER - paste the observed Content-Type header>`. NOTE: the Safari crossed-play
-glyph is now suspected to be the CSP defect above, not content-type; the header read still
-happens in runway to settle it empirically. No remediation of stored objects either way
-(A6-4): playback stops depending on the original's stored metadata the moment a rendition
-exists.
+**Re-attribution (batch 2):** the missing `media-src` was the **ENTIRE playback blocker, all
+browsers, latent since D-W1-A** - not just a Chrome/HEVC issue. POST-FIX, the **HEVC ORIGINAL
+played in Chrome-on-macOS with picture AND sound** (rendition not yet uploaded; Network shows
+`original.mov` 206s). The HEVC dead-player expectation had masked it.
+
+## Pre-merge defect 2: quick-look media height unbounded for portrait video (fixed, this commit)
+
+The quick-look overlay did not constrain the media region's height, so a portrait video's
+poster/player pushed the gated-Play affordance and the refusal line **below the viewport with
+no scroll path** - hiding the gate's own surface (a member who can't see Play can't reach
+gate-passing playback; one who can't see the refusal loses the attestation's trust
+legibility). Fix: CSS-only - the image side is a bounded flex column with the media in a
+`flex:1 1 auto; min-height:0; overflow:hidden` cell (object-fit contain) and the affordance
+strip `flex:none`, so the strip is always reserved on-screen. The room `RoomVideo` cell is a
+FIXED aspect-ratio box (absolute Play overlay, line below) so the hazard does not apply there;
+added `object-fit:contain` to its `<video>` for portrait correctness. No route/gate/logic change.
+
+## original.mov content-type - content-type theory DEAD
+
+`curl -I` on a fresh signed URL OBSERVED verbatim: **`content-type: video/quicktime`**.
+Stored originals were correctly typed all along - the grant flow's `contentType: file.type`
+worked; **no stored-object defect ever existed**. The A6-4 empty-`file.type` guard stays as
+belt-and-braces. The Safari crossed-play glyph is now **confirmed CSP** (defect 1), not
+content-type.
+
+## Observations banked (D-W1-A flags closed)
+
+- **Original played to completion with sound** (1:05 / 1:05) in Chrome-on-macOS.
+- **SCRUB-SEEK OBSERVED** on the original: founder scrubbed, playback resumed; Network shows
+  multiple **206 partial-content range requests** against the signed URL (some disk-cached,
+  ~45 MB / ~20 MB chunks). **The D-W1-A seek flag CLOSES** on this evidence (it will be
+  re-observed incidentally on the rendition). The expiry half was already observed; both
+  halves of the seek/expiry boundary are now settled.
+- Fallback leg banked (sign returned `original.mov` with the rendition absent).
+
+## Rendition justification (re-framed, batch 2)
+
+The HEVC premise NARROWS, it does not die: Chrome on recent macOS hardware-decodes HEVC, so
+the original played on the founder's machine. "Chrome cannot decode HEVC" still holds for
+Windows / older hardware. The rendition unit's justification is therefore **member reach** -
+a 10-person league on mixed hardware where some members' browsers cannot decode the iPhone
+HEVC original - NOT the founder's machine. The H.264/AAC rendition is the broad-decode target;
+the sign route already serves it when present (progressive enhancement).
 
 ## Boundaries held
 
@@ -97,17 +135,19 @@ transcode infrastructure - commissioner-side production only. Original bytes nev
 renditions regenerable or deletable without fact loss. Option-3 rejection stands.
 Verified-vs-testimony distinction untouched.
 
-## Founder runway
+## Founder runway (remaining after the two fixes land)
+
+Already closed: CSP playback (Chrome, with sound), scrub-seek, expiry, fallback leg,
+content-type, the quick-look height hazard. What's left:
 
 1. Run `~/sv-apply/apply_a6_rendition_backfill_v1.sh` (fill the source paths/entry ids/hashes
    first); collect 2 `playback.mp4` + the PAIRING lines; record the ffmpeg version line.
 2. Upload each via the "Upload playback rendition" affordance (dashboard upload acceptable;
    confirm `video/mp4` in object metadata).
-3. Click-through, in order:
-   - the attested no-voice video plays in **Chrome WITH SOUND**;
-   - **scrub-seek mid-stream OBSERVED** (closes the last open D-W1-A flag);
-   - the voiced video still shows the neutral refusal (gate regression check);
-   - `curl -I` a fresh signed URL of `original.mov`, record the Content-Type line verbatim;
-   - optional Safari re-check.
-4. Paste the PAIRING lines + observations back for the build-memo close-out commit; merge
-   PR #22 via `gh pr merge`.
+3. Play -> confirm the Network filename **switches to `playback.mp4`** (the rendition leg now
+   serves instead of the original).
+4. Voiced-video refusal check - but **verify each entry's CURRENT attestation state first**
+   (states churned during #21 testing; the latest event is what the gate reads).
+5. Paste the PAIRING lines + the playback.mp4-Network observation back for the build-memo
+   close-out commit (fill the pairing table + ffmpeg-version + content-type lines); merge PR
+   #22 via `gh pr merge`.

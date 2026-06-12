@@ -100,7 +100,10 @@ export function RoomVideo({
       >
         {playUrl ? (
           // FIX 1: key forces a clean mount so the src applies and the request fires.
-          <video key={playUrl} src={playUrl} controls playsInline preload="metadata" style={{ width: '100%', height: '100%' }} />
+          // Batch-2: the room cell is a FIXED aspect-ratio box (Play overlay is absolute, the
+          // attestation line sits below it), so the quick-look off-viewport hazard does not
+          // apply here; object-fit contain keeps a portrait video undistorted within the box.
+          <video key={playUrl} src={playUrl} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         ) : posterUrl && !posterFailed ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}

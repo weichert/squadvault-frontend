@@ -1721,18 +1721,31 @@ function QuickLook({
           padding: '0 0.9rem 0.9rem',
         }}
       >
-        {/* Image side */}
+        {/* Image side. Batch-2 fix: a bounded flex column - the MEDIA cell flexes (1 1 auto,
+            min-height 0, object-fit contain) and the affordance strip is flex:none - so the
+            Play button / refusal line can never be pushed below the viewport for a portrait
+            video (hiding the gate's own surface). CSS-only; no logic. */}
         <div
           style={{
             flex: '2 1 360px',
             minWidth: 0,
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
             gap: '0.6rem',
           }}
         >
+          <div
+            style={{
+              flex: '1 1 auto',
+              minHeight: 0,
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
           {playUrl ? (
             // D-W1-A: playback granted by the gate (takes precedence over the poster sign).
             // key={playUrl} forces a clean <video> mount so the src is applied and the
@@ -1780,13 +1793,15 @@ function QuickLook({
               )}
             </div>
           )}
+          </div>
           {/* D-W1-A: play on intent. The gate is enforced at the route - a click that the
               gate refuses returns a neutral message; a pass swaps the poster for the player.
               FIX 4: when the RENDERED attestation state is member_voice_present we already
               know playback is gated, so show the refusal directly instead of a Play button
-              (using only state the panel already renders; the route gate is untouched). */}
+              (using only state the panel already renders; the route gate is untouched).
+              The strip is flex:none so it is always reserved below the media cell. */}
           {entry.mediaKind === 'video' && !playUrl && (
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ flex: 'none', textAlign: 'center' }}>
               {entry.voiceAttestation?.state === 'member_voice_present' ? (
                 <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', maxWidth: 360 }}>
                   Member voice present — playback gated.
