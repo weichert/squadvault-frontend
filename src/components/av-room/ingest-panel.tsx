@@ -31,6 +31,9 @@ export type IngestEntry = {
   hasPoster: boolean;
   thumbUrl: string | null;
   tags: IngestTag[];
+  // R4-D3 (migration 013) byte-identity, for the derived duplicate indicator. Null until
+  // hashed / pre-migration.
+  contentHash: string | null;
 };
 
 export type IngestMember = {
@@ -108,9 +111,12 @@ type CorpusFilterState = {
   withdrawn: WithdrawnFilter;
   text: string;
   needs: NeedsFilter;
+  // R4 derived duplicate indicator: 'duplicates' shows only the byte-duplicate items
+  // (every copy after the earliest per content_hash).
+  dup: 'all' | 'duplicates';
 };
 
-const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '', needs: 'all' };
+const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '', needs: 'all', dup: 'all' };
 
 // Distinct values for a tag kind, sorted only to order the SELECTOR options - this
 // orders the dropdown, never the corpus.
@@ -142,7 +148,37 @@ function matchesFilters(entry: IngestEntry, f: CorpusFilterState): boolean {
 }
 
 function filtersActive(f: CorpusFilterState): boolean {
-  return f.kind !== 'all' || f.withdrawn !== 'all' || !!f.season || !!f.event || !!f.text.trim() || f.needs !== 'all';
+  return (
+    f.kind !== 'all' ||
+    f.withdrawn !== 'all' ||
+    !!f.season ||
+    !!f.event ||
+    !!f.text.trim() ||
+    f.needs !== 'all' ||
+    f.dup !== 'all'
+  );
+}
+
+// R4 derived duplicate indicator: byte-identity within the league, derived from
+// content_hash - NOT a stored tag. The EARLIEST entry per hash is the original; every
+// later copy maps to it. Retroactive by construction, self-maintaining, no migration.
+function deriveDuplicates(entries: IngestEntry[]): Map<string, string> {
+  const byHash = new Map<string, IngestEntry[]>();
+  for (const e of entries) {
+    if (!e.contentHash) continue;
+    const arr = byHash.get(e.contentHash);
+    if (arr) arr.push(e);
+    else byHash.set(e.contentHash, [e]);
+  }
+  const duplicateOf = new Map<string, string>();
+  for (const group of Array.from(byHash.values())) {
+    if (group.length < 2) continue;
+    const original = group.reduce((a: IngestEntry, b: IngestEntry) => (a.createdAt <= b.createdAt ? a : b));
+    for (const e of group) {
+      if (e.id !== original.id) duplicateOf.set(e.id, original.id);
+    }
+  }
+  return duplicateOf;
 }
 
 export function IngestPanel({
@@ -211,7 +247,11 @@ export function IngestPanel({
     season: seasons,
     event: events,
   };
-  const visibleEntries = entries.filter((e) => matchesFilters(e, filters));
+  // R4 derived duplicate indicator: which entries are byte-duplicates of an earlier one.
+  const duplicateOf = deriveDuplicates(entries);
+  const visibleEntries = entries
+    .filter((e) => matchesFilters(e, filters))
+    .filter((e) => (filters.dup === 'duplicates' ? duplicateOf.has(e.id) : true));
 
   // R4-D4 ordering assertion: the ingest list is newest-first (server sort, D4). A dev
   // tripwire makes a silent regression of that invariant loud rather than invisible.
@@ -396,9 +436,11 @@ export function IngestPanel({
             selected={selected}
             expandedIds={expandedIds}
             focusedIndex={focusedIndex}
+            duplicateOf={duplicateOf}
             onSelect={selectAt}
             onToggleExpand={toggleExpand}
             onOpen={openQuickLook}
+            onJumpToItem={jumpToItem}
           />
         )}
       </section>
@@ -431,9 +473,11 @@ function VirtualCorpus({
   selected,
   expandedIds,
   focusedIndex,
+  duplicateOf,
   onSelect,
   onToggleExpand,
   onOpen,
+  onJumpToItem,
 }: {
   entries: IngestEntry[];
   members: IngestMember[];
@@ -441,9 +485,11 @@ function VirtualCorpus({
   selected: Set<string>;
   expandedIds: Set<string>;
   focusedIndex: number;
+  duplicateOf: Map<string, string>;
   onSelect: (id: string, index: number, shiftKey: boolean) => void;
   onToggleExpand: (id: string) => void;
   onOpen: (id: string) => void;
+  onJumpToItem: (id: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -494,9 +540,11 @@ function VirtualCorpus({
                 selected={selected.has(e.id)}
                 expanded={expandedIds.has(e.id)}
                 focused={vrow.index === focusedIndex}
+                duplicateOfId={duplicateOf.get(e.id) ?? null}
                 onSelect={(shiftKey) => onSelect(e.id, vrow.index, shiftKey)}
                 onToggleExpand={() => onToggleExpand(e.id)}
                 onOpen={() => onOpen(e.id)}
+                onJumpToItem={onJumpToItem}
               />
             </div>
           </div>
@@ -596,6 +644,17 @@ function CorpusFilters({
         {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
           <option key={k} value={k}>Needs {TAG_KIND_LABEL[k].toLowerCase()}</option>
         ))}
+      </select>
+      {/* R4 derived duplicate indicator: filter to byte-duplicates. */}
+      <select
+        aria-label="Filter by duplicate state"
+        value={filters.dup}
+        onChange={(e) => onChange({ ...filters, dup: e.target.value as CorpusFilterState['dup'] })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="all">All items</option>
+        <option value="duplicates">Duplicates only</option>
       </select>
       <input
         type="text"
@@ -2019,9 +2078,11 @@ function EntryCard({
   selected,
   expanded,
   focused,
+  duplicateOfId,
   onSelect,
   onToggleExpand,
   onOpen,
+  onJumpToItem,
 }: {
   entry: IngestEntry;
   members: IngestMember[];
@@ -2032,9 +2093,12 @@ function EntryCard({
   // drive them. onSelect carries shiftKey for range select.
   expanded: boolean;
   focused: boolean;
+  // R4 derived duplicate indicator: the original's id if this entry is a byte-duplicate.
+  duplicateOfId: string | null;
   onSelect: (shiftKey: boolean) => void;
   onToggleExpand: () => void;
   onOpen: () => void;
+  onJumpToItem: (id: string) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -2157,6 +2221,8 @@ function EntryCard({
             {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
             {entry.tags.length > 0 ? ` · ${entry.tags.length} tag${entry.tags.length === 1 ? '' : 's'}` : ''}
             {entry.withdrawn ? ' · WITHDRAWN' : ''}
+            {/* R4 derived duplicate indicator: a byte-duplicate of an earlier item. */}
+            {duplicateOfId && <span style={{ color: 'var(--vault-withheld)' }}> · DUPLICATE</span>}
           </div>
           {entry.uploadNote && (
             <p
@@ -2176,6 +2242,11 @@ function EntryCard({
           ) : (
             <button type="button" disabled={busy} onClick={withdraw} style={{ ...btnStyle(busy), padding: '0.25rem 0.5rem' }}>
               Withdraw
+            </button>
+          )}
+          {duplicateOfId && (
+            <button type="button" onClick={() => onJumpToItem(duplicateOfId)} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>
+              Show original
             </button>
           )}
           <button type="button" aria-expanded={expanded} onClick={onToggleExpand} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>

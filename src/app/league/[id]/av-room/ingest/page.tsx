@@ -128,6 +128,21 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
     granted2a: grantedSet.has(m.member_user_id),
   }));
 
+  // R4 derived duplicate indicator: content_hash per entry (migration 013). Queried
+  // separately so loadRoomState (shared with the room) stays untouched; graceful if the
+  // column is absent in some environment (all null -> indicator simply inactive).
+  const contentHashById = new Map<string, string | null>();
+  {
+    const { data: hashRows, error: hashErr } = (await admin
+      .from('media_entries')
+      .select('id, content_hash')
+      .eq('league_id', league.id)) as {
+      data: { id: string; content_hash: string | null }[] | null;
+      error: { code?: string } | null;
+    };
+    if (!hashErr) for (const r of hashRows ?? []) contentHashById.set(r.id, r.content_hash);
+  }
+
   const entries: IngestEntry[] = room.entries.map((re) => ({
     id: re.entry.id,
     mediaKind: re.entry.media_kind,
@@ -136,6 +151,7 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
     withdrawn: re.withdrawn,
     hasPoster: re.entry.media_kind === 'video' ? (videoHasPoster.get(re.entry.id) ?? false) : false,
     thumbUrl: thumbUrl.get(re.entry.id) ?? null,
+    contentHash: contentHashById.get(re.entry.id) ?? null,
     tags: [
       ...re.tagsByKind.contributor,
       ...re.tagsByKind.date,
@@ -171,6 +187,7 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
         withdrawn: false,
         hasPoster: false,
         thumbUrl: null,
+        contentHash: null,
         tags: [],
       });
     }
