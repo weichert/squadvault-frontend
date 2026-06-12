@@ -143,6 +143,21 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
     if (!hashErr) for (const r of hashRows ?? []) contentHashById.set(r.id, r.content_hash);
   }
 
+  // D-W1-E1: which entries are expunged (tombstones), and the recorded reason. Graceful
+  // if migration 014 is absent (empty map -> the class is simply inactive).
+  const expungedReasonById = new Map<string, string>();
+  {
+    const { data: expRows, error: expErr } = (await admin
+      .from('media_expungement_events')
+      .select('media_entry_id, reason, recorded_at')
+      .eq('league_id', league.id)
+      .order('recorded_at', { ascending: true })) as {
+      data: { media_entry_id: string; reason: string; recorded_at: string }[] | null;
+      error: { code?: string } | null;
+    };
+    if (!expErr) for (const r of expRows ?? []) if (!expungedReasonById.has(r.media_entry_id)) expungedReasonById.set(r.media_entry_id, r.reason);
+  }
+
   const entries: IngestEntry[] = room.entries.map((re) => ({
     id: re.entry.id,
     mediaKind: re.entry.media_kind,
@@ -152,6 +167,8 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
     hasPoster: re.entry.media_kind === 'video' ? (videoHasPoster.get(re.entry.id) ?? false) : false,
     thumbUrl: thumbUrl.get(re.entry.id) ?? null,
     contentHash: contentHashById.get(re.entry.id) ?? null,
+    expunged: expungedReasonById.has(re.entry.id),
+    expungedReason: expungedReasonById.get(re.entry.id) ?? null,
     tags: [
       ...re.tagsByKind.contributor,
       ...re.tagsByKind.date,
@@ -188,6 +205,8 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
         hasPoster: false,
         thumbUrl: null,
         contentHash: null,
+        expunged: false,
+        expungedReason: null,
         tags: [],
       });
     }

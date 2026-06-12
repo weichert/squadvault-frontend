@@ -365,6 +365,17 @@ export interface MediaDisplayReinstatement {
   recorded_at: string;
 }
 
+// D-W1-E1 (migration 014): the append-only expungement event - the license to delete a
+// media item's stored bytes. Terminal; reason required.
+export interface MediaExpungementEvent {
+  id: string;
+  league_id: string;
+  media_entry_id: string;
+  reason: string;
+  expunged_by: string;
+  recorded_at: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -420,6 +431,7 @@ export type Database = {
       room_ratification_events: { Row: RoomRatificationEvent; Insert: Omit<RoomRatificationEvent, 'id' | 'recorded_at'>; Update: never };
       media_display_withdrawals: { Row: MediaDisplayWithdrawal; Insert: Omit<MediaDisplayWithdrawal, 'id' | 'recorded_at'>; Update: never };
       media_display_reinstatements: { Row: MediaDisplayReinstatement; Insert: Omit<MediaDisplayReinstatement, 'id' | 'recorded_at'>; Update: never };
+      media_expungement_events: { Row: MediaExpungementEvent; Insert: Omit<MediaExpungementEvent, 'id' | 'recorded_at'>; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };

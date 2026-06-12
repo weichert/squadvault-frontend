@@ -911,6 +911,33 @@ async function g18() {
   }
 }
 
+// ── G19: media_expungement_events is commissioner-write + append-only (RLS, W.1 D-W1-E1).
+// The expungement EVENT is the license to delete bytes (the ruled exception); the event
+// itself must be commissioner-only and append-only, exactly like its withdrawal/
+// reinstatement siblings. Probe-skip until migration 014 is applied (the 012/G17 rhythm).
+async function g19() {
+  console.log('\nG19 — media_expungement_events is commissioner-write + append-only (RLS, W.1 D-W1-E1)');
+
+  const { error: probeErr } = await serviceClient
+    .from('media_expungement_events')
+    .select('id')
+    .limit(1);
+  if (probeErr) {
+    console.log('     (skip G19: media_expungement_events not present — apply migration 014)');
+    return;
+  }
+
+  // Anon cannot INSERT. WITH CHECK requires commissioner/admin, evaluated before FK, so
+  // bogus ids still surface as a 42501 policy denial rather than an FK error.
+  const { error: insErr } = await anonClient.from('media_expungement_events').insert({
+    league_id: DEMO_LEAGUE_ID,
+    media_entry_id: '00000000-0000-0000-0000-0000000000aa',
+    reason: 'g19 probe',
+    expunged_by: '00000000-0000-0000-0000-0000000000cc',
+  });
+  assertRlsInsertDenied('G19', 'media_expungement_events', insErr);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -933,6 +960,7 @@ async function main() {
   await g16();
   await g17();
   await g18();
+  await g19();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);

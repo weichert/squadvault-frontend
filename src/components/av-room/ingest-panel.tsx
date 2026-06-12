@@ -34,6 +34,9 @@ export type IngestEntry = {
   // R4-D3 (migration 013) byte-identity, for the derived duplicate indicator. Null until
   // hashed / pre-migration.
   contentHash: string | null;
+  // D-W1-E1 (migration 014): expunged = bytes deleted, row tombstoned. Terminal.
+  expunged: boolean;
+  expungedReason: string | null;
 };
 
 export type IngestMember = {
@@ -114,9 +117,11 @@ type CorpusFilterState = {
   // R4 derived duplicate indicator: 'duplicates' shows only the byte-duplicate items
   // (every copy after the earliest per content_hash).
   dup: 'all' | 'duplicates';
+  // D-W1-E1: expunged items are hidden ('hide') by default; 'only' shows the tombstones.
+  expunged: 'hide' | 'only';
 };
 
-const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '', needs: 'all', dup: 'all' };
+const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '', needs: 'all', dup: 'all', expunged: 'hide' };
 
 // Distinct values for a tag kind, sorted only to order the SELECTOR options - this
 // orders the dropdown, never the corpus.
@@ -155,7 +160,8 @@ function filtersActive(f: CorpusFilterState): boolean {
     !!f.event ||
     !!f.text.trim() ||
     f.needs !== 'all' ||
-    f.dup !== 'all'
+    f.dup !== 'all' ||
+    f.expunged !== 'hide'
   );
 }
 
@@ -250,6 +256,8 @@ export function IngestPanel({
   // R4 derived duplicate indicator: which entries are byte-duplicates of an earlier one.
   const duplicateOf = deriveDuplicates(entries);
   const visibleEntries = entries
+    // D-W1-E1: expunged tombstones are hidden unless the Expunged filter asks for them.
+    .filter((e) => (filters.expunged === 'only' ? e.expunged : !e.expunged))
     .filter((e) => matchesFilters(e, filters))
     .filter((e) => (filters.dup === 'duplicates' ? duplicateOf.has(e.id) : true));
 
@@ -291,7 +299,7 @@ export function IngestPanel({
 
   // R4-D5: the untagged work queue's quiet count - entries carrying no tags at all.
   // Deterministic, commissioner-only tool-state; no streaks, no progress mechanics.
-  const untaggedCount = entries.filter((e) => e.tags.length === 0).length;
+  const untaggedCount = entries.filter((e) => !e.expunged && e.tags.length === 0).length;
 
   // R4-D1 quick-look: an index INTO the filtered list (so arrow-keys walk exactly what
   // the commissioner is looking at). Opening resolves the row's id to its filtered index.
@@ -655,6 +663,17 @@ function CorpusFilters({
       >
         <option value="all">All items</option>
         <option value="duplicates">Duplicates only</option>
+      </select>
+      {/* D-W1-E1: the tombstone view. */}
+      <select
+        aria-label="Filter by expunged state"
+        value={filters.expunged}
+        onChange={(e) => onChange({ ...filters, expunged: e.target.value as CorpusFilterState['expunged'] })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="hide">Active</option>
+        <option value="only">Expunged (tombstones)</option>
       </select>
       <input
         type="text"
@@ -1078,11 +1097,15 @@ async function uploadOneFile(
     });
     if (dupRes.ok) {
       const { duplicate } = (await dupRes.json()) as {
-        duplicate: { id: string; createdAt: string } | null;
+        duplicate: { id: string; createdAt: string; expunged?: boolean } | null;
       };
       if (duplicate) {
         const when = new Date(duplicate.createdAt).toISOString().slice(0, 10);
-        throw new DuplicateError(`Already in the record (uploaded ${when}).`, duplicate.id);
+        // D-W1-E1: distinguish a duplicate-of-expunged from one still in the record.
+        const msg = duplicate.expunged
+          ? `Duplicate of an expunged item (was uploaded ${when}).`
+          : `Already in the record (uploaded ${when}).`;
+        throw new DuplicateError(msg, duplicate.id);
       }
     }
   }
@@ -1730,6 +1753,7 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
   const [posterBusy, setPosterBusy] = useState(false);
   const [posterMsg, setPosterMsg] = useState<string | null>(null);
   const [downloadBusy, setDownloadBusy] = useState(false);
+  const [expungeBusy, setExpungeBusy] = useState(false);
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
   const [tagValue, setTagValue] = useState('');
   const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
@@ -1796,6 +1820,34 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
       setError('Could not prepare the download.');
     } finally {
       setDownloadBusy(false);
+    }
+  }
+
+  // D-W1-E1: expunge - the ruled exception. A required-reason confirm states plainly what
+  // happens (bytes destroyed, permanent, tombstone remains). Terminal: no reinstatement.
+  async function expunge() {
+    const reason = window.prompt(
+      'EXPUNGE this item?\n\nThis permanently DELETES the stored bytes — the original and its thumbnail/poster. It cannot be undone. The record keeps a tombstone showing the item existed and was expunged, when, by whom, and why.\n\nEnter a reason (required):',
+    );
+    if (reason === null || reason.trim().length === 0) return;
+    setExpungeBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/expunge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id, reason: reason.trim() }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not expunge the item.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not expunge the item.');
+    } finally {
+      setExpungeBusy(false);
     }
   }
 
@@ -2066,6 +2118,19 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
           {error}
         </p>
       )}
+      {/* D-W1-E1: expunge - the terminal, ruled exception. Available for any item
+          (withdrawn or live); a required-reason confirm states plainly what will happen. */}
+      <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.6rem' }}>
+        <button
+          type="button"
+          disabled={expungeBusy}
+          onClick={expunge}
+          className="font-mono"
+          style={{ ...btnStyle(expungeBusy), padding: '0.25rem 0.5rem', color: 'var(--vault-withheld)' }}
+        >
+          {expungeBusy ? 'Expunging…' : 'Expunge (delete the bytes)…'}
+        </button>
+      </div>
     </>
   );
 }
@@ -2151,6 +2216,25 @@ function EntryCard({
     } finally {
       setBusy(false);
     }
+  }
+
+  // D-W1-E1: an expunged item is a tombstone - bytes gone, terminal. It renders only here
+  // (under the Expunged filter), with no thumbnail, no actions, no editing: a permanent
+  // record that it existed and was expunged, and why.
+  if (entry.expunged) {
+    return (
+      <article style={{ ...cardStyle, padding: '0.55rem 0.7rem', opacity: 0.55 }}>
+        <div className="font-mono" style={labelStyle}>
+          {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)} ·{' '}
+          <span style={{ color: 'var(--vault-withheld)' }}>EXPUNGED</span>
+        </div>
+        {entry.expungedReason && (
+          <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.8rem', marginTop: 4 }}>
+            Reason: {entry.expungedReason}
+          </p>
+        )}
+      </article>
+    );
   }
 
   return (
