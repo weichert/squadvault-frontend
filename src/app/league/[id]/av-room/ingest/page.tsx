@@ -158,6 +158,34 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
     if (!expErr) for (const r of expRows ?? []) if (!expungedReasonById.has(r.media_entry_id)) expungedReasonById.set(r.media_entry_id, r.reason);
   }
 
+  // D-W1-A: the LATEST voice attestation per entry (the gate reads the latest event), with
+  // the attester's display name resolved for the trust-legible line. Graceful if migration
+  // 015 is absent (empty map -> no attestation line, gate's leg 1 simply unsatisfied).
+  const latestAttById = new Map<string, { state: string; by: string; at: string }>();
+  {
+    const { data: attRows, error: attErr } = (await admin
+      .from('media_voice_attestations')
+      .select('media_entry_id, attested_state, attested_by, recorded_at')
+      .eq('league_id', league.id)
+      .order('recorded_at', { ascending: false })) as {
+      data: { media_entry_id: string; attested_state: string; attested_by: string; recorded_at: string }[] | null;
+      error: { code?: string } | null;
+    };
+    if (!attErr) for (const r of attRows ?? []) if (!latestAttById.has(r.media_entry_id)) latestAttById.set(r.media_entry_id, { state: r.attested_state, by: r.attested_by, at: r.recorded_at });
+  }
+  const attesterNameById = new Map<string, string>();
+  {
+    const ids = Array.from(new Set(Array.from(latestAttById.values()).map((v) => v.by)));
+    if (ids.length > 0) {
+      const { data: fr } = (await admin
+        .from('franchises')
+        .select('member_user_id, owner_display_name')
+        .eq('league_id', league.id)
+        .in('member_user_id', ids)) as { data: { member_user_id: string | null; owner_display_name: string }[] | null };
+      for (const m of fr ?? []) if (m.member_user_id) attesterNameById.set(m.member_user_id, m.owner_display_name);
+    }
+  }
+
   const entries: IngestEntry[] = room.entries.map((re) => ({
     id: re.entry.id,
     mediaKind: re.entry.media_kind,
@@ -169,6 +197,15 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
     contentHash: contentHashById.get(re.entry.id) ?? null,
     expunged: expungedReasonById.has(re.entry.id),
     expungedReason: expungedReasonById.get(re.entry.id) ?? null,
+    voiceAttestation: (() => {
+      const v = latestAttById.get(re.entry.id);
+      if (!v) return null;
+      return {
+        state: v.state as 'no_member_voice' | 'member_voice_present',
+        byName: attesterNameById.get(v.by) ?? null,
+        at: v.at,
+      };
+    })(),
     tags: [
       ...re.tagsByKind.contributor,
       ...re.tagsByKind.date,
@@ -207,6 +244,7 @@ export default async function AvRoomIngestPage({ params, searchParams }: Props) 
         contentHash: null,
         expunged: false,
         expungedReason: null,
+        voiceAttestation: null,
         tags: [],
       });
     }
