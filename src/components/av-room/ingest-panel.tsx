@@ -1046,6 +1046,23 @@ function UploadForm({ leagueId }: { leagueId: string }) {
     enqueue([{ file: item.file, allowDuplicate: true }]);
   }
 
+  // R4-D7: retry a failed upload (a flaky connection costs a click, not a re-drop). Drop
+  // the failed row and re-enqueue the SAME file as a fresh normal upload - the duplicate
+  // and HEIC checks run again (a retry is not an override). Duplicates are not retryable
+  // here: they have the explicit "Upload anyway" override instead.
+  function retry(item: QueueItem) {
+    if (!item.file) return;
+    setItems((prev) => prev.filter((it) => it.id !== item.id));
+    enqueue([{ file: item.file }]);
+  }
+  function retryAll() {
+    const retryable = items.filter((it) => it.status === 'failed' && !it.duplicateOf && it.file);
+    if (retryable.length === 0) return;
+    const ids = new Set(retryable.map((it) => it.id));
+    setItems((prev) => prev.filter((it) => !ids.has(it.id)));
+    enqueue(retryable.map((it) => ({ file: it.file as File })));
+  }
+
   async function ensureRunning() {
     if (runningRef.current) return;
     runningRef.current = true;
@@ -1063,7 +1080,8 @@ function UploadForm({ leagueId }: { leagueId: string }) {
           if (e instanceof DuplicateError) {
             setItem(next.id, { status: 'failed', reason: e.message, duplicateOf: e.duplicateOf, file: next.file });
           } else {
-            setItem(next.id, { status: 'failed', reason: (e as Error).message });
+            // R4-D7: keep the File on every failure so it can be retried with one click.
+            setItem(next.id, { status: 'failed', reason: (e as Error).message, file: next.file });
           }
         } finally {
           // Drop from the live queue either way; failures stay in `items` for display.
@@ -1080,6 +1098,8 @@ function UploadForm({ leagueId }: { leagueId: string }) {
   }
 
   const active = items.some((it) => it.status === 'queued' || it.status === 'uploading');
+  // R4-D7: retryable = failed, not a duplicate (those use Upload anyway), file retained.
+  const failedRetryable = items.filter((it) => it.status === 'failed' && !it.duplicateOf && it.file);
 
   return (
     <section style={cardStyle}>
@@ -1185,9 +1205,28 @@ function UploadForm({ leagueId }: { leagueId: string }) {
                     Upload anyway
                   </button>
                 )}
+                {/* R4-D7: a non-duplicate failure is retryable in one click. */}
+                {it.status === 'failed' && !it.duplicateOf && it.file && (
+                  <button
+                    type="button"
+                    onClick={() => retry(it)}
+                    className="font-mono"
+                    style={{ ...btnStyle(false), flexShrink: 0, padding: '0.1rem 0.4rem' }}
+                  >
+                    Retry
+                  </button>
+                )}
               </li>
             ))}
           </ul>
+        )}
+
+        {/* R4-D7: retry every retryable failure at once - a flaky connection costs a
+            click, not a re-drop. Duplicates are excluded (they have Upload anyway). */}
+        {failedRetryable.length > 1 && (
+          <button type="button" onClick={retryAll} className="font-mono" style={{ ...btnStyle(false), alignSelf: 'flex-start', padding: '0.35rem 0.6rem' }}>
+            Retry all ({failedRetryable.length})
+          </button>
         )}
 
         {active && (
