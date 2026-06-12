@@ -89,6 +89,17 @@ export async function POST(req: NextRequest) {
       // Neutral body: no leakage of which gate leg failed, or what tags/grants exist.
       return NextResponse.json({ error: 'Playback gated' }, { status: 403 });
     }
+    // D-W1-A6: prefer the playback RENDITION (H.264/AAC, web-decodable) when present, else
+    // fall back to the original. Progressive enhancement, zero regression - Safari users
+    // (HEVC-native) lose nothing while renditions backfill, and the gate already passed
+    // identically above. The rendition is a derived sibling in poster.jpg's governance
+    // class (6.9); filesystem presence IS the state.
+    const { data: rendition } = await admin.storage
+      .from('league-media')
+      .createSignedUrl(`${folder}/playback.mp4`, PLAYBACK_TTL_SECONDS);
+    if (rendition) {
+      return NextResponse.json({ url: rendition.signedUrl, ttl: PLAYBACK_TTL_SECONDS });
+    }
     path = entry.storage_path;
     ttl = PLAYBACK_TTL_SECONDS;
   } else if (wantDownload) {
