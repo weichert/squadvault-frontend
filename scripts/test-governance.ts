@@ -938,6 +938,33 @@ async function g19() {
   assertRlsInsertDenied('G19', 'media_expungement_events', insErr);
 }
 
+// ── G20: media_voice_attestations is commissioner-write + append-only (RLS, W.1 D-W1-A).
+// The attestation EVENT is the license that satisfies the playback gate's first disjunct;
+// it must be commissioner-only and append-only, like its withdrawal/expungement siblings.
+// Probe-skip until migration 015 is applied (the G17/G19 rhythm).
+async function g20() {
+  console.log('\nG20 — media_voice_attestations is commissioner-write + append-only (RLS, W.1 D-W1-A)');
+
+  const { error: probeErr } = await serviceClient
+    .from('media_voice_attestations')
+    .select('id')
+    .limit(1);
+  if (probeErr) {
+    console.log('     (skip G20: media_voice_attestations not present — apply migration 015)');
+    return;
+  }
+
+  // Anon cannot INSERT. WITH CHECK requires commissioner/admin, evaluated before FK, so
+  // bogus ids still surface as a 42501 policy denial rather than an FK error.
+  const { error: insErr } = await anonClient.from('media_voice_attestations').insert({
+    league_id: DEMO_LEAGUE_ID,
+    media_entry_id: '00000000-0000-0000-0000-0000000000aa',
+    attested_state: 'no_member_voice',
+    attested_by: '00000000-0000-0000-0000-0000000000cc',
+  });
+  assertRlsInsertDenied('G20', 'media_voice_attestations', insErr);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -961,6 +988,7 @@ async function main() {
   await g17();
   await g18();
   await g19();
+  await g20();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);

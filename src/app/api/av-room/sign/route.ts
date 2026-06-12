@@ -12,12 +12,16 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient, createAdminClient } from '@/lib/supabase/server';
-import { isLeagueMember, isLeagueCommissioner } from '@/lib/av-room';
+import { isLeagueMember, isLeagueCommissioner, evaluatePlaybackGate } from '@/lib/av-room';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const SIGNED_URL_TTL_SECONDS = 120;
+// D-W1-A: the playback-specific TTL (the 120s display TTL is unchanged). An already-minted
+// playback URL lives out this window even after a superseding attestation - supersession
+// stops future ISSUANCE, never rewrites an in-flight stream (the D-U boundary on playback).
+const PLAYBACK_TTL_SECONDS = 600;
 
 export async function POST(req: NextRequest) {
   let body: { mediaEntryId?: unknown; variant?: unknown; download?: unknown };
@@ -28,20 +32,21 @@ export async function POST(req: NextRequest) {
   }
 
   const { mediaEntryId, variant } = body;
-  // R4-D2: download mode mints a signed URL of the ORIGINAL (any kind) with a download
-  // disposition - the Permanence moat made tangible: the league can always retrieve its
-  // own full-resolution history. This is RETRIEVAL, not display/playback, so it signs the
-  // original video file too (the image-only / no-playback line governs DISPLAY in the
-  // room, not the commissioner pulling back the league's own asset). Commissioner-only in
-  // Increment 1 (the room/member download surface rides Inc 2).
+  // R4-D2: 'download' mints a signed URL of the ORIGINAL (any kind) with a download
+  // disposition - RETRIEVAL, not display. Commissioner-only in Increment 1.
   const wantDownload = body.download === true;
+  // R4-D1: 'poster' signs a video's still. Default display: the full-resolution photo.
+  const wantPoster = variant === 'poster';
+  // D-W1-A: 'playback' signs a VIDEO's ORIGINAL for the <video> player - but ONLY behind
+  // the route-enforced playback gate (spec 5.7). This AMENDS the prior code-level invariant
+  // ("a video's original is never signed for display"): a video's original is now signed
+  // for display ONLY through this gate-checked variant (TTL 600s). The UI is never the
+  // boundary - the gate is enforced here.
+  const wantPlayback = variant === 'playback';
+
   if (typeof mediaEntryId !== 'string' || mediaEntryId.length === 0) {
     return NextResponse.json({ error: 'mediaEntryId is required' }, { status: 400 });
   }
-  // R4-D1 quick-look: 'original' (the default - the full-resolution photo) or 'poster'
-  // (a video's still). A video's ORIGINAL is never signed for display - the image-only /
-  // no-playback line holds; quick-look shows a video's poster, never the .mov.
-  const wantPoster = variant === 'poster';
 
   const supabase = await createServerClient();
   const {
@@ -59,8 +64,8 @@ export async function POST(req: NextRequest) {
   };
   if (!entry) return NextResponse.json({ error: 'Media entry not found' }, { status: 404 });
 
-  // Download (full-original retrieval) is commissioner-only in Increment 1; display
-  // signing stays league-member (the room reads it).
+  // Auth: download is commissioner-only (Inc 1); display + playback are league-member (the
+  // room reads them - for playback the GATE, not membership, is the real protection).
   if (wantDownload) {
     if (!(await isLeagueCommissioner(admin, entry.league_id, user.id))) {
       return NextResponse.json({ error: 'Commissioner only' }, { status: 403 });
@@ -70,24 +75,38 @@ export async function POST(req: NextRequest) {
   }
 
   const folder = entry.storage_path.slice(0, entry.storage_path.lastIndexOf('/'));
-  // Download -> the ORIGINAL (any kind), with a download disposition + friendly filename.
-  // Display -> the thumb/poster; a video is NEVER signed as its original bytes for display.
   let path: string;
+  let ttl = SIGNED_URL_TTL_SECONDS;
   let options: { download?: string } | undefined;
-  if (wantDownload) {
+
+  if (wantPlayback) {
+    // Video-only; the gate is enforced HERE.
+    if (entry.media_kind !== 'video') {
+      return NextResponse.json({ error: 'Playback applies to video only' }, { status: 400 });
+    }
+    const gate = await evaluatePlaybackGate(admin, mediaEntryId);
+    if (!gate.allowed) {
+      // Neutral body: no leakage of which gate leg failed, or what tags/grants exist.
+      return NextResponse.json({ error: 'Playback gated' }, { status: 403 });
+    }
+    path = entry.storage_path;
+    ttl = PLAYBACK_TTL_SECONDS;
+  } else if (wantDownload) {
     path = entry.storage_path;
     const ext = entry.storage_path.slice(entry.storage_path.lastIndexOf('.') + 1) || 'bin';
     options = { download: `squadvault-${mediaEntryId.slice(0, 8)}.${ext}` };
   } else {
+    // Display -> photo original or a video's poster; a video's original is NEVER signed
+    // for display here (only the gate-checked playback variant above may sign it).
     path = wantPoster || entry.media_kind === 'video' ? `${folder}/poster.jpg` : entry.storage_path;
   }
 
   const { data: signed, error: signErr } = await admin.storage
     .from('league-media')
-    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS, options);
+    .createSignedUrl(path, ttl, options);
   if (signErr || !signed) {
     return NextResponse.json({ error: 'Could not sign URL' }, { status: 502 });
   }
 
-  return NextResponse.json({ url: signed.signedUrl, ttl: SIGNED_URL_TTL_SECONDS });
+  return NextResponse.json({ url: signed.signedUrl, ttl });
 }
