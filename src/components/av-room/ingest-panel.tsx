@@ -1133,16 +1133,20 @@ async function uploadOneFile(
     const j = (await grantRes.json().catch(() => ({}))) as { error?: string };
     throw new Error(j.error ?? 'Could not start the upload.');
   }
-  const { mediaEntryId, path, token } = (await grantRes.json()) as {
+  const { mediaEntryId, path, token, mime } = (await grantRes.json()) as {
     mediaEntryId: string;
     path: string;
     token: string;
+    mime: string;
   };
 
   const supabase = createClient();
+  // D-W1-A6 (A6-4): some browsers leave file.type empty; fall back to the grant-declared
+  // mime so the stored object ALWAYS has an explicit content-type (the Safari/HEVC header
+  // posture). The grant already validated this mime server-side.
   const { error: upErr } = await supabase.storage
     .from('league-media')
-    .uploadToSignedUrl(path, token, file, { contentType: file.type });
+    .uploadToSignedUrl(path, token, file, { contentType: file.type || mime });
   if (upErr) {
     const msg = (upErr.message ?? '').toLowerCase();
     if (msg.includes('exceeded') || msg.includes('maximum allowed size') || msg.includes('payload too large')) {
