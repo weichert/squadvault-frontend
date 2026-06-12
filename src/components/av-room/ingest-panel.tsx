@@ -37,6 +37,9 @@ export type IngestEntry = {
   // D-W1-E1 (migration 014): expunged = bytes deleted, row tombstoned. Terminal.
   expunged: boolean;
   expungedReason: string | null;
+  // D-W1-A (migration 015): the LATEST voice attestation for a video, or null. Drives the
+  // attestation line + the playback gate's first leg.
+  voiceAttestation: { state: 'no_member_voice' | 'member_voice_present'; byName: string | null; at: string } | null;
 };
 
 export type IngestMember = {
@@ -1582,6 +1585,33 @@ function QuickLook({
   const [loading, setLoading] = useState(true);
   const [signFailed, setSignFailed] = useState(false);
   const [imgError, setImgError] = useState(false);
+  // D-W1-A: playback is fetched on USER INTENT (a Play click), never prefetched on render.
+  const [playUrl, setPlayUrl] = useState<string | null>(null);
+  const [playBusy, setPlayBusy] = useState(false);
+  const [playMsg, setPlayMsg] = useState<string | null>(null);
+
+  async function requestPlayback() {
+    setPlayBusy(true);
+    setPlayMsg(null);
+    try {
+      const res = await fetch('/api/av-room/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id, variant: 'playback' }),
+      });
+      if (res.ok) {
+        const j = (await res.json()) as { url: string };
+        setPlayUrl(j.url);
+      } else {
+        // Neutral: the route returns "Playback gated" with no leg detail.
+        setPlayMsg('Playback gated — voice attestation or recorded-voice consent is not current.');
+      }
+    } catch {
+      setPlayMsg('Could not start playback.');
+    } finally {
+      setPlayBusy(false);
+    }
+  }
 
   // Sign the current item's image on open and on every navigation.
   useEffect(() => {
@@ -1591,6 +1621,9 @@ function QuickLook({
     setLoading(true);
     setSignFailed(false);
     setImgError(false);
+    setPlayUrl(null);
+    setPlayBusy(false);
+    setPlayMsg(null);
     (async () => {
       try {
         const res = await fetch('/api/av-room/sign', {
@@ -1634,7 +1667,12 @@ function QuickLook({
       role="dialog"
       aria-modal="true"
       aria-label="Quick-look"
-      onClick={onClose}
+      // FIX 2: close ONLY on a direct backdrop click. No stopPropagation on the children -
+      // so the <video> controls (play/volume/fullscreen) are fully interactive and a click
+      // on the player never closes the overlay. Nav stays on the header buttons + keyboard.
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -1644,12 +1682,8 @@ function QuickLook({
         flexDirection: 'column',
       }}
     >
-      {/* Header: position + walk controls + close. Stop propagation so clicks here
-          don't close the overlay. */}
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.6rem 0.9rem', flexShrink: 0 }}
-      >
+      {/* Header: position + walk controls + close. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.6rem 0.9rem', flexShrink: 0 }}>
         <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text)' }}>
           {index + 1} / {entries.length} · {entry.mediaKind.toUpperCase()} ·{' '}
           {new Date(entry.createdAt).toISOString().slice(0, 10)}
@@ -1685,7 +1719,6 @@ function QuickLook({
       >
         {/* Image side */}
         <div
-          onClick={(e) => e.stopPropagation()}
           style={{
             flex: '2 1 360px',
             minWidth: 0,
@@ -1696,7 +1729,19 @@ function QuickLook({
             gap: '0.6rem',
           }}
         >
-          {loading ? (
+          {playUrl ? (
+            // D-W1-A: playback granted by the gate (takes precedence over the poster sign).
+            // key={playUrl} forces a clean <video> mount so the src is applied and the
+            // metadata request fires. No autoplay; metadata-only preload.
+            <video
+              key={playUrl}
+              src={playUrl}
+              controls
+              playsInline
+              preload="metadata"
+              style={{ maxWidth: '100%', maxHeight: '100%' }}
+            />
+          ) : loading ? (
             <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text2)' }}>
               LOADING…
             </span>
@@ -1731,16 +1776,39 @@ function QuickLook({
               )}
             </div>
           )}
-          {entry.mediaKind === 'video' && url && !imgError && (
-            <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.78rem' }}>
-              Poster still — playback pending voice attestation (image-only).
-            </p>
+          {/* D-W1-A: play on intent. The gate is enforced at the route - a click that the
+              gate refuses returns a neutral message; a pass swaps the poster for the player.
+              FIX 4: when the RENDERED attestation state is member_voice_present we already
+              know playback is gated, so show the refusal directly instead of a Play button
+              (using only state the panel already renders; the route gate is untouched). */}
+          {entry.mediaKind === 'video' && !playUrl && (
+            <div style={{ textAlign: 'center' }}>
+              {entry.voiceAttestation?.state === 'member_voice_present' ? (
+                <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', maxWidth: 360 }}>
+                  Member voice present — playback gated.
+                </p>
+              ) : (
+                <>
+                  <button type="button" disabled={playBusy} onClick={requestPlayback} className="font-mono" style={{ ...btnStyle(playBusy), padding: '0.3rem 0.7rem' }}>
+                    {playBusy ? 'Starting…' : 'Play video'}
+                  </button>
+                  {playMsg ? (
+                    <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 6, maxWidth: 360 }}>
+                      {playMsg}
+                    </p>
+                  ) : (
+                    <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.74rem', marginTop: 6 }}>
+                      No autoplay; fetched only when you press play.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
           )}
         </div>
 
         {/* Tag panel side - scrollable so the form is always reachable. */}
         <div
-          onClick={(e) => e.stopPropagation()}
           style={{
             flex: '1 1 280px',
             minWidth: 0,
@@ -1771,6 +1839,7 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
   const [posterMsg, setPosterMsg] = useState<string | null>(null);
   const [downloadBusy, setDownloadBusy] = useState(false);
   const [expungeBusy, setExpungeBusy] = useState(false);
+  const [attestBusy, setAttestBusy] = useState(false);
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
   const [tagValue, setTagValue] = useState('');
   const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
@@ -1865,6 +1934,31 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
       setError('Could not expunge the item.');
     } finally {
       setExpungeBusy(false);
+    }
+  }
+
+  // D-W1-A: record a voice attestation - a NEW append-only event (never an edit). A contrary
+  // claim supersedes by being later; the gate reads the latest. No AI - this is the
+  // commissioner's own act.
+  async function attest(attestedState: 'no_member_voice' | 'member_voice_present') {
+    setAttestBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/attest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id, attestedState }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not record the attestation.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not record the attestation.');
+    } finally {
+      setAttestBusy(false);
     }
   }
 
@@ -2023,6 +2117,31 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
                   {posterMsg}
                 </p>
               )}
+            </div>
+          )}
+          {/* D-W1-A: voice attestation - the playback gate's first leg. The line is
+              trust-legible and supersedable; controls record NEW append-only events
+              (never edits). Commissioner-only this increment. */}
+          {entry.mediaKind === 'video' && (
+            <div style={{ marginBottom: '0.9rem' }}>
+              <p
+                className="font-ui"
+                style={{ fontSize: '0.78rem', color: entry.voiceAttestation?.state === 'no_member_voice' ? 'var(--vault-text2)' : 'var(--vault-withheld)' }}
+              >
+                {entry.voiceAttestation
+                  ? entry.voiceAttestation.state === 'no_member_voice'
+                    ? `No member voice — attested by ${entry.voiceAttestation.byName ?? 'the commissioner'}, ${new Date(entry.voiceAttestation.at).toLocaleDateString('en-CA')}`
+                    : `Member voice present — attested by ${entry.voiceAttestation.byName ?? 'the commissioner'}, ${new Date(entry.voiceAttestation.at).toLocaleDateString('en-CA')} (playback gated)`
+                  : 'No voice attestation yet — playback stays gated until attested.'}
+              </p>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <button type="button" disabled={attestBusy} onClick={() => attest('no_member_voice')} className="font-mono" style={{ ...btnStyle(attestBusy), padding: '0.25rem 0.5rem' }}>
+                  {attestBusy ? 'Recording…' : 'Attest: no member voice'}
+                </button>
+                <button type="button" disabled={attestBusy} onClick={() => attest('member_voice_present')} className="font-mono" style={{ ...btnStyle(attestBusy), padding: '0.25rem 0.5rem' }}>
+                  Record contrary attestation
+                </button>
+              </div>
             </div>
           )}
           {supersedes && (

@@ -20,6 +20,7 @@ import { getLeague, getViewer } from '@/lib/league';
 import { createAdminClient } from '@/lib/supabase/server';
 import { loadRoomState, isLeagueMember, type RoomEntry } from '@/lib/av-room';
 import { RoomImage } from '@/components/av-room/room-image';
+import { RoomVideo } from '@/components/av-room/room-video';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,6 +126,44 @@ export default async function AvRoomPage({ params }: Props) {
   const videos = live.filter((re) => re.entry.media_kind === 'video');
   const ordered = [...photos, ...videos];
 
+  // D-W1-A: the latest voice attestation per video, passed structured to RoomVideo (it
+  // formats the trust-legible line in viewer-local time and suppresses Play on a
+  // member_voice_present state). The player itself is gated server-side; this is the
+  // legibility, not the gate. Graceful if migration 015 is absent (no attestation).
+  const attestation = new Map<string, { state: 'no_member_voice' | 'member_voice_present'; byName: string | null; at: string }>();
+  if (videos.length > 0) {
+    const videoIds = videos.map((re) => re.entry.id);
+    const { data: attRows, error: attErr } = (await admin
+      .from('media_voice_attestations')
+      .select('media_entry_id, attested_state, attested_by, recorded_at')
+      .in('media_entry_id', videoIds)
+      .order('recorded_at', { ascending: false })) as {
+      data: { media_entry_id: string; attested_state: string; attested_by: string; recorded_at: string }[] | null;
+      error: { code?: string } | null;
+    };
+    if (!attErr) {
+      const latest = new Map<string, { state: string; by: string; at: string }>();
+      for (const r of attRows ?? []) if (!latest.has(r.media_entry_id)) latest.set(r.media_entry_id, { state: r.attested_state, by: r.attested_by, at: r.recorded_at });
+      const byIds = Array.from(new Set(Array.from(latest.values()).map((v) => v.by)));
+      const nameById = new Map<string, string>();
+      if (byIds.length > 0) {
+        const { data: fr } = (await admin
+          .from('franchises')
+          .select('member_user_id, owner_display_name')
+          .eq('league_id', league.id)
+          .in('member_user_id', byIds)) as { data: { member_user_id: string | null; owner_display_name: string }[] | null };
+        for (const m of fr ?? []) if (m.member_user_id) nameById.set(m.member_user_id, m.owner_display_name);
+      }
+      latest.forEach((v, id) => {
+        attestation.set(id, {
+          state: v.state as 'no_member_voice' | 'member_voice_present',
+          byName: nameById.get(v.by) ?? null,
+          at: v.at,
+        });
+      });
+    }
+  }
+
   // R3-D1: the room is a list surface, so it serves the small thumb.jpg rendition for
   // photos and poster.jpg for videos - NEVER the full original (that is reserved for
   // quick-look and downloads). A missing rendition simply fails to load and RoomImage
@@ -184,29 +223,31 @@ export default async function AvRoomPage({ params }: Props) {
               const posterUrl = videoPosterUrl.get(re.entry.id);
               return (
                 <figure key={re.entry.id} style={{ margin: 0 }}>
-                  <div
-                    style={{
-                      width: '100%',
-                      aspectRatio: '4 / 3',
-                      background: 'var(--vault-s2)',
-                      border: '1px solid var(--vault-border)',
-                      borderRadius: 6,
-                      overflow: 'hidden',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <RoomImage
-                      kind={re.entry.media_kind}
-                      url={re.entry.media_kind === 'photo' ? (url ?? null) : (posterUrl ?? null)}
-                      alt={
-                        re.entry.media_kind === 'photo'
-                          ? (re.entry.upload_note ?? 'Archival photograph')
-                          : (re.entry.upload_note ?? 'Archival video — poster still')
-                      }
+                  {re.entry.media_kind === 'video' ? (
+                    // D-W1-A: the room video cell - poster + attestation line + gated player.
+                    <RoomVideo
+                      mediaEntryId={re.entry.id}
+                      posterUrl={posterUrl ?? null}
+                      alt={re.entry.upload_note ?? 'Archival video — poster still'}
+                      attestation={attestation.get(re.entry.id) ?? null}
                     />
-                  </div>
+                  ) : (
+                    <div
+                      style={{
+                        width: '100%',
+                        aspectRatio: '4 / 3',
+                        background: 'var(--vault-s2)',
+                        border: '1px solid var(--vault-border)',
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <RoomImage kind="photo" url={url ?? null} alt={re.entry.upload_note ?? 'Archival photograph'} />
+                    </div>
+                  )}
                   <figcaption>
                     <ProvenancePanel re={re} />
                   </figcaption>

@@ -281,3 +281,78 @@ export async function loadRoomState(
 
   return { ratified, entries: roomEntries };
 }
+
+// D-W1-A: the 2b consent category (recorded voice) - the second playback-gate leg. Inert
+// but real until E2.3: when members can hold grants, this leg becomes live with NO schema
+// change. Distinct from the 2a (media_appearance) category that gates identified display.
+export const RECORDED_VOICE_CATEGORY = 'recorded_voice' as const;
+
+// D-W1-A: the video-playback gate (spec 5.7), evaluated server-side - the UI is NEVER the
+// boundary. Returns { allowed } ONLY; the route returns a NEUTRAL 403 on fail, leaking
+// neither which leg failed nor what tags/grants exist. Gate = Leg1 OR Leg2:
+//   Leg1 - the LATEST media_voice_attestations event for the entry is 'no_member_voice'.
+//   Leg2 - at least ONE identified member (current, non-superseded member_identification
+//          tags, reused from the room read-model - no twin) AND every identified member
+//          has a current 'recorded_voice' (2b) grant.
+//   A2a - zero identified members => Leg2 is FALSE (absence of tags is not evidence of
+//         absence of voices; an untagged video plays only via an attestation).
+// ANY uncertainty - read error, missing read-model, non-video, missing table - FAILS
+// CLOSED ({ allowed: false }). content_hash/withdrawal are orthogonal and not consulted.
+export async function evaluatePlaybackGate(
+  admin: AdminClient,
+  mediaEntryId: string,
+): Promise<{ allowed: boolean }> {
+  try {
+    const { data: entry } = (await admin
+      .from('media_entries')
+      .select('league_id, media_kind')
+      .eq('id', mediaEntryId)
+      .maybeSingle()) as { data: { league_id: string; media_kind: string } | null };
+    if (!entry || entry.media_kind !== 'video') return { allowed: false };
+
+    // Leg 1 - latest attestation is 'no_member_voice'. A missing table (migration 015 not
+    // applied) yields an error -> leg 1 is simply not satisfied, not a throw.
+    const { data: attRows, error: attErr } = (await admin
+      .from('media_voice_attestations')
+      .select('attested_state, recorded_at')
+      .eq('media_entry_id', mediaEntryId)
+      .order('recorded_at', { ascending: false })
+      .limit(1)) as {
+      data: { attested_state: string; recorded_at: string }[] | null;
+      error: { code?: string } | null;
+    };
+    if (!attErr && attRows && attRows[0]?.attested_state === 'no_member_voice') {
+      return { allowed: true };
+    }
+
+    // Leg 2 - reuse the room read-model for current member_identification tags (no twin).
+    const room = await loadRoomState(admin, entry.league_id, { includeWithdrawn: true });
+    const re = room.entries.find((e) => e.entry.id === mediaEntryId);
+    const identifiedIds = Array.from(
+      new Set(
+        (re?.tagsByKind.member_identification ?? [])
+          .map((t) => t.tagged_member_user_id)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    // A2a vacuous-truth exclusion: no identified members => leg 2 false.
+    if (identifiedIds.length === 0) return { allowed: false };
+
+    const { data: grants, error: grantErr } = (await admin
+      .from('member_consent_current')
+      .select('member_user_id, current_state')
+      .eq('league_id', entry.league_id)
+      .eq('category', RECORDED_VOICE_CATEGORY)
+      .in('member_user_id', identifiedIds)) as {
+      data: { member_user_id: string; current_state: string }[] | null;
+      error: { code?: string } | null;
+    };
+    if (grantErr) return { allowed: false };
+    const granted = new Set(
+      (grants ?? []).filter((g) => g.current_state === 'GRANT').map((g) => g.member_user_id),
+    );
+    return { allowed: identifiedIds.every((id) => granted.has(id)) };
+  } catch {
+    return { allowed: false };
+  }
+}

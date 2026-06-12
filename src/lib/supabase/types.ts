@@ -376,6 +376,19 @@ export interface MediaExpungementEvent {
   recorded_at: string;
 }
 
+// D-W1-A (migration 015): the append-only voice-attestation event - a commissioner's
+// claim about whether a video contains a member's voice. The playback gate reads the
+// LATEST event per entry.
+export interface MediaVoiceAttestation {
+  id: string;
+  league_id: string;
+  media_entry_id: string;
+  attested_state: 'no_member_voice' | 'member_voice_present';
+  attested_by: string;
+  note: string | null;
+  recorded_at: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -432,6 +445,7 @@ export type Database = {
       media_display_withdrawals: { Row: MediaDisplayWithdrawal; Insert: Omit<MediaDisplayWithdrawal, 'id' | 'recorded_at'>; Update: never };
       media_display_reinstatements: { Row: MediaDisplayReinstatement; Insert: Omit<MediaDisplayReinstatement, 'id' | 'recorded_at'>; Update: never };
       media_expungement_events: { Row: MediaExpungementEvent; Insert: Omit<MediaExpungementEvent, 'id' | 'recorded_at'>; Update: never };
+      media_voice_attestations: { Row: MediaVoiceAttestation; Insert: Omit<MediaVoiceAttestation, 'id' | 'recorded_at'>; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };
