@@ -144,17 +144,20 @@ Done + still open:
   fixes folded in (player wiring, overlay controls, local date, gated affordance). The one
   open limitation (corpus is iPhone HEVC; Chrome can't decode) is addressed by D-W1-A6. Memos
   `…_DW1A_VOICE_ATTESTATION_RULING.md`, `…_DW1A_VOICE_PLAYBACK_BUILD.md`.
-- **D-W1-A6 playback rendition — DONE on `feat/w1-a6-playback-rendition`, in PR #22;
-  DISCHARGE HELD pending rendition backfill + click-through.** DECIDE ruling Fable 2026-06-12
-  (mechanism spec under 6.9; the b78070f LEAN precedent). A derived `playback.mp4` (H.264/AAC)
-  sibling in poster.jpg's governance class: the sign route signs rendition-when-present-else-
-  original (`cb04b02`, progressive enhancement, zero regression); client-direct upload via a
-  new commissioner-only `/api/av-room/rendition-grant` (`4509397`, server-named path, video/mp4,
-  upsert, no finalize); empty-file.type contentType guard (`6f2204b`, A6-4). Commissioner-side
-  ffmpeg backfill script delivered to `~/sv-apply/` (not committed). No new table / RLS surface;
-  governance 116/0. Ruling memo `…_DW1A6_PLAYBACK_RENDITION_RULING.md`; build memo
-  `…_DW1A6_PLAYBACK_RENDITION_BUILD.md`. Founder runway: backfill 2 corpus videos -> Chrome
-  playback with sound + scrub-seek (closes the last D-W1-A flag).
+- **D-W1-A6 playback rendition — DONE + DISCHARGED 2026-06-12** (merged PR #22; founder
+  click-through complete). DECIDE ruling Fable 2026-06-12 (mechanism spec under 6.9; the
+  b78070f LEAN precedent). A derived `playback.mp4` (H.264/AAC) sibling in poster.jpg's
+  governance class: the sign route signs rendition-when-present-else-original (`cb04b02`,
+  progressive enhancement, zero regression); client-direct upload via a new commissioner-only
+  `/api/av-room/rendition-grant` (`4509397`, server-named path, video/mp4, upsert, no finalize);
+  empty-file.type contentType guard (`6f2204b`, A6-4); CSP `media-src` fix (`b8c3cd2`) +
+  quick-look portrait height fix (`93db8aa`). Verified end-to-end: rendition leg serves
+  playback.mp4 (picture + sound), refusal cycle both directions, scrub-seek (closes the last
+  D-W1-A flag). Governance 116/0. Memos `…_DW1A6_PLAYBACK_RENDITION_RULING.md`,
+  `…_DW1A6_PLAYBACK_RENDITION_BUILD.md`. **Carry-forward candidates (not built):** a backfill
+  script v2 (per-entry output path; refuse empty HASH; no false PAIRING on SKIP); same-footage-
+  different-bytes duplicates evade the byte-hash detector (accepted limitation); an HDR-to-8-bit
+  recipe v2.
 
 ### Harden / operate
 - CI live on push/PR (this scaffold).

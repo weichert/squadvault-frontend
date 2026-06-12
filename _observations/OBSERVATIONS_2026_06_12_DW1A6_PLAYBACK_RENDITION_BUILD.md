@@ -3,9 +3,9 @@
 Dated 2026-06-12. Session: Claude Code / Opus 4.8 (EXECUTE). Branch
 `feat/w1-a6-playback-rendition` off `main` at `cb3ba97`. Mechanism work under invariant
 6.9 inside the admitted W.1 surface - specification, not amendment (the b78070f LEAN
-precedent). Ruling memo of record = first commit (`1379739`). One PR. Discharge held for
-the founder click-through (rendition backfill + confirming the Network filename switches to
-playback.mp4). The D-W1-A scrub-seek flag is now CLOSED on the original (batch-2 below).
+precedent). Ruling memo of record = first commit (`1379739`). One PR (#22). Founder
+click-through COMPLETE 2026-06-12 - rendition leg, refusal cycle, scrub-seek, and the 9:16
+portrait fix all OBSERVED; pairing + ffmpeg version recorded below. Ready to merge.
 
 ## Shipped
 
@@ -56,14 +56,21 @@ may be 10-bit; 4:2:0 8-bit is the broad-decode target). `+faststart` fronts the 
 for range-request seek on a signed URL. ffmpeg output is not byte-stable across versions -
 the METHOD is pinned, not the bytes.
 
-**Producing ffmpeg -version:** `<PLACEHOLDER - paste the script's first line at runway>`
+**Producing ffmpeg -version:** `ffmpeg version 8.1.1 Copyright (c) 2000-2026 the FFmpeg
+developers (Homebrew bottle, Apple clang 16.0.0)`
 
-## Pairing table (filled at runway)
+## Pairing table (OBSERVED at runway, 2026-06-12)
+
+The two corpus videos are BYTE-DUPLICATES (identical original content_hash) - one rendition
+serves both (identical rendition sha256).
 
 | entry id | original content_hash (mig 013, ID convenience) | rendition sha256 |
 |----------|--------------------------------------------------|------------------|
-| `<entry1>` | `<hash1>` | `<sha1>` |
-| `<entry2>` | `<hash2>` | `<sha2>` |
+| `9be767f9-9909-488f-a4de-752c896cf91b` | `857e3b9b…f03a8b913` | `06d814db…aac2a6d7` |
+| `bab24ed6-1d60-457c-955b-62619834cd5c` | `857e3b9b…f03a8b913` | `06d814db…aac2a6d7` |
+
+Full hashes: original `857e3b9bea4869c75d73535babc3015cbef775103abf58efeecf576f03a8b913`;
+rendition `06d814db660d073b187326be3ac98438dc7371ff064eb1206d608a18aac2a6d7`.
 
 ## Runway venue (recorded honestly)
 
@@ -157,17 +164,37 @@ transcode infrastructure - commissioner-side production only. Original bytes nev
 renditions regenerable or deletable without fact loss. Option-3 rejection stands.
 Verified-vs-testimony distinction untouched.
 
-## Founder runway (nearly complete)
+## Founder runway - COMPLETE (2026-06-12)
 
-Closed end-to-end: CSP playback (Chrome, picture + sound), scrub-seek, expiry, fallback leg,
-content-type, the rendition leg (playback.mp4 served, Network filename switch), the refusal
-cycle both directions. What's left:
+All closed end-to-end: CSP playback (Chrome, picture + sound), scrub-seek, expiry, fallback
+leg, content-type, the rendition leg (playback.mp4 served, Network filename switch), the
+refusal cycle both directions, and the **9:16 portrait re-verify** - OBSERVED at `93db8aa`:
+poster + strip, mounted player + controls, and the refusal line ALL within the viewport.
+Pairing + ffmpeg version recorded above.
 
-1. **Re-verify the 9:16 portrait entry** in quick-look after this commit (poster + mounted-
-   player + refusal states all sit within the viewport with the strip reachable).
-2. Close-out: paste the PAIRING lines (entry id / original content_hash / rendition sha256)
-   + the producing `ffmpeg -version` line, so I fill the pairing table + version placeholder
-   in this memo; then merge PR #22 via `gh pr merge`.
+## Runway findings (batch 3, recorded; follow-ups are ledger, not this PR)
 
-(The backfill script + the per-entry CURRENT-attestation-state verification noted in batch 2
-are done; the rendition leg is live.)
+- **Backfill script defect** (`~/sv-apply/apply_a6_rendition_backfill_v1.sh`): two source
+  variables resolving to the same output folder cause an output-path COLLISION - the second
+  pass SKIPs (output exists) but still emits a (false) PAIRING line for it; and HASH
+  placeholders pass the guard (the script only asserts SRC/ENTRY non-empty, not HASH). The
+  founder worked around it via Download Original + shasum. A script v2 should: derive the
+  output per ENTRY (not per source dir), refuse empty HASH, and not emit PAIRING on SKIP.
+- **Byte-duplicate finding**: original `857e3b9b…` is stored under BOTH entries
+  (`9be767f9…`, `bab24ed6…`) - verified via Download Original + shasum on both sides. They are
+  true byte-duplicates; the R4 derived duplicate indicator surfaces them, and one rendition
+  legitimately serves both.
+- **IMG_6214 near-miss**: a local source hash-matched NEITHER stored row; Download Original
+  was used to obtain the exact stored bytes for transcoding. content_hash is an ID
+  convenience, not provenance (per mig 013) - this is exactly why entry id + storage path are
+  the identity of record.
+
+## Ledger (carry-forward candidates, not in this PR)
+
+- **Same-footage-different-bytes duplicates evade the hash detector.** Two recordings of the
+  same moment have different bytes -> different content_hash -> the byte-equality detector
+  (R4-D3) does not flag them. A known, accepted limitation of byte-identity dup detection;
+  any semantic/perceptual dedup would be a separate DECIDE (and brushes the no-AI line).
+- **HDR-to-8-bit recipe v2 candidate.** The pinned recipe forces `yuv420p` (8-bit) for broad
+  decode; an HDR source loses its HDR. A recipe v2 that handles HDR tone-mapping is a future
+  candidate (deterministic-in-method; would be recorded with its own ffmpeg version).
