@@ -102,21 +102,30 @@ Done + still open:
     entries / 0 NULLs; cross-kind + against-withdrawn matching; control upload prepends).
     Memos: `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_INGEST_ROUND_4_R4D3.md`,
     `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_R4D3_HASH_BACKFILL_RLS_FIX.md`.
-  - **Continuation batch 1 — DONE on `feat/w1-ingest-round4-cont`, in PR #18; DISCHARGE
-    HELD pending click-through.** R4-D1 quick-look (`a6aef39` — full original signed on
-    demand; video = poster + attestation placeholder, no player; unreadable original falls
-    back to an open-original link; shared EntryDetailPanel for the tag panel), R4-D2
-    download original (`7d01097` — commissioner retrieval of the full-res original, any
-    kind, withdrawn included), R4-D5 untagged work queue (`f2cf807` — tag-absence filter +
-    quiet count), R4-D8 select-all-in-filter (`6393b2a`), override-prepend fix (`2ef04bb` —
-    the narrowed #16 finding). Governance 114/0.
-  - **Continuation batch 2 (pending, same branch or next):** R4-D4 tag autocomplete (own
-    ratified values only) + the D4 ordering assertion, R4-D6 keyboard-first flow, R4-D7
-    retry-failed, the **jump-to-item link** (D1 owes it), and the **derived duplicate
-    indicator** (read-model derives "DUPLICATE of <item>" from content_hash equality, all
-    but the earliest per hash; reuses D1's jump-to-item; adds a "duplicates" filter; NO
-    migration / NO tag kind / NO stored state — adjudicated Fable 2026-06-11). Full brief:
-    `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_ROUND_4_CONTINUATION_QUEUE.md`.
+  - **Continuation batch 1 — DONE + DISCHARGED 2026-06-11** (merged `a97fd15`, PR #18;
+    founder click-through PASSED in full). R4-D1 quick-look (`a6aef39`), R4-D2 download
+    original (`7d01097`), R4-D5 untagged work queue (`f2cf807`), R4-D8 select-all-in-filter
+    (`6393b2a`), override-prepend fix (`2ef04bb`). Governance 114/0.
+  - **Continuation batch 2 — DONE on `feat/w1-ingest-round4-cont-b2`, in PR #19; DISCHARGE
+    HELD pending migration 014 apply + one consolidated click-through.** R4-D4 tag
+    autocomplete (own ratified values only) + the D4 ordering assertion (`6d8ed09`), R4-D7
+    retry-failed (`1eb5520`), R4-D6 keyboard-first flow (`312938a`), jump-to-item link
+    (`8d7582c`), derived duplicate indicator (`a594cec`), and **media expungement**
+    (`7119651`). Governance 114/0 (G19 probe-skips until 014; self-activates to 115 after).
+    Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_ROUND_4_CONT_BATCH_2.md`.
+  - **D-W1-E1 media EXPUNGEMENT class — ADMITTED + BUILT 2026-06-11** (founder, Fable chat;
+    Spec 5.2 Amendment 1 ratified verbatim). Append-only, commissioner-ratified, reason-
+    required expungement event that DELETES the stored bytes (original + renditions) and
+    tombstones the entry (row never deleted; log testifies it existed and was expunged).
+    Terminal (no reinstatement); content_hash survives so re-upload surfaces as
+    duplicate-of-expunged. Built in PR #19: migration 014 `media_expungement_events` +
+    G19, expunge route (authed-insert event = license, then admin byte-delete), room
+    excludes expunged, "Expunged" tombstone filter, Expunge action behind a required-reason
+    confirm, dup-check distinguishes expunged. **Migration 014 needs the dashboard apply.**
+    Post-E2.3 consent dimension deferred to Inc 2. Ruling memo
+    `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_DW1E1_EXPUNGEMENT_RULING.md`.
+    Engine-side follow-up (next engine session, doc-only): flip the parked candidate
+    (engine memo `6dce2f6` + STATE.md Deferred line) PARKED -> ADMITTED.
   - Bright lines: no AI tagging/face-detection/AI-search; no gamification/streaks/nudges;
     no relevance ranking — filters/matches stay deterministic.
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive

@@ -64,8 +64,23 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: 'Could not check for duplicates' }, { status: 502 });
   }
+  if (!data) {
+    return NextResponse.json({ duplicate: null });
+  }
+
+  // D-W1-E1: the dup-check message distinguishes "expunged" from "in the record". The
+  // content_hash survives expungement, so a match may be a tombstone. Graceful if
+  // migration 014 is absent (treated as not-expunged).
+  let expunged = false;
+  const { data: expRow } = (await admin
+    .from('media_expungement_events')
+    .select('id')
+    .eq('media_entry_id', data.id)
+    .limit(1)
+    .maybeSingle()) as { data: { id: string } | null };
+  if (expRow) expunged = true;
 
   return NextResponse.json({
-    duplicate: data ? { id: data.id, note: data.upload_note, createdAt: data.created_at } : null,
+    duplicate: { id: data.id, note: data.upload_note, createdAt: data.created_at, expunged },
   });
 }

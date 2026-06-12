@@ -104,10 +104,25 @@ export default async function AvRoomPage({ params }: Props) {
 
   const room = await loadRoomState(admin, league.id);
 
+  // D-W1-E1: expunged items render NOWHERE except the ingest tombstone filter - never in
+  // the room. Build the expunged set and exclude it. Graceful if migration 014 is absent.
+  const expunged = new Set<string>();
+  {
+    const { data: expRows, error: expErr } = (await admin
+      .from('media_expungement_events')
+      .select('media_entry_id')
+      .eq('league_id', league.id)) as {
+      data: { media_entry_id: string }[] | null;
+      error: { code?: string } | null;
+    };
+    if (!expErr) for (const r of expRows ?? []) expunged.add(r.media_entry_id);
+  }
+  const live = room.entries.filter((re) => !expunged.has(re.entry.id));
+
   // Photo-first ordering: photos (chronological by ingest) then video, both
   // deterministic - no algorithmic ranking (6.4).
-  const photos = room.entries.filter((re) => re.entry.media_kind === 'photo');
-  const videos = room.entries.filter((re) => re.entry.media_kind === 'video');
+  const photos = live.filter((re) => re.entry.media_kind === 'photo');
+  const videos = live.filter((re) => re.entry.media_kind === 'video');
   const ordered = [...photos, ...videos];
 
   // R3-D1: the room is a list surface, so it serves the small thumb.jpg rendition for

@@ -31,6 +31,12 @@ export type IngestEntry = {
   hasPoster: boolean;
   thumbUrl: string | null;
   tags: IngestTag[];
+  // R4-D3 (migration 013) byte-identity, for the derived duplicate indicator. Null until
+  // hashed / pre-migration.
+  contentHash: string | null;
+  // D-W1-E1 (migration 014): expunged = bytes deleted, row tombstoned. Terminal.
+  expunged: boolean;
+  expungedReason: string | null;
 };
 
 export type IngestMember = {
@@ -38,6 +44,10 @@ export type IngestMember = {
   displayName: string;
   granted2a: boolean;
 };
+
+// R4-D4: the league's own ratified tag values, offered as autocomplete. Free-text entry
+// of new values stays first-class (a datalist suggests, never constrains).
+type TagVocab = { contributor: string[]; season: string[]; event: string[] };
 
 const TAG_KIND_LABEL: Record<MediaProvenanceTagKind, string> = {
   contributor: 'Contributor',
@@ -104,9 +114,14 @@ type CorpusFilterState = {
   withdrawn: WithdrawnFilter;
   text: string;
   needs: NeedsFilter;
+  // R4 derived duplicate indicator: 'duplicates' shows only the byte-duplicate items
+  // (every copy after the earliest per content_hash).
+  dup: 'all' | 'duplicates';
+  // D-W1-E1: expunged items are hidden ('hide') by default; 'only' shows the tombstones.
+  expunged: 'hide' | 'only';
 };
 
-const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '', needs: 'all' };
+const EMPTY_FILTERS: CorpusFilterState = { kind: 'all', season: '', event: '', withdrawn: 'all', text: '', needs: 'all', dup: 'all', expunged: 'hide' };
 
 // Distinct values for a tag kind, sorted only to order the SELECTOR options - this
 // orders the dropdown, never the corpus.
@@ -138,7 +153,38 @@ function matchesFilters(entry: IngestEntry, f: CorpusFilterState): boolean {
 }
 
 function filtersActive(f: CorpusFilterState): boolean {
-  return f.kind !== 'all' || f.withdrawn !== 'all' || !!f.season || !!f.event || !!f.text.trim() || f.needs !== 'all';
+  return (
+    f.kind !== 'all' ||
+    f.withdrawn !== 'all' ||
+    !!f.season ||
+    !!f.event ||
+    !!f.text.trim() ||
+    f.needs !== 'all' ||
+    f.dup !== 'all' ||
+    f.expunged !== 'hide'
+  );
+}
+
+// R4 derived duplicate indicator: byte-identity within the league, derived from
+// content_hash - NOT a stored tag. The EARLIEST entry per hash is the original; every
+// later copy maps to it. Retroactive by construction, self-maintaining, no migration.
+function deriveDuplicates(entries: IngestEntry[]): Map<string, string> {
+  const byHash = new Map<string, IngestEntry[]>();
+  for (const e of entries) {
+    if (!e.contentHash) continue;
+    const arr = byHash.get(e.contentHash);
+    if (arr) arr.push(e);
+    else byHash.set(e.contentHash, [e]);
+  }
+  const duplicateOf = new Map<string, string>();
+  for (const group of Array.from(byHash.values())) {
+    if (group.length < 2) continue;
+    const original = group.reduce((a: IngestEntry, b: IngestEntry) => (a.createdAt <= b.createdAt ? a : b));
+    for (const e of group) {
+      if (e.id !== original.id) duplicateOf.set(e.id, original.id);
+    }
+  }
+  return duplicateOf;
 }
 
 export function IngestPanel({
@@ -157,23 +203,78 @@ export function IngestPanel({
   const router = useRouter();
   // D2: batch tagging - selection lifted here so one tag applies across many items.
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  function toggleSelect(id: string) {
+  function clearSelection() {
+    setSelected(new Set());
+  }
+  // R4-D6: shift-click range select. The anchor is the last single toggle; a shift-click
+  // adds every selectable item between the anchor and the clicked row.
+  const lastSelectedIndexRef = useRef<number | null>(null);
+  function selectAt(id: string, index: number, shiftKey: boolean) {
     setSelected((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastSelectedIndexRef.current !== null) {
+        const lo = Math.min(lastSelectedIndexRef.current, index);
+        const hi = Math.max(lastSelectedIndexRef.current, index);
+        for (let i = lo; i <= hi; i++) {
+          const e = visibleEntries[i];
+          if (e && !e.withdrawn) next.add(e.id);
+        }
+      } else if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    lastSelectedIndexRef.current = index;
+  }
+  // R4-D6: keyboard-first. A focused row (J/K), space = quick-look, enter = expand. Expand
+  // state is lifted here so Enter can toggle the focused row's detail.
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
   }
-  function clearSelection() {
-    setSelected(new Set());
-  }
   // D3: deterministic filters narrow the corpus before render. Selectors derive
   // their options from what the corpus actually carries.
   const [filters, setFilters] = useState<CorpusFilterState>(EMPTY_FILTERS);
   const seasons = distinctTagValues(entries, 'season');
   const events = distinctTagValues(entries, 'event');
-  const visibleEntries = entries.filter((e) => matchesFilters(e, filters));
+  // R4-D4: autocomplete vocabulary - the league's OWN previously-recorded values, never
+  // invented and never sourced from anywhere but this league's tag history. Prevents
+  // "Draft Day"/"draft day" drift that would silently split the r2-D3 filters.
+  const vocab: TagVocab = {
+    contributor: distinctTagValues(entries, 'contributor'),
+    season: seasons,
+    event: events,
+  };
+  // R4 derived duplicate indicator: which entries are byte-duplicates of an earlier one.
+  const duplicateOf = deriveDuplicates(entries);
+  const visibleEntries = entries
+    // D-W1-E1: expunged tombstones are hidden unless the Expunged filter asks for them.
+    .filter((e) => (filters.expunged === 'only' ? e.expunged : !e.expunged))
+    .filter((e) => matchesFilters(e, filters))
+    .filter((e) => (filters.dup === 'duplicates' ? duplicateOf.has(e.id) : true));
+
+  // R4-D4 ordering assertion: the ingest list is newest-first (server sort, D4). A dev
+  // tripwire makes a silent regression of that invariant loud rather than invisible.
+  if (process.env.NODE_ENV !== 'production') {
+    for (let i = 1; i < entries.length; i++) {
+      if (entries[i - 1].createdAt < entries[i].createdAt) {
+        // eslint-disable-next-line no-console
+        console.error('R4-D4 ordering assertion FAILED: ingest entries are not newest-first', {
+          prev: entries[i - 1].id,
+          next: entries[i].id,
+        });
+        break;
+      }
+    }
+  }
   // Keep selection from going stale: batch tagging only acts on items in view, so
   // an item filtered off-screen is not silently tagged.
   const presentIds = new Set(visibleEntries.map((e) => e.id));
@@ -198,7 +299,7 @@ export function IngestPanel({
 
   // R4-D5: the untagged work queue's quiet count - entries carrying no tags at all.
   // Deterministic, commissioner-only tool-state; no streaks, no progress mechanics.
-  const untaggedCount = entries.filter((e) => e.tags.length === 0).length;
+  const untaggedCount = entries.filter((e) => !e.expunged && e.tags.length === 0).length;
 
   // R4-D1 quick-look: an index INTO the filtered list (so arrow-keys walk exactly what
   // the commissioner is looking at). Opening resolves the row's id to its filtered index.
@@ -208,10 +309,58 @@ export function IngestPanel({
     if (i >= 0) setQuickLook(i);
   }
 
+  // R4: jump to a specific item in the corpus - focus it (the keyboard focus ring) and
+  // scroll it into view via the virtualizer. If it is filtered out of the current view,
+  // clear the filters first so it can be shown (its index in the cleared, newest-first
+  // list equals its index in the full corpus). Reused by the duplicate refusal and the
+  // derived duplicate indicator.
+  function jumpToItem(id: string) {
+    const inView = visibleEntries.findIndex((e) => e.id === id);
+    if (inView >= 0) {
+      setFocusedIndex(inView);
+      return;
+    }
+    const full = entries.findIndex((e) => e.id === id);
+    if (full < 0) return;
+    setFilters(EMPTY_FILTERS);
+    setFocusedIndex(full);
+  }
+
+  // R4-D6: global keyboard nav over the corpus. J/K move the focused row, Space opens
+  // quick-look on it, Enter expands it. Ignored while typing in a field or while the
+  // lightbox is open (quick-look owns its own keys). A curator's bench should feel like one.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (quickLook !== null) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const n = visibleEntries.length;
+      if (n === 0) return;
+      if (e.key === 'j' || e.key === 'J') {
+        setFocusedIndex((i) => Math.min(n - 1, i < 0 ? 0 : i + 1));
+      } else if (e.key === 'k' || e.key === 'K') {
+        setFocusedIndex((i) => Math.max(0, i < 0 ? 0 : i - 1));
+      } else if (e.key === ' ') {
+        if (focusedIndex >= 0 && visibleEntries[focusedIndex]) {
+          e.preventDefault();
+          openQuickLook(visibleEntries[focusedIndex].id);
+        }
+      } else if (e.key === 'Enter') {
+        if (focusedIndex >= 0 && visibleEntries[focusedIndex]) {
+          e.preventDefault();
+          toggleExpand(visibleEntries[focusedIndex].id);
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleEntries, focusedIndex, quickLook]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <RoomRatification leagueId={leagueId} ratified={ratified} />
-      <UploadForm leagueId={leagueId} />
+      <UploadForm leagueId={leagueId} onJumpToItem={jumpToItem} />
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
           <h2 className="font-mono" style={labelStyle}>
@@ -291,9 +440,15 @@ export function IngestPanel({
           <VirtualCorpus
             entries={visibleEntries}
             members={members}
+            vocab={vocab}
             selected={selected}
-            onToggleSelect={toggleSelect}
+            expandedIds={expandedIds}
+            focusedIndex={focusedIndex}
+            duplicateOf={duplicateOf}
+            onSelect={selectAt}
+            onToggleExpand={toggleExpand}
             onOpen={openQuickLook}
+            onJumpToItem={jumpToItem}
           />
         )}
       </section>
@@ -303,6 +458,7 @@ export function IngestPanel({
           entries={visibleEntries}
           index={quickLook}
           members={members}
+          vocab={vocab}
           onIndexChange={setQuickLook}
           onClose={() => setQuickLook(null)}
         />
@@ -321,15 +477,27 @@ export function IngestPanel({
 function VirtualCorpus({
   entries,
   members,
+  vocab,
   selected,
-  onToggleSelect,
+  expandedIds,
+  focusedIndex,
+  duplicateOf,
+  onSelect,
+  onToggleExpand,
   onOpen,
+  onJumpToItem,
 }: {
   entries: IngestEntry[];
   members: IngestMember[];
+  vocab: TagVocab;
   selected: Set<string>;
-  onToggleSelect: (id: string) => void;
+  expandedIds: Set<string>;
+  focusedIndex: number;
+  duplicateOf: Map<string, string>;
+  onSelect: (id: string, index: number, shiftKey: boolean) => void;
+  onToggleExpand: (id: string) => void;
   onOpen: (id: string) => void;
+  onJumpToItem: (id: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -345,6 +513,14 @@ function VirtualCorpus({
     getItemKey: (i) => entries[i].id,
   });
   const rows = virtualizer.getVirtualItems();
+
+  // R4-D6: keep the keyboard-focused row in view as J/K move it.
+  useEffect(() => {
+    if (focusedIndex >= 0 && focusedIndex < entries.length) {
+      virtualizer.scrollToIndex(focusedIndex, { align: 'auto' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedIndex]);
 
   return (
     <div ref={listRef} style={{ position: 'relative', height: virtualizer.getTotalSize() }}>
@@ -367,10 +543,16 @@ function VirtualCorpus({
               <EntryCard
                 entry={e}
                 members={members}
+                vocab={vocab}
                 selectable={!e.withdrawn}
                 selected={selected.has(e.id)}
-                onToggleSelect={() => onToggleSelect(e.id)}
+                expanded={expandedIds.has(e.id)}
+                focused={vrow.index === focusedIndex}
+                duplicateOfId={duplicateOf.get(e.id) ?? null}
+                onSelect={(shiftKey) => onSelect(e.id, vrow.index, shiftKey)}
+                onToggleExpand={() => onToggleExpand(e.id)}
                 onOpen={() => onOpen(e.id)}
+                onJumpToItem={onJumpToItem}
               />
             </div>
           </div>
@@ -470,6 +652,28 @@ function CorpusFilters({
         {(Object.keys(TAG_KIND_LABEL) as MediaProvenanceTagKind[]).map((k) => (
           <option key={k} value={k}>Needs {TAG_KIND_LABEL[k].toLowerCase()}</option>
         ))}
+      </select>
+      {/* R4 derived duplicate indicator: filter to byte-duplicates. */}
+      <select
+        aria-label="Filter by duplicate state"
+        value={filters.dup}
+        onChange={(e) => onChange({ ...filters, dup: e.target.value as CorpusFilterState['dup'] })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="all">All items</option>
+        <option value="duplicates">Duplicates only</option>
+      </select>
+      {/* D-W1-E1: the tombstone view. */}
+      <select
+        aria-label="Filter by expunged state"
+        value={filters.expunged}
+        onChange={(e) => onChange({ ...filters, expunged: e.target.value as CorpusFilterState['expunged'] })}
+        className="font-ui"
+        style={selStyle}
+      >
+        <option value="hide">Active</option>
+        <option value="only">Expunged (tombstones)</option>
       </select>
       <input
         type="text"
@@ -844,6 +1048,16 @@ class DuplicateError extends Error {
   }
 }
 
+// A failure that will fail IDENTICALLY forever (a content refusal: HEIC-by-content, an
+// unsupported type, an over-cap file). Retry is for TRANSIENT failures only - a permanent
+// refusal gets the honest message and NO retry button.
+class PermanentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermanentError';
+  }
+}
+
 // D6 HEIC honesty (module-level so single + queue paths share it). iPhone photos
 // default to HEIC/HEIF, which browsers can't render in an <img>, so storing one only
 // yields a broken thumbnail. Some browsers leave file.type empty, so also sniff ext.
@@ -871,19 +1085,20 @@ async function uploadOneFile(
   opts?: { allowDuplicate?: boolean },
 ): Promise<void> {
   const kind = mediaKindFor(file);
-  if (!kind) throw new Error('Unsupported file type — choose an image or video.');
+  // These pre-checks are PERMANENT: the same file fails identically forever, so no retry.
+  if (!kind) throw new PermanentError('Unsupported file type — choose an image or video.');
   if (isHeicFile(file)) {
-    throw new Error('HEIC is not supported. Export the photo as JPEG and upload that.');
+    throw new PermanentError('HEIC is not supported. Export the photo as JPEG and upload that.');
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
+    throw new PermanentError(`This file is ${formatSize(file.size)}; the limit is ${MAX_UPLOAD_LABEL}.`);
   }
 
   // R4-D3: one byte read -> content hash + content-level HEIC check (catches a renamed
   // HEIC the extension check above missed), then a deterministic duplicate check.
   const { hash, heic } = await inspectFileBytes(file);
   if (heic) {
-    throw new Error('This is a HEIC/HEVC photo (by its contents, despite the name). Export it as JPEG and upload that.');
+    throw new PermanentError('This is a HEIC/HEVC photo (by its contents, despite the name). Export it as JPEG and upload that.');
   }
   if (!opts?.allowDuplicate) {
     const dupRes = await fetch('/api/av-room/duplicate', {
@@ -893,11 +1108,15 @@ async function uploadOneFile(
     });
     if (dupRes.ok) {
       const { duplicate } = (await dupRes.json()) as {
-        duplicate: { id: string; createdAt: string } | null;
+        duplicate: { id: string; createdAt: string; expunged?: boolean } | null;
       };
       if (duplicate) {
         const when = new Date(duplicate.createdAt).toISOString().slice(0, 10);
-        throw new DuplicateError(`Already in the record (uploaded ${when}).`, duplicate.id);
+        // D-W1-E1: distinguish a duplicate-of-expunged from one still in the record.
+        const msg = duplicate.expunged
+          ? `Duplicate of an expunged item (was uploaded ${when}).`
+          : `Already in the record (uploaded ${when}).`;
+        throw new DuplicateError(msg, duplicate.id);
       }
     }
   }
@@ -962,11 +1181,13 @@ type QueueItem = {
   // (so "upload anyway" can resubmit with an explicit override).
   duplicateOf?: string;
   file?: File;
+  // Fix: a permanent failure (content refusal) gets the message only - no retry button.
+  permanent?: boolean;
 };
 
 const UPLOAD_CONCURRENCY = 3;
 
-function UploadForm({ leagueId }: { leagueId: string }) {
+function UploadForm({ leagueId, onJumpToItem }: { leagueId: string; onJumpToItem: (id: string) => void }) {
   const router = useRouter();
   const [note, setNote] = useState('');
   const [items, setItems] = useState<QueueItem[]>([]);
@@ -1014,6 +1235,23 @@ function UploadForm({ leagueId }: { leagueId: string }) {
     enqueue([{ file: item.file, allowDuplicate: true }]);
   }
 
+  // R4-D7: retry a failed upload (a flaky connection costs a click, not a re-drop). Drop
+  // the failed row and re-enqueue the SAME file as a fresh normal upload - the duplicate
+  // and HEIC checks run again (a retry is not an override). Duplicates are not retryable
+  // here: they have the explicit "Upload anyway" override instead.
+  function retry(item: QueueItem) {
+    if (!item.file) return;
+    setItems((prev) => prev.filter((it) => it.id !== item.id));
+    enqueue([{ file: item.file }]);
+  }
+  function retryAll() {
+    const retryable = items.filter((it) => it.status === 'failed' && !it.duplicateOf && it.file);
+    if (retryable.length === 0) return;
+    const ids = new Set(retryable.map((it) => it.id));
+    setItems((prev) => prev.filter((it) => !ids.has(it.id)));
+    enqueue(retryable.map((it) => ({ file: it.file as File })));
+  }
+
   async function ensureRunning() {
     if (runningRef.current) return;
     runningRef.current = true;
@@ -1030,8 +1268,12 @@ function UploadForm({ leagueId }: { leagueId: string }) {
         } catch (e) {
           if (e instanceof DuplicateError) {
             setItem(next.id, { status: 'failed', reason: e.message, duplicateOf: e.duplicateOf, file: next.file });
+          } else if (e instanceof PermanentError) {
+            // Content refusal - fails identically forever. Message only, no retry.
+            setItem(next.id, { status: 'failed', reason: e.message, permanent: true });
           } else {
-            setItem(next.id, { status: 'failed', reason: (e as Error).message });
+            // R4-D7: a transient failure keeps the File so it can be retried with one click.
+            setItem(next.id, { status: 'failed', reason: (e as Error).message, file: next.file });
           }
         } finally {
           // Drop from the live queue either way; failures stay in `items` for display.
@@ -1048,6 +1290,8 @@ function UploadForm({ leagueId }: { leagueId: string }) {
   }
 
   const active = items.some((it) => it.status === 'queued' || it.status === 'uploading');
+  // R4-D7: retryable = failed, not a duplicate (those use Upload anyway), file retained.
+  const failedRetryable = items.filter((it) => it.status === 'failed' && !it.duplicateOf && !it.permanent && it.file);
 
   return (
     <section style={cardStyle}>
@@ -1143,6 +1387,17 @@ function UploadForm({ leagueId }: { leagueId: string }) {
                         ? 'DONE'
                         : `FAILED — ${it.reason ?? 'error'}`}
                 </span>
+                {it.duplicateOf && (
+                  // R4 jump-to-item: take the commissioner to the existing original.
+                  <button
+                    type="button"
+                    onClick={() => onJumpToItem(it.duplicateOf as string)}
+                    className="font-mono"
+                    style={{ ...btnStyle(false), flexShrink: 0, padding: '0.1rem 0.4rem' }}
+                  >
+                    Show original
+                  </button>
+                )}
                 {it.duplicateOf && it.file && (
                   <button
                     type="button"
@@ -1153,9 +1408,29 @@ function UploadForm({ leagueId }: { leagueId: string }) {
                     Upload anyway
                   </button>
                 )}
+                {/* R4-D7: only a TRANSIENT failure is retryable. Permanent content
+                    refusals (HEIC-by-content, etc.) get the message only - no retry. */}
+                {it.status === 'failed' && !it.duplicateOf && !it.permanent && it.file && (
+                  <button
+                    type="button"
+                    onClick={() => retry(it)}
+                    className="font-mono"
+                    style={{ ...btnStyle(false), flexShrink: 0, padding: '0.1rem 0.4rem' }}
+                  >
+                    Retry
+                  </button>
+                )}
               </li>
             ))}
           </ul>
+        )}
+
+        {/* R4-D7: retry every retryable failure at once - a flaky connection costs a
+            click, not a re-drop. Duplicates are excluded (they have Upload anyway). */}
+        {failedRetryable.length > 1 && (
+          <button type="button" onClick={retryAll} className="font-mono" style={{ ...btnStyle(false), alignSelf: 'flex-start', padding: '0.35rem 0.6rem' }}>
+            Retry all ({failedRetryable.length})
+          </button>
         )}
 
         {active && (
@@ -1291,12 +1566,14 @@ function QuickLook({
   entries,
   index,
   members,
+  vocab,
   onIndexChange,
   onClose,
 }: {
   entries: IngestEntry[];
   index: number;
   members: IngestMember[];
+  vocab: TagVocab;
   onIndexChange: (i: number) => void;
   onClose: () => void;
 }) {
@@ -1475,7 +1752,7 @@ function QuickLook({
             padding: '0.9rem',
           }}
         >
-          <EntryDetailPanel entry={entry} members={members} />
+          <EntryDetailPanel entry={entry} members={members} vocab={vocab} />
         </div>
       </div>
     </div>
@@ -1486,13 +1763,14 @@ function QuickLook({
 // form. Rendered both inside the corpus row's expand (EntryCard) AND alongside the full
 // image in quick-look (QuickLook): "you cannot tag what you cannot see." Owns the tag-form
 // and poster/correction writes; the compact row's withdraw/reinstate stay in EntryCard.
-function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: IngestMember[] }) {
+function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; members: IngestMember[]; vocab: TagVocab }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [posterBusy, setPosterBusy] = useState(false);
   const [posterMsg, setPosterMsg] = useState<string | null>(null);
   const [downloadBusy, setDownloadBusy] = useState(false);
+  const [expungeBusy, setExpungeBusy] = useState(false);
   const [tagKind, setTagKind] = useState<MediaProvenanceTagKind>('contributor');
   const [tagValue, setTagValue] = useState('');
   const [datePrecision, setDatePrecision] = useState<MediaDatePrecision>('exact');
@@ -1503,6 +1781,12 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
   const memberName = (uid: string | null) =>
     members.find((m) => m.memberUserId === uid)?.displayName ?? 'Unknown member';
   const selectedMember = members.find((m) => m.memberUserId === taggedMember) ?? null;
+
+  // R4-D4: the league's own ratified values for the active kind, offered as a datalist
+  // (suggests, never constrains - free text stays first-class). Date is open, so no list.
+  const vocabFor =
+    tagKind === 'contributor' || tagKind === 'season' || tagKind === 'event' ? vocab[tagKind] : null;
+  const vocabListId = vocabFor && vocabFor.length > 0 ? `vocab-${entry.id}-${tagKind}` : undefined;
 
   async function setPoster(img: File) {
     setPosterBusy(true);
@@ -1556,6 +1840,34 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
     }
   }
 
+  // D-W1-E1: expunge - the ruled exception. A required-reason confirm states plainly what
+  // happens (bytes destroyed, permanent, tombstone remains). Terminal: no reinstatement.
+  async function expunge() {
+    const reason = window.prompt(
+      'EXPUNGE this item?\n\nThis permanently DELETES the stored bytes — the original and its thumbnail/poster. It cannot be undone. The record keeps a tombstone showing the item existed and was expunged, when, by whom, and why.\n\nEnter a reason (required):',
+    );
+    if (reason === null || reason.trim().length === 0) return;
+    setExpungeBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/av-room/expunge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaEntryId: entry.id, reason: reason.trim() }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? 'Could not expunge the item.');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not expunge the item.');
+    } finally {
+      setExpungeBusy(false);
+    }
+  }
+
   function resetTagForm() {
     setTagValue('');
     setDatePrecision('exact');
@@ -1571,9 +1883,17 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
       setError(`${TAG_KIND_LABEL[tagKind]} needs a value.`);
       return;
     }
-    if (tagKind === 'date' && !tagValue.trim()) {
-      setError('A date needs a value.');
-      return;
+    if (tagKind === 'date') {
+      if (!tagValue.trim()) {
+        setError('A date needs a value.');
+        return;
+      }
+      // Fix: presence alone admitted nonsense (e.g. "Kent") into the date axis. Refuse an
+      // unparseable date client-side - accept YYYY, YYYY-MM, or YYYY-MM-DD only.
+      if (!/^\d{4}(-\d{2}(-\d{2})?)?$/.test(tagValue.trim())) {
+        setError('Enter a date as YYYY, YYYY-MM, or YYYY-MM-DD.');
+        return;
+      }
     }
     if (tagKind === 'member_identification' && !taggedMember) {
       setError('Choose the member to identify.');
@@ -1720,6 +2040,12 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
                 onChange={(e) => {
                   setTagKind(e.target.value as MediaProvenanceTagKind);
                   setSupersedes(null);
+                  // Fix: a value belongs to its kind. Switching kind must NOT carry the
+                  // previous kind's value across (e.g. "Kent" surviving into the date axis).
+                  setTagValue('');
+                  setTaggedMember('');
+                  setDatePrecision('exact');
+                  setError(null);
                 }}
                 className="font-ui"
                 style={{ ...inputStyle, marginTop: 4 }}
@@ -1755,9 +2081,17 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
                   value={tagValue}
                   onChange={(e) => setTagValue(e.target.value)}
                   placeholder={tagKind === 'date' ? 'e.g. 1998 or 1998-09-04' : ''}
+                  list={vocabListId}
                   className="font-ui"
                   style={{ ...inputStyle, marginTop: 4 }}
                 />
+                {vocabFor && vocabListId && (
+                  <datalist id={vocabListId}>
+                    {vocabFor.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                )}
               </div>
             )}
 
@@ -1815,6 +2149,19 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
           {error}
         </p>
       )}
+      {/* D-W1-E1: expunge - the terminal, ruled exception. Available for any item
+          (withdrawn or live); a required-reason confirm states plainly what will happen. */}
+      <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.6rem' }}>
+        <button
+          type="button"
+          disabled={expungeBusy}
+          onClick={expunge}
+          className="font-mono"
+          style={{ ...btnStyle(expungeBusy), padding: '0.25rem 0.5rem', color: 'var(--vault-withheld)' }}
+        >
+          {expungeBusy ? 'Expunging…' : 'Expunge (delete the bytes)…'}
+        </button>
+      </div>
     </>
   );
 }
@@ -1822,23 +2169,36 @@ function EntryDetailPanel({ entry, members }: { entry: IngestEntry; members: Ing
 function EntryCard({
   entry,
   members,
+  vocab,
   selectable,
   selected,
-  onToggleSelect,
+  expanded,
+  focused,
+  duplicateOfId,
+  onSelect,
+  onToggleExpand,
   onOpen,
+  onJumpToItem,
 }: {
   entry: IngestEntry;
   members: IngestMember[];
+  vocab: TagVocab;
   selectable: boolean;
   selected: boolean;
-  onToggleSelect: () => void;
+  // R4-D6: expand + focus are controlled by IngestPanel so the keyboard (Enter/J/K) can
+  // drive them. onSelect carries shiftKey for range select.
+  expanded: boolean;
+  focused: boolean;
+  // R4 derived duplicate indicator: the original's id if this entry is a byte-duplicate.
+  duplicateOfId: string | null;
+  onSelect: (shiftKey: boolean) => void;
+  onToggleExpand: () => void;
   onOpen: () => void;
+  onJumpToItem: (id: string) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // D3: the edit affordances collapse behind a toggle so a large corpus stays scannable.
-  const [expanded, setExpanded] = useState(false);
   // R3-D1: a thumb URL that fails to load (no rendition yet) falls back to the
   // placeholder - never to the full original.
   const [thumbFailed, setThumbFailed] = useState(false);
@@ -1889,8 +2249,36 @@ function EntryCard({
     }
   }
 
+  // D-W1-E1: an expunged item is a tombstone - bytes gone, terminal. It renders only here
+  // (under the Expunged filter), with no thumbnail, no actions, no editing: a permanent
+  // record that it existed and was expunged, and why.
+  if (entry.expunged) {
+    return (
+      <article style={{ ...cardStyle, padding: '0.55rem 0.7rem', opacity: 0.55 }}>
+        <div className="font-mono" style={labelStyle}>
+          {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)} ·{' '}
+          <span style={{ color: 'var(--vault-withheld)' }}>EXPUNGED</span>
+        </div>
+        {entry.expungedReason && (
+          <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.8rem', marginTop: 4 }}>
+            Reason: {entry.expungedReason}
+          </p>
+        )}
+      </article>
+    );
+  }
+
   return (
-    <article style={{ ...cardStyle, padding: '0.55rem 0.7rem', opacity: entry.withdrawn ? 0.6 : 1, outline: selected ? '1px solid var(--vault-gold)' : 'none' }}>
+    <article
+      style={{
+        ...cardStyle,
+        padding: '0.55rem 0.7rem',
+        opacity: entry.withdrawn ? 0.6 : 1,
+        outline: selected ? '1px solid var(--vault-gold)' : 'none',
+        // R4-D6: a focus ring for the keyboard-focused row (distinct from the selected outline).
+        boxShadow: focused ? '0 0 0 2px var(--vault-gold)' : 'none',
+      }}
+    >
       {/* D2 (round 2): compact default row - thumbnail + title/note + kind/date ONLY.
           All tag detail and the tag form live behind the per-item expand. */}
       <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center' }}>
@@ -1898,7 +2286,10 @@ function EntryCard({
           <input
             type="checkbox"
             checked={selected}
-            onChange={onToggleSelect}
+            // R4-D6: onClick carries shiftKey for range select; onChange is a no-op so the
+            // controlled checkbox does not warn (the click handles keyboard + mouse toggles).
+            onChange={() => {}}
+            onClick={(e) => onSelect((e as unknown as { shiftKey: boolean }).shiftKey)}
             aria-label="Select for batch tagging"
             style={{ width: 16, height: 16, accentColor: 'var(--vault-gold)', cursor: 'pointer', flexShrink: 0 }}
           />
@@ -1945,6 +2336,8 @@ function EntryCard({
             {entry.mediaKind.toUpperCase()} · {new Date(entry.createdAt).toISOString().slice(0, 10)}
             {entry.tags.length > 0 ? ` · ${entry.tags.length} tag${entry.tags.length === 1 ? '' : 's'}` : ''}
             {entry.withdrawn ? ' · WITHDRAWN' : ''}
+            {/* R4 derived duplicate indicator: a byte-duplicate of an earlier item. */}
+            {duplicateOfId && <span style={{ color: 'var(--vault-withheld)' }}> · DUPLICATE</span>}
           </div>
           {entry.uploadNote && (
             <p
@@ -1966,7 +2359,12 @@ function EntryCard({
               Withdraw
             </button>
           )}
-          <button type="button" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>
+          {duplicateOfId && (
+            <button type="button" onClick={() => onJumpToItem(duplicateOfId)} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>
+              Show original
+            </button>
+          )}
+          <button type="button" aria-expanded={expanded} onClick={onToggleExpand} className="font-mono" style={{ ...btnStyle(false), padding: '0.25rem 0.5rem' }}>
             {expanded ? 'Hide' : 'Details'}
           </button>
         </div>
@@ -1976,7 +2374,7 @@ function EntryCard({
           affordances. Available for withdrawn items too, so their tags stay viewable. */}
       {expanded && (
         <div style={{ marginTop: '0.7rem', borderTop: '1px solid var(--vault-border)', paddingTop: '0.7rem' }}>
-          <EntryDetailPanel entry={entry} members={members} />
+          <EntryDetailPanel entry={entry} members={members} vocab={vocab} />
         </div>
       )}
 
