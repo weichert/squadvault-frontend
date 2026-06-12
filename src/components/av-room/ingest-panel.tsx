@@ -261,6 +261,23 @@ export function IngestPanel({
     if (i >= 0) setQuickLook(i);
   }
 
+  // R4: jump to a specific item in the corpus - focus it (the keyboard focus ring) and
+  // scroll it into view via the virtualizer. If it is filtered out of the current view,
+  // clear the filters first so it can be shown (its index in the cleared, newest-first
+  // list equals its index in the full corpus). Reused by the duplicate refusal and the
+  // derived duplicate indicator.
+  function jumpToItem(id: string) {
+    const inView = visibleEntries.findIndex((e) => e.id === id);
+    if (inView >= 0) {
+      setFocusedIndex(inView);
+      return;
+    }
+    const full = entries.findIndex((e) => e.id === id);
+    if (full < 0) return;
+    setFilters(EMPTY_FILTERS);
+    setFocusedIndex(full);
+  }
+
   // R4-D6: global keyboard nav over the corpus. J/K move the focused row, Space opens
   // quick-look on it, Enter expands it. Ignored while typing in a field or while the
   // lightbox is open (quick-look owns its own keys). A curator's bench should feel like one.
@@ -295,7 +312,7 @@ export function IngestPanel({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <RoomRatification leagueId={leagueId} ratified={ratified} />
-      <UploadForm leagueId={leagueId} />
+      <UploadForm leagueId={leagueId} onJumpToItem={jumpToItem} />
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
           <h2 className="font-mono" style={labelStyle}>
@@ -1075,7 +1092,7 @@ type QueueItem = {
 
 const UPLOAD_CONCURRENCY = 3;
 
-function UploadForm({ leagueId }: { leagueId: string }) {
+function UploadForm({ leagueId, onJumpToItem }: { leagueId: string; onJumpToItem: (id: string) => void }) {
   const router = useRouter();
   const [note, setNote] = useState('');
   const [items, setItems] = useState<QueueItem[]>([]);
@@ -1272,6 +1289,17 @@ function UploadForm({ leagueId }: { leagueId: string }) {
                         ? 'DONE'
                         : `FAILED — ${it.reason ?? 'error'}`}
                 </span>
+                {it.duplicateOf && (
+                  // R4 jump-to-item: take the commissioner to the existing original.
+                  <button
+                    type="button"
+                    onClick={() => onJumpToItem(it.duplicateOf as string)}
+                    className="font-mono"
+                    style={{ ...btnStyle(false), flexShrink: 0, padding: '0.1rem 0.4rem' }}
+                  >
+                    Show original
+                  </button>
+                )}
                 {it.duplicateOf && it.file && (
                   <button
                     type="button"
