@@ -92,7 +92,13 @@ Done + still open:
   Click-through finding folded to R4-D3: a HEIC/HEVC file renamed `.jpg` bypasses the
   extension-based D6 gate — fix is magic-byte content sniffing (memo
   `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_R3_CLICKTHROUGH_HEIC_GATE.md`).
-- **Ingest round 4 (the curator's bench) — R4-D3 DISCHARGED; continuation OPEN.**
+- **Ingest round 4 (the curator's bench) — COMPLETE + DISCHARGED 2026-06-11.** D1 quick-look,
+  D2 download, D3 duplicate detection + HEIC content-sniff, D4 autocomplete + ordering
+  assertion, D5 untagged queue, D6 keyboard-first, D7 retry-failed, D8 select-all-in-filter,
+  plus jump-to-item, derived duplicate indicator, and the D-W1-E1 media expungement class.
+  Migrations 013 + 014 applied; governance 115/0. The only W.1 ingest threads left are
+  deferred-by-design: video playback / voice-attestation (a DECIDE session) and Increment 2
+  member work (E2.3).
   - **R4-D3 deterministic duplicate detection + HEIC content-sniff — DONE + DISCHARGED
     2026-06-11.** Migration 013 (`content_hash`, a convenience not provenance) applied to
     prod + verified (column present, nullable). Byte-equality duplicate refusal ("already
@@ -106,26 +112,26 @@ Done + still open:
     founder click-through PASSED in full). R4-D1 quick-look (`a6aef39`), R4-D2 download
     original (`7d01097`), R4-D5 untagged work queue (`f2cf807`), R4-D8 select-all-in-filter
     (`6393b2a`), override-prepend fix (`2ef04bb`). Governance 114/0.
-  - **Continuation batch 2 — DONE on `feat/w1-ingest-round4-cont-b2`, in PR #19; DISCHARGE
-    HELD pending migration 014 apply + one consolidated click-through.** R4-D4 tag
-    autocomplete (own ratified values only) + the D4 ordering assertion (`6d8ed09`), R4-D7
-    retry-failed (`1eb5520`), R4-D6 keyboard-first flow (`312938a`), jump-to-item link
-    (`8d7582c`), derived duplicate indicator (`a594cec`), and **media expungement**
-    (`7119651`). Governance 114/0 (G19 probe-skips until 014; self-activates to 115 after).
-    Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_ROUND_4_CONT_BATCH_2.md`.
-  - **D-W1-E1 media EXPUNGEMENT class — ADMITTED + BUILT 2026-06-11** (founder, Fable chat;
-    Spec 5.2 Amendment 1 ratified verbatim). Append-only, commissioner-ratified, reason-
-    required expungement event that DELETES the stored bytes (original + renditions) and
-    tombstones the entry (row never deleted; log testifies it existed and was expunged).
+  - **Continuation batch 2 — DONE + DISCHARGED 2026-06-11** (merged `6f8dddb`, PR #19;
+    migration 014 applied to prod; founder click-through passed). R4-D4 tag autocomplete +
+    D4 ordering assertion (`6d8ed09`), R4-D7 retry-failed (`1eb5520`), R4-D6 keyboard-first
+    (`312938a`), jump-to-item link (`8d7582c`), derived duplicate indicator (`a594cec`),
+    media expungement (`7119651`), and two click-through fixes — stale-value-on-kind-switch
+    + date validation, and no-retry-on-permanent-refusals (`37d6c0e`). **Governance 115/0
+    (G19 active).** Memo `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_ROUND_4_CONT_BATCH_2.md`.
+  - **D-W1-E1 media EXPUNGEMENT class — ADMITTED + BUILT + DISCHARGED 2026-06-11** (founder,
+    Fable chat; Spec 5.2 Amendment 1 ratified verbatim). Append-only, commissioner-ratified,
+    reason-required expungement event that DELETES the stored bytes (original + renditions)
+    and tombstones the entry (row never deleted; log testifies it existed and was expunged).
     Terminal (no reinstatement); content_hash survives so re-upload surfaces as
-    duplicate-of-expunged. Built in PR #19: migration 014 `media_expungement_events` +
-    G19, expunge route (authed-insert event = license, then admin byte-delete), room
-    excludes expunged, "Expunged" tombstone filter, Expunge action behind a required-reason
-    confirm, dup-check distinguishes expunged. **Migration 014 needs the dashboard apply.**
-    Post-E2.3 consent dimension deferred to Inc 2. Ruling memo
+    duplicate-of-expunged. Merged `6f8dddb` (PR #19): migration 014 applied + verified (G19
+    active, governance 115/0); expunge route (authed-insert event = license, then admin
+    byte-delete), room excludes expunged, "Expunged" tombstone filter, Expunge action behind
+    a required-reason confirm, dup-check distinguishes expunged. Post-E2.3 consent dimension
+    deferred to Inc 2. Ruling memo
     `_observations/OBSERVATIONS_2026_06_11_AV_ROOM_DW1E1_EXPUNGEMENT_RULING.md`.
-    Engine-side follow-up (next engine session, doc-only): flip the parked candidate
-    (engine memo `6dce2f6` + STATE.md Deferred line) PARKED -> ADMITTED.
+    **Engine-side follow-up still OPEN (next engine session, doc-only):** flip the parked
+    candidate (engine memo `6dce2f6` + STATE.md Deferred line) PARKED -> ADMITTED.
   - Bright lines: no AI tagging/face-detection/AI-search; no gamification/streaks/nudges;
     no relevance ranking — filters/matches stay deterministic.
 - **Video playback + the voice-attestation class** — still BLOCKED; the positive
