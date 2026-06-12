@@ -14,6 +14,11 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       `img-src 'self' data: blob: https://${SUPABASE_HOSTNAME}`,
+      // media-src: the <video> playback element fetches the signed original/rendition from
+      // Supabase Storage. Without this, media falls back to default-src 'self' and Chrome
+      // refuses the cross-origin fetch (D-W1-A6 runway CSP defect; latent from D-W1-A,
+      // masked there by the HEVC dead-player expectation).
+      `media-src 'self' https://${SUPABASE_HOSTNAME}`,
       `connect-src 'self' https://${SUPABASE_HOSTNAME} wss://${SUPABASE_HOSTNAME} https://api.anthropic.com`,
       // frame-ancestors: DENY prevents clickjacking of the approval UX
       "frame-ancestors 'none'",

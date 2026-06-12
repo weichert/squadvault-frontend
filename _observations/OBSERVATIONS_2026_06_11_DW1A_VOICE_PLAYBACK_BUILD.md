@@ -112,3 +112,9 @@ Corpus originals are HEVC; Chrome cannot decode them even when wired - a **playb
 and is NOT in this PR. **Safari plays HEVC natively and is the interim verification path.**
 Seek/expiry flag: the **expiry half is now OBSERVED** (expired-token rejection above); the
 **seek half verifies in Safari** post-fix (scrub a playing gate-passed video).
+
+> **Correction (2026-06-12, D-W1-A6 runway).** A missing CSP `media-src` directive (fixed in
+> D-W1-A6) blocked the `<video>` cross-origin fetch entirely - latent here, masked by the
+> HEVC dead-player expectation. The Safari crossed-play glyph is now the SUSPECTED PRIMARY
+> CAUSE (CSP), not content-type; the `curl -I` header read still happens in runway to settle
+> it. See `_observations/OBSERVATIONS_2026_06_12_DW1A6_PLAYBACK_RENDITION_BUILD.md`.

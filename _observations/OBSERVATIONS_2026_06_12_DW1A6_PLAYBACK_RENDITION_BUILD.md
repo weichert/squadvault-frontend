@@ -64,13 +64,29 @@ the METHOD is pinned, not the bytes.
 | `<entry1>` | `<hash1>` | `<sha1>` |
 | `<entry2>` | `<hash2>` | `<sha2>` |
 
+## Pre-merge defect: CSP blocked video playback (fixed on the PR)
+
+Runway step-0 on the preview (`089a80d`) OBSERVED: the gate passed and `sign` returned 200
+carrying the **original.mov** URL (rendition absent -> the route fell through to the
+original). **The A6 fallback leg is CONFIRMED** end-to-end. But the mounted `<video>` issued
+NO network request, and the console showed a CSP refusal.
+
+Root cause: `next.config.js` had `img-src` and `connect-src` for Supabase but **no
+`media-src` directive** - media fell back to `default-src 'self'` and Chrome refused the
+cross-origin fetch. **Latent from D-W1-A** (masked there by the HEVC dead-player expectation;
+it also likely explains Safari's crossed-play glyph, previously attributed to content-type).
+
+Fix (this PR, `media-src` added to the CSP array, no other directive change):
+`media-src 'self' https://${SUPABASE_HOSTNAME}`.
+
 ## original.mov content-type (OBSERVED at runway)
 
 `curl -I` on a fresh signed URL of an original.mov, content-type line verbatim:
-`<PLACEHOLDER - paste the observed Content-Type header>`
-
-No remediation of stored objects either way (A6-4): playback stops depending on the
-original's stored metadata the moment a rendition exists.
+`<PLACEHOLDER - paste the observed Content-Type header>`. NOTE: the Safari crossed-play
+glyph is now suspected to be the CSP defect above, not content-type; the header read still
+happens in runway to settle it empirically. No remediation of stored objects either way
+(A6-4): playback stops depending on the original's stored metadata the moment a rendition
+exists.
 
 ## Boundaries held
 
