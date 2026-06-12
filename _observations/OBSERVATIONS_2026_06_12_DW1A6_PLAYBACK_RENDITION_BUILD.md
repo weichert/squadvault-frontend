@@ -93,11 +93,26 @@ The quick-look overlay did not constrain the media region's height, so a portrai
 poster/player pushed the gated-Play affordance and the refusal line **below the viewport with
 no scroll path** - hiding the gate's own surface (a member who can't see Play can't reach
 gate-passing playback; one who can't see the refusal loses the attestation's trust
-legibility). Fix: CSS-only - the image side is a bounded flex column with the media in a
-`flex:1 1 auto; min-height:0; overflow:hidden` cell (object-fit contain) and the affordance
-strip `flex:none`, so the strip is always reserved on-screen. The room `RoomVideo` cell is a
-FIXED aspect-ratio box (absolute Play overlay, line below) so the hazard does not apply there;
-added `object-fit:contain` to its `<video>` for portrait correctness. No route/gate/logic change.
+legibility). First fix (`1e9b250`): a bounded flex column with the media in a `flex:1 1 auto`
+cell + `flex:none` strip. This held only for squarish media and was INSUFFICIENT for 9:16
+portrait (still painted past the fold).
+
+**ROOT CAUSE (iteration 2, `<this commit>`):** the quick-look row used `flex-wrap: wrap`, so
+the flex LINE cross-size is content-driven before stretch - the media cell's `flex-basis:auto`
+fed the media's INTRINSIC height into line sizing (`max-height:100%` cannot resolve during
+line sizing), inflating tall portrait media past the viewport. CSS-only fix, no logic:
+- media cell `flex:1 1 auto` -> `flex:1 1 0` (basis 0 kills the intrinsic-height feedback);
+  keep `min-height:0` + `overflow:hidden`;
+- `<video>` and `<img>` in the cell -> `width:100%; height:100%; object-fit:contain`;
+- the detail column gains `min-height:0` (with its `overflow-y:auto`) so its own content
+  scrolls within the overlay rather than past the fold;
+- **removed `flex-wrap:wrap` from the row** - a fixed full-viewport dialog keeps media + tag
+  panel on one line with a DEFINITE cross-size, so the basis-0 cell bounds to the row height
+  (and the wrapped-line collapse the basis-0 logic would cause is avoided). The two sides
+  shrink to fit on narrow viewports. The room `RoomVideo` cell is a FIXED aspect-ratio box so
+  the hazard never applied there; `object-fit:contain` added to its `<video>` for portrait
+  correctness. No route/gate/logic change. Founder verifies the 9:16 portrait entry
+  (poster + mounted-player + refusal states).
 
 ## original.mov content-type - content-type theory DEAD
 
@@ -116,6 +131,13 @@ content-type.
   re-observed incidentally on the rendition). The expiry half was already observed; both
   halves of the seek/expiry boundary are now settled.
 - Fallback leg banked (sign returned `original.mov` with the rendition absent).
+- **RENDITION LEG END-TO-END OBSERVED** (batch 2): after the rendition upload, Play serves
+  **playback.mp4** - Network filename SWITCHED (multiple `playback.mp4` requests), picture +
+  sound. The A6 progressive-enhancement path is confirmed live.
+- **Refusal cycle OBSERVED both directions** (gate regression closed): a contrary attestation
+  -> the red gated line + the refusal in place of the player; re-attest `no_member_voice` ->
+  Play restored. All three append-only events are legitimate history (the gate reads the
+  latest).
 
 ## Rendition justification (re-framed, batch 2)
 
@@ -135,19 +157,17 @@ transcode infrastructure - commissioner-side production only. Original bytes nev
 renditions regenerable or deletable without fact loss. Option-3 rejection stands.
 Verified-vs-testimony distinction untouched.
 
-## Founder runway (remaining after the two fixes land)
+## Founder runway (nearly complete)
 
-Already closed: CSP playback (Chrome, with sound), scrub-seek, expiry, fallback leg,
-content-type, the quick-look height hazard. What's left:
+Closed end-to-end: CSP playback (Chrome, picture + sound), scrub-seek, expiry, fallback leg,
+content-type, the rendition leg (playback.mp4 served, Network filename switch), the refusal
+cycle both directions. What's left:
 
-1. Run `~/sv-apply/apply_a6_rendition_backfill_v1.sh` (fill the source paths/entry ids/hashes
-   first); collect 2 `playback.mp4` + the PAIRING lines; record the ffmpeg version line.
-2. Upload each via the "Upload playback rendition" affordance (dashboard upload acceptable;
-   confirm `video/mp4` in object metadata).
-3. Play -> confirm the Network filename **switches to `playback.mp4`** (the rendition leg now
-   serves instead of the original).
-4. Voiced-video refusal check - but **verify each entry's CURRENT attestation state first**
-   (states churned during #21 testing; the latest event is what the gate reads).
-5. Paste the PAIRING lines + the playback.mp4-Network observation back for the build-memo
-   close-out commit (fill the pairing table + ffmpeg-version + content-type lines); merge PR
-   #22 via `gh pr merge`.
+1. **Re-verify the 9:16 portrait entry** in quick-look after this commit (poster + mounted-
+   player + refusal states all sit within the viewport with the strip reachable).
+2. Close-out: paste the PAIRING lines (entry id / original content_hash / rendition sha256)
+   + the producing `ffmpeg -version` line, so I fill the pairing table + version placeholder
+   in this memo; then merge PR #22 via `gh pr merge`.
+
+(The backfill script + the per-entry CURRENT-attestation-state verification noted in batch 2
+are done; the rendition leg is live.)

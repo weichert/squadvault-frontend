@@ -1716,12 +1716,15 @@ function QuickLook({
           flex: 1,
           minHeight: 0,
           display: 'flex',
-          flexWrap: 'wrap',
+          // Batch-2: NO flex-wrap. A fixed full-viewport dialog keeps media + tag panel on a
+          // single line with a DEFINITE cross-size, so the basis-0 media cell bounds to the
+          // row height (wrap made the line cross-size content-driven, inflating portrait
+          // media). The two sides shrink to fit on narrow viewports instead of stacking.
           gap: '1rem',
           padding: '0 0.9rem 0.9rem',
         }}
       >
-        {/* Image side. Batch-2 fix: a bounded flex column - the MEDIA cell flexes (1 1 auto,
+        {/* Image side. Batch-2 fix: a bounded flex column - the MEDIA cell flexes (1 1 0,
             min-height 0, object-fit contain) and the affordance strip is flex:none - so the
             Play button / refusal line can never be pushed below the viewport for a portrait
             video (hiding the gate's own surface). CSS-only; no logic. */}
@@ -1737,7 +1740,11 @@ function QuickLook({
         >
           <div
             style={{
-              flex: '1 1 auto',
+              // Batch-2 root cause: the overlay row uses flex-wrap, so the line cross-size
+              // is content-driven before stretch. flex-basis 0 (not auto) kills the media's
+              // INTRINSIC height feeding into line sizing - tall portrait media no longer
+              // inflates the line past the viewport. min-height:0 + overflow:hidden bound it.
+              flex: '1 1 0',
               minHeight: 0,
               width: '100%',
               display: 'flex',
@@ -1756,7 +1763,7 @@ function QuickLook({
               controls
               playsInline
               preload="metadata"
-              style={{ maxWidth: '100%', maxHeight: '100%' }}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : loading ? (
             <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text2)' }}>
@@ -1768,7 +1775,7 @@ function QuickLook({
               src={url}
               alt={entry.uploadNote ?? `Archival ${entry.mediaKind}`}
               onError={() => setImgError(true)}
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : (
             // Honest fallback: a video with no poster, a sign failure, or - the
@@ -1831,6 +1838,9 @@ function QuickLook({
           style={{
             flex: '1 1 280px',
             minWidth: 0,
+            // Batch-2: min-height:0 lets the detail column's own content scroll WITHIN the
+            // overlay (overflowY:auto) instead of painting past the fold.
+            minHeight: 0,
             maxWidth: 460,
             overflowY: 'auto',
             background: 'var(--vault-s1)',
