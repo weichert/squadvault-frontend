@@ -135,8 +135,8 @@ Done + still open:
   - Bright lines: no AI tagging/face-detection/AI-search; no gamification/streaks/nudges;
     no relevance ranking — filters/matches stay deterministic.
 - **Video playback + the voice-attestation class (D-W1-A) — DONE on
-  `feat/w1-video-playback-attestation`, in PR #PENDING; DISCHARGE HELD pending migration
-  015 apply + click-through.** DECIDE ruling ratified Fable 2026-06-11 (mechanism spec under
+  `feat/w1-video-playback-attestation`, in PR #21; DISCHARGE HELD pending migration 015
+  apply + click-through.** DECIDE ruling ratified Fable 2026-06-11 (mechanism spec under
   5.7; option-3 soft-tag REJECTED 2026-06-10 STANDS). Migration 015 `media_voice_attestations`
   + G20 (`d63bba7`); route-enforced playback gate (Leg1 attestation OR Leg2 2b-consent, A2a
   vacuous-truth exclusion, fail-closed; `sign` variant `playback`, TTL 600s, neutral 403);
