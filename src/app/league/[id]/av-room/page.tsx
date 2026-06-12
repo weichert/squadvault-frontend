@@ -126,10 +126,11 @@ export default async function AvRoomPage({ params }: Props) {
   const videos = live.filter((re) => re.entry.media_kind === 'video');
   const ordered = [...photos, ...videos];
 
-  // D-W1-A: the trust-legible attestation line per video, visible to members (the player
-  // itself is gated server-side; this is the legibility, not the gate). Latest attestation
-  // per entry + attester name. Graceful if migration 015 is absent (no line).
-  const attestationLine = new Map<string, string>();
+  // D-W1-A: the latest voice attestation per video, passed structured to RoomVideo (it
+  // formats the trust-legible line in viewer-local time and suppresses Play on a
+  // member_voice_present state). The player itself is gated server-side; this is the
+  // legibility, not the gate. Graceful if migration 015 is absent (no attestation).
+  const attestation = new Map<string, { state: 'no_member_voice' | 'member_voice_present'; byName: string | null; at: string }>();
   if (videos.length > 0) {
     const videoIds = videos.map((re) => re.entry.id);
     const { data: attRows, error: attErr } = (await admin
@@ -154,14 +155,11 @@ export default async function AvRoomPage({ params }: Props) {
         for (const m of fr ?? []) if (m.member_user_id) nameById.set(m.member_user_id, m.owner_display_name);
       }
       latest.forEach((v, id) => {
-        const who = nameById.get(v.by) ?? 'the commissioner';
-        const when = new Date(v.at).toISOString().slice(0, 10);
-        attestationLine.set(
-          id,
-          v.state === 'no_member_voice'
-            ? `No member voice — attested by ${who}, ${when}`
-            : `Member voice present — attested by ${who}, ${when}`,
-        );
+        attestation.set(id, {
+          state: v.state as 'no_member_voice' | 'member_voice_present',
+          byName: nameById.get(v.by) ?? null,
+          at: v.at,
+        });
       });
     }
   }
@@ -231,7 +229,7 @@ export default async function AvRoomPage({ params }: Props) {
                       mediaEntryId={re.entry.id}
                       posterUrl={posterUrl ?? null}
                       alt={re.entry.upload_note ?? 'Archival video — poster still'}
-                      attestationLine={attestationLine.get(re.entry.id) ?? null}
+                      attestation={attestation.get(re.entry.id) ?? null}
                     />
                   ) : (
                     <div

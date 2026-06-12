@@ -65,3 +65,50 @@ No AI audio analysis proposes or makes attestations - the attestation is a human
 commissioner's act. No autoplay, no view counts, no engagement mechanics (6.3). 2b grants
 remain each member's own authenticated act (E2.3); the 2b leg is inert-but-real until then.
 Option-3 (soft-tag-carrying-hard-gate) rejection stands. Fail closed everywhere.
+
+## Click-through OBSERVED evidence (founder, pre-merge on PR #21)
+
+The GATE behaviour verified end-to-end:
+- **Gate-pass mints a playback URL** (sign 200 `{url, ttl}`); **TTL 600s on the token**
+  (decoded JWT `iat`/`exp` delta = 600s). Gate-FAIL returns the neutral refusal, rendered
+  in place of the player. **Supersession gates forward** (a contrary attestation -> the next
+  Play is refused). **No autoplay** anywhere.
+- **Expired URL rejects** - verbatim body: `InvalidJWT: "exp" claim timestamp check failed`
+  (a 90-byte JSON). So the expiry half of the seek/expiry boundary is now OBSERVED: an
+  expired token is refused outright.
+- **Full-original retrieval via a fresh URL** confirmed - `curl` served the full **69 MB**
+  original. So the transport + signing are correct; the bytes are reachable.
+
+Codec finding (root cause of the "looks dead" playback):
+- The corpus videos are **iPhone HEVC/AAC `.mov`** (QuickTime inspector confirmed) - healthy
+  originals. **Chrome cannot decode HEVC**, so even a correctly-wired `<video>` shows nothing
+  playable in Chrome.
+
+## Pre-merge defect fixes (this commit)
+
+1. **FIX 1 - playback URL never attached to `<video>` src.** Evidence: the playback sign POST
+   returned 200 but no `original.mov` media request fired. Hardened the player wiring -
+   `playUrl` now takes precedence over the poster-loading state and the `<video>` carries
+   `key={playUrl}` so it remounts cleanly and applies the src (the metadata request fires on
+   press). Both quick-look and the room `RoomVideo`.
+2. **FIX 2 - dead player controls in the quick-look overlay.** The overlay was a full-bleed
+   click-catcher whose child `stopPropagation` handlers sat over the player region. Replaced
+   with a backdrop-only close (`e.target === e.currentTarget`) and removed the child
+   `stopPropagation`, so the `<video>` controls (play/volume/fullscreen) are fully
+   interactive; header buttons + keyboard still drive nav/close.
+3. **FIX 3 - attestation date rendered UTC-tomorrow.** `recorded_at` (timestamptz) was
+   formatted with `toISOString()` (UTC); now `toLocaleDateString('en-CA')` in viewer-local
+   time, in both the ingest detail line and the room (RoomVideo formats it client-side from
+   the raw timestamp).
+4. **FIX 4 - gated-item Play affordance (founder pick b).** When the RENDERED attestation
+   state is `member_voice_present`, the Play affordance is replaced by the refusal text
+   directly (using only state the panel already renders; the route gate is untouched, the UI
+   still never decides).
+
+## Limitation + verification path
+
+Corpus originals are HEVC; Chrome cannot decode them even when wired - a **playback rendition**
+(transcode to a web-decodable codec) is the registered follow-up **D-W1-A6, ruled separately**
+and is NOT in this PR. **Safari plays HEVC natively and is the interim verification path.**
+Seek/expiry flag: the **expiry half is now OBSERVED** (expired-token rejection above); the
+**seek half verifies in Safari** post-fix (scrub a playing gate-passed video).

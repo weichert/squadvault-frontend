@@ -1667,7 +1667,12 @@ function QuickLook({
       role="dialog"
       aria-modal="true"
       aria-label="Quick-look"
-      onClick={onClose}
+      // FIX 2: close ONLY on a direct backdrop click. No stopPropagation on the children -
+      // so the <video> controls (play/volume/fullscreen) are fully interactive and a click
+      // on the player never closes the overlay. Nav stays on the header buttons + keyboard.
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -1677,12 +1682,8 @@ function QuickLook({
         flexDirection: 'column',
       }}
     >
-      {/* Header: position + walk controls + close. Stop propagation so clicks here
-          don't close the overlay. */}
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.6rem 0.9rem', flexShrink: 0 }}
-      >
+      {/* Header: position + walk controls + close. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.6rem 0.9rem', flexShrink: 0 }}>
         <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text)' }}>
           {index + 1} / {entries.length} · {entry.mediaKind.toUpperCase()} ·{' '}
           {new Date(entry.createdAt).toISOString().slice(0, 10)}
@@ -1718,7 +1719,6 @@ function QuickLook({
       >
         {/* Image side */}
         <div
-          onClick={(e) => e.stopPropagation()}
           style={{
             flex: '2 1 360px',
             minWidth: 0,
@@ -1729,18 +1729,22 @@ function QuickLook({
             gap: '0.6rem',
           }}
         >
-          {loading ? (
-            <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text2)' }}>
-              LOADING…
-            </span>
-          ) : playUrl ? (
-            // D-W1-A: playback granted by the gate. No autoplay; metadata-only preload.
+          {playUrl ? (
+            // D-W1-A: playback granted by the gate (takes precedence over the poster sign).
+            // key={playUrl} forces a clean <video> mount so the src is applied and the
+            // metadata request fires. No autoplay; metadata-only preload.
             <video
+              key={playUrl}
               src={playUrl}
               controls
+              playsInline
               preload="metadata"
               style={{ maxWidth: '100%', maxHeight: '100%' }}
             />
+          ) : loading ? (
+            <span className="font-mono" style={{ ...labelStyle, color: 'var(--vault-text2)' }}>
+              LOADING…
+            </span>
           ) : url && !imgError ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -1773,20 +1777,31 @@ function QuickLook({
             </div>
           )}
           {/* D-W1-A: play on intent. The gate is enforced at the route - a click that the
-              gate refuses returns a neutral message; a pass swaps the poster for the player. */}
+              gate refuses returns a neutral message; a pass swaps the poster for the player.
+              FIX 4: when the RENDERED attestation state is member_voice_present we already
+              know playback is gated, so show the refusal directly instead of a Play button
+              (using only state the panel already renders; the route gate is untouched). */}
           {entry.mediaKind === 'video' && !playUrl && (
             <div style={{ textAlign: 'center' }}>
-              <button type="button" disabled={playBusy} onClick={requestPlayback} className="font-mono" style={{ ...btnStyle(playBusy), padding: '0.3rem 0.7rem' }}>
-                {playBusy ? 'Starting…' : 'Play video'}
-              </button>
-              {playMsg ? (
-                <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 6, maxWidth: 360 }}>
-                  {playMsg}
+              {entry.voiceAttestation?.state === 'member_voice_present' ? (
+                <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', maxWidth: 360 }}>
+                  Member voice present — playback gated.
                 </p>
               ) : (
-                <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.74rem', marginTop: 6 }}>
-                  No autoplay; fetched only when you press play.
-                </p>
+                <>
+                  <button type="button" disabled={playBusy} onClick={requestPlayback} className="font-mono" style={{ ...btnStyle(playBusy), padding: '0.3rem 0.7rem' }}>
+                    {playBusy ? 'Starting…' : 'Play video'}
+                  </button>
+                  {playMsg ? (
+                    <p className="font-ui" style={{ color: 'var(--vault-withheld)', fontSize: '0.78rem', marginTop: 6, maxWidth: 360 }}>
+                      {playMsg}
+                    </p>
+                  ) : (
+                    <p className="font-ui" style={{ color: 'var(--vault-text3)', fontSize: '0.74rem', marginTop: 6 }}>
+                      No autoplay; fetched only when you press play.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1794,7 +1809,6 @@ function QuickLook({
 
         {/* Tag panel side - scrollable so the form is always reachable. */}
         <div
-          onClick={(e) => e.stopPropagation()}
           style={{
             flex: '1 1 280px',
             minWidth: 0,
@@ -2116,8 +2130,8 @@ function EntryDetailPanel({ entry, members, vocab }: { entry: IngestEntry; membe
               >
                 {entry.voiceAttestation
                   ? entry.voiceAttestation.state === 'no_member_voice'
-                    ? `No member voice — attested by ${entry.voiceAttestation.byName ?? 'the commissioner'}, ${new Date(entry.voiceAttestation.at).toISOString().slice(0, 10)}`
-                    : `Member voice present — attested by ${entry.voiceAttestation.byName ?? 'the commissioner'}, ${new Date(entry.voiceAttestation.at).toISOString().slice(0, 10)} (playback gated)`
+                    ? `No member voice — attested by ${entry.voiceAttestation.byName ?? 'the commissioner'}, ${new Date(entry.voiceAttestation.at).toLocaleDateString('en-CA')}`
+                    : `Member voice present — attested by ${entry.voiceAttestation.byName ?? 'the commissioner'}, ${new Date(entry.voiceAttestation.at).toLocaleDateString('en-CA')} (playback gated)`
                   : 'No voice attestation yet — playback stays gated until attested.'}
               </p>
               <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
