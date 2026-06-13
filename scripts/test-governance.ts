@@ -965,6 +965,35 @@ async function g20() {
   assertRlsInsertDenied('G20', 'media_voice_attestations', insErr);
 }
 
+// ── G21: franchise_member_links is commissioner-write + append-only (RLS, E2.3-minimal).
+// The linkage EVENT is the commissioner's ratification binding a member to a franchise;
+// it must be commissioner-only and append-only, like its 012/014/015 siblings - a member
+// can never self-assert the link. Probe-skip until migration 016 is applied (the
+// G17/G19/G20 rhythm).
+async function g21() {
+  console.log('\nG21 — franchise_member_links is commissioner-write + append-only (RLS, E2.3)');
+
+  const { error: probeErr } = await serviceClient
+    .from('franchise_member_links')
+    .select('id')
+    .limit(1);
+  if (probeErr) {
+    console.log('     (skip G21: franchise_member_links not present — apply migration 016)');
+    return;
+  }
+
+  // Anon cannot INSERT. WITH CHECK requires commissioner/admin, evaluated before FK, so
+  // bogus ids still surface as a 42501 policy denial rather than an FK error. This is the
+  // "never self-asserted" guarantee at the RLS layer: no anon/member proxy can author a link.
+  const { error: insErr } = await anonClient.from('franchise_member_links').insert({
+    league_id: DEMO_LEAGUE_ID,
+    franchise_id: '00000000-0000-0000-0000-0000000000aa',
+    member_user_id: '00000000-0000-0000-0000-0000000000bb',
+    linked_by: '00000000-0000-0000-0000-0000000000cc',
+  });
+  assertRlsInsertDenied('G21', 'franchise_member_links', insErr);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -989,6 +1018,7 @@ async function main() {
   await g18();
   await g19();
   await g20();
+  await g21();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);

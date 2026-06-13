@@ -389,6 +389,20 @@ export interface MediaVoiceAttestation {
   recorded_at: string;
 }
 
+// E2.3-minimal (migration 016): the append-only member<->franchise linkage event -
+// the commissioner's ratification binding an invited member_user_id to a franchise.
+// The latest event per franchise is the current linkage; franchises.member_user_id is
+// the derived pointer the invite route maintains for existing readers.
+export interface FranchiseMemberLink {
+  id: string;
+  league_id: string;
+  franchise_id: string;
+  member_user_id: string;
+  linked_by: string;
+  note: string | null;
+  recorded_at: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -446,6 +460,7 @@ export type Database = {
       media_display_reinstatements: { Row: MediaDisplayReinstatement; Insert: Omit<MediaDisplayReinstatement, 'id' | 'recorded_at'>; Update: never };
       media_expungement_events: { Row: MediaExpungementEvent; Insert: Omit<MediaExpungementEvent, 'id' | 'recorded_at'>; Update: never };
       media_voice_attestations: { Row: MediaVoiceAttestation; Insert: Omit<MediaVoiceAttestation, 'id' | 'recorded_at'>; Update: never };
+      franchise_member_links: { Row: FranchiseMemberLink; Insert: Omit<FranchiseMemberLink, 'id' | 'recorded_at'>; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };

@@ -49,6 +49,21 @@ labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
 - **Voice bridge** — founding Voice Profile -> engine recap voice. Cross-repo;
   build only when deliberately designed. (Engine never reads
   `voice_profile_id` today.)
+- **E2.3-minimal — member onboarding (invite + ratified franchise linkage)** —
+  **BUILT 2026-06-12, pending founder apply + click-through** (branch
+  `feat/e2-3-minimal-member-onboarding`). Ruled scope D-SEQ-2 (engine Fable DECIDE
+  2026-06-12); founder picked the binding mechanism = **invite + ratify at issue**. One
+  commissioner action (members-page control, commissioner-only) issues a Supabase magic-link
+  invite to a member email AND records the linkage: migration 016 `franchise_member_links`
+  (append-only, commissioner-write, no UPDATE/DELETE — sibling of 012/014/015), with
+  `franchises.member_user_id` kept as the derived pointer existing readers consume. G21 gov
+  test added (probe-skip until 016 applied). Gate semantics CONSUMED, not touched — this is
+  what finally makes the 2a-silence / 2b-playback gates exercisable with a real member.
+  DISCHARGE held on: migration 016 live + gov 117+/0 + one real invite click-through (2a
+  silent-without-grant, renders-with-grant, commissioner id still works). Memo
+  `_observations/OBSERVATIONS_2026_06_12_E2_3_MINIMAL_BUILD.md`. Local `npm run build` fails
+  identically on `main` (`8cd2474`) — pre-existing/environmental, not this unit; CI is the
+  authority.
 - **A/V Room — member testimony (Increment 2)** — build-gated on **E2.3**
   (member<->franchise identity linkage). No member-facing write path exists yet;
   the 6.6 fail-closed 2a-silence path is structurally unexercisable until a
