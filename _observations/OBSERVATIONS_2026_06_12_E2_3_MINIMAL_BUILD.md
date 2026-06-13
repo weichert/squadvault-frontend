@@ -93,3 +93,29 @@ The verbatim 2a-silence observations are recorded here after that pass, before m
 - [ ] Commissioner identification continues to work. [verbatim observation TBD]
 
 Until those are filled and gov reads 117+/0, this unit is BUILT, not DISCHARGED.
+
+## Click-through 404 finding + auth-flow ledger (2026-06-12)
+
+Founder-verified during the first click-through: the magic link landed on
+`localhost:3000/league#access_token=...` and 404'd. Two-part finding.
+
+**Fixed in-scope (this branch).** `src/app/api/members/invite/route.ts` set
+`const leagueRedirect = '/league'`, a bare non-route. The redirect comment already names
+the consent surface as the intended target, so it now reads
+`/league/${franchise.league_id}/consent` (`franchise.league_id` was already in scope). The
+member now lands on their consent surface to record 2a/2b grants, as designed.
+
+**Auth-flow ledger (NOT fixed here - flagged for a separate look).** The 404 surfaced that
+the project is on Supabase **implicit flow**: the magic link returns the session in a URL
+**fragment** (`#access_token=...`), not a `?code` query param. Consequences recorded:
+
+- `src/app/auth/callback/route.ts` reads only `?code` (PKCE) and no-ops under implicit flow
+  - the fragment never reaches the server (browsers don't send `#...` to the server). Session
+  establishment is therefore CLIENT-side via `detectSessionInUrl` at the landing route, not
+  in the callback handler.
+- Because the callback handler never runs under implicit flow, its **commissioner-claim
+  block** (auth/callback/route.ts:41-62, which writes `leagues.commissioner_user_id` on first
+  matching-email login) **may never fire**. This is a latent gap for commissioner onboarding,
+  independent of the member-invite path fixed above.
+- OUT OF SCOPE for E2.3-minimal: choosing PKCE vs implicit, and where the commissioner claim
+  should run under the live flow, are a separate auth-flow unit. Flagged here, not decided.

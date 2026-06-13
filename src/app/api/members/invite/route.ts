@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   // Issue the magic-link invite. Supabase sends the email; the redirect lands the member
   // on their consent surface so the first thing they can do is record 2a/2b grants.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-  const leagueRedirect = `/league`;
+  const leagueRedirect = `/league/${franchise.league_id}/consent`;
   let memberUserId: string;
   let alreadyRegistered = false;
 
