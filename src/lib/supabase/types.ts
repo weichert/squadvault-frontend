@@ -433,6 +433,39 @@ export interface VaultSealedLetterBody {
   body: string;
 }
 
+// L.1 Historian Interviews (migration 020): the oral-history testimony fact class. Two-table
+// append-only split - member_history_sessions holds the interview METADATA (insert-once,
+// member-identity-keyed via the franchises.member_user_id pointer); member_history_exchanges
+// is the append-only child, one row per turn. Testimony is a fact-ABOUT-WHAT-WAS-SAID and
+// NEVER contaminates the event ledger (proven structurally by testimony_separation_probe).
+export type MemberHistorySessionState = 'IN_PROGRESS' | 'ENDED';
+
+export interface MemberHistorySession {
+  id: string;
+  league_id: string;
+  member_user_id: string;
+  franchise_id: string;
+  state: MemberHistorySessionState;
+  recorded_at: string;
+}
+
+export type HistorySpeaker = 'HISTORIAN' | 'MEMBER';
+
+// One captured turn. provenance is the non-strippable S1 stamp (fixed 'MEMBER_TESTIMONY',
+// NOT NULL) marking the row as testimony-layer; intent_classified/topic_covered are
+// descriptive bookkeeping (no required-coverage gate). A correction is a new row, never edit.
+export interface MemberHistoryExchange {
+  id: string;
+  session_id: string;
+  turn: number;
+  speaker: HistorySpeaker;
+  content: string;
+  intent_classified: string | null;
+  topic_covered: string | null;
+  provenance: 'MEMBER_TESTIMONY';
+  recorded_at: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -493,6 +526,8 @@ export type Database = {
       franchise_member_links: { Row: FranchiseMemberLink; Insert: Omit<FranchiseMemberLink, 'id' | 'recorded_at'>; Update: never };
       vault_sealed_letters: { Row: VaultSealedLetter; Insert: Omit<VaultSealedLetter, 'id' | 'sealed_at' | 'recorded_at'>; Update: never };
       vault_sealed_letter_bodies: { Row: VaultSealedLetterBody; Insert: VaultSealedLetterBody; Update: never };
+      member_history_sessions: { Row: MemberHistorySession; Insert: Omit<MemberHistorySession, 'id' | 'recorded_at' | 'state'> & { state?: MemberHistorySessionState }; Update: never };
+      member_history_exchanges: { Row: MemberHistoryExchange; Insert: Omit<MemberHistoryExchange, 'id' | 'recorded_at' | 'provenance'> & { provenance?: 'MEMBER_TESTIMONY' }; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };
