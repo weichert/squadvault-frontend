@@ -48,6 +48,7 @@ const CATEGORY_LABEL: Record<MemberConsentCategory, string> = {
   likeness_derived: 'Your image in made artifacts',
   attributed_quotes: 'Your words, attributed',
   synthesized_voice: 'Synthesized voice',
+  sealed_testimony: 'Sealed letter (the Vault)',
 };
 
 export function MemberConsentPanel({

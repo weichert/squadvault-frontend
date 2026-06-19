@@ -250,7 +250,11 @@ export type MemberConsentCategory =
   | 'recorded_voice'
   | 'likeness_derived'
   | 'attributed_quotes'
-  | 'synthesized_voice';
+  | 'synthesized_voice'
+  // L.3 The Vault (migration 017, D-L3-4). Consent-at-writing for a sealed letter; carries
+  // no rendering_class. The GRANT covers in-ceremony reveal only (republication is a
+  // distinct future consent act, D-SEQ-6 held in-ceremony-only).
+  | 'sealed_testimony';
 
 export type MemberConsentEventType = 'GRANT' | 'REVOKE';
 
@@ -403,6 +407,27 @@ export interface FranchiseMemberLink {
   recorded_at: string;
 }
 
+// L.3 The Vault (migration 018): the sealed-letter fact class. Two-table seal split -
+// vault_sealed_letters holds the readable METADATA (existence + sealed_at); the body lives
+// in vault_sealed_letter_bodies behind NO read policy (the seal). Append-only; a SEAL is
+// terminal and a correction is a NEW letter.
+export interface VaultSealedLetter {
+  id: string;
+  league_id: string;
+  member_user_id: string;
+  franchise_id: string;
+  season: number;
+  sealed_at: string;
+  recorded_at: string;
+}
+
+// The sealed body. No SELECT policy exists on this table pre-reveal: no role - author,
+// commissioner, admin - can read it. Insert-only (author of the parent letter).
+export interface VaultSealedLetterBody {
+  letter_id: string;
+  body: string;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -461,6 +486,8 @@ export type Database = {
       media_expungement_events: { Row: MediaExpungementEvent; Insert: Omit<MediaExpungementEvent, 'id' | 'recorded_at'>; Update: never };
       media_voice_attestations: { Row: MediaVoiceAttestation; Insert: Omit<MediaVoiceAttestation, 'id' | 'recorded_at'>; Update: never };
       franchise_member_links: { Row: FranchiseMemberLink; Insert: Omit<FranchiseMemberLink, 'id' | 'recorded_at'>; Update: never };
+      vault_sealed_letters: { Row: VaultSealedLetter; Insert: Omit<VaultSealedLetter, 'id' | 'sealed_at' | 'recorded_at'>; Update: never };
+      vault_sealed_letter_bodies: { Row: VaultSealedLetterBody; Insert: VaultSealedLetterBody; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };
@@ -469,6 +496,9 @@ export type Database = {
       get_user_league_id: { Args: Record<never, never>; Returns: string };
       is_commissioner:    { Args: { p_league_id: string }; Returns: boolean };
       is_admin:           { Args: Record<never, never>; Returns: boolean };
+      // L.3 (migration 018): read-only seal-fails-closed introspection for G22. Returns
+      // booleans about vault_sealed_letter_bodies' existence + policy shape; no body access.
+      vault_seal_probe:   { Args: Record<never, never>; Returns: { body_table_exists: boolean; body_has_read_policy: boolean; body_has_insert_policy: boolean; meta_table_exists: boolean }[] };
     };
   };
 };

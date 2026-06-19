@@ -994,6 +994,113 @@ async function g21() {
   assertRlsInsertDenied('G21', 'franchise_member_links', insErr);
 }
 
+// ── G22: the Vault seal fails closed (RLS, L.3) ─────────────────────────
+// Inverse-of-G11 discipline: a MISSING table/policy/probe FAILS this test; absence must
+// never read as a granted-deny pass. The seal is "no read policy on the body for any role";
+// pg_policies is not reachable via PostgREST, so the structural proof runs through the
+// SECURITY DEFINER vault_seal_probe() helper (migration 018), which returns booleans only.
+async function g22() {
+  console.log('\nG22 — the Vault seal fails closed: no role reads a sealed body (RLS, L.3)');
+
+  // STRUCTURAL — the load-bearing seal proof, covering EVERY role (author, commissioner,
+  // admin) via the absence of any SELECT/ALL policy on the body table.
+  const { data: probeData, error: probeErr } = await serviceClient.rpc('vault_seal_probe' as never);
+  const probe = (probeData as
+    | { body_table_exists: boolean; body_has_read_policy: boolean; body_has_insert_policy: boolean; meta_table_exists: boolean }[]
+    | null)?.[0];
+  if (probeErr || !probe) {
+    fail('G22', `vault_seal_probe() unavailable — migration 018 not applied? (${probeErr ? (probeErr as { message?: string }).message : 'no rows'})`);
+    return;
+  }
+  if (!probe.meta_table_exists) {
+    fail('G22', 'vault_sealed_letters (metadata) missing — migration 018 not applied');
+    return;
+  }
+  if (!probe.body_table_exists) {
+    fail('G22', 'vault_sealed_letter_bodies missing — migration 018 not applied');
+    return;
+  }
+  if (probe.body_has_read_policy) {
+    fail('G22', 'vault_sealed_letter_bodies has a SELECT/ALL policy — THE SEAL LEAKS (a role can read a sealed body)');
+  } else {
+    pass('G22: vault_sealed_letter_bodies has NO read policy — no role (author, commissioner, admin) reads a sealed body');
+  }
+  if (probe.body_has_insert_policy) {
+    pass('G22: vault_sealed_letter_bodies is RLS-governed (author INSERT policy present)');
+  } else {
+    fail('G22', 'vault_sealed_letter_bodies has no INSERT policy — table not governed as expected (incomplete migration?)');
+  }
+
+  // BEHAVIORAL — anon can author neither a letter nor a body.
+  const { error: metaInsErr } = await anonClient.from('vault_sealed_letters').insert({
+    league_id: DEMO_LEAGUE_ID,
+    member_user_id: '00000000-0000-0000-0000-0000000000bb',
+    franchise_id: '00000000-0000-0000-0000-0000000000aa',
+    season: 2026,
+  });
+  assertRlsInsertDenied('G22', 'vault_sealed_letters', metaInsErr);
+
+  const { error: bodyInsErr } = await anonClient.from('vault_sealed_letter_bodies').insert({
+    letter_id: '00000000-0000-0000-0000-0000000000dd',
+    body: 'governance_probe',
+  });
+  assertRlsInsertDenied('G22', 'vault_sealed_letter_bodies', bodyInsErr);
+
+  // BEHAVIORAL on a REAL row — seed a sealed letter + body via service role, then assert an
+  // anon SELECT of the body returns nothing. We just seeded it, so an empty read is a genuine
+  // RLS denial, not a missing-table vacuum (the G11 false-pass guard).
+  const { data: fr } = (await serviceClient
+    .from('franchises')
+    .select('id, league_id, member_user_id')
+    .not('member_user_id', 'is', null)
+    .limit(1)
+    .maybeSingle()) as { data: { id: string; league_id: string; member_user_id: string } | null };
+  if (!fr) {
+    console.log('     (G22 behavioral seed skipped: no franchise with a member_user_id; the structural seal proof above stands)');
+    return;
+  }
+
+  const { data: meta } = (await serviceClient
+    .from('vault_sealed_letters')
+    .insert({ league_id: fr.league_id, member_user_id: fr.member_user_id, franchise_id: fr.id, season: 2026 })
+    .select('id, sealed_at')
+    .single()) as { data: { id: string; sealed_at: string } | null };
+  if (!meta) {
+    fail('G22', 'Could not seed vault_sealed_letters via service role');
+    return;
+  }
+
+  const { error: seedBodyErr } = await serviceClient
+    .from('vault_sealed_letter_bodies')
+    .insert({ letter_id: meta.id, body: 'GOVERNANCE_SEAL_PROBE_BODY' });
+  if (seedBodyErr) {
+    fail('G22', `Could not seed vault_sealed_letter_bodies via service role: ${(seedBodyErr as { message?: string }).message}`);
+    await serviceClient.from('vault_sealed_letters').delete().eq('id', meta.id);
+    return;
+  }
+
+  const { data: anonBody } = await anonClient
+    .from('vault_sealed_letter_bodies')
+    .select('letter_id, body')
+    .eq('letter_id', meta.id);
+  if (!anonBody || anonBody.length === 0) {
+    pass('G22: Anon SELECT of a seeded sealed body returns no body (RLS denies a real row)');
+  } else {
+    fail('G22', `Anon read a sealed body — SEAL FAILURE (${anonBody.length})`);
+  }
+
+  const metaKeys = Object.keys(meta);
+  if (metaKeys.includes('sealed_at') && !metaKeys.includes('body')) {
+    pass('G22: metadata projection returns existence + sealed_at, never a body');
+  } else {
+    fail('G22', `metadata projection shape wrong: ${JSON.stringify(metaKeys)}`);
+  }
+
+  // Cleanup — service role bypasses the append-only RLS for test teardown.
+  await serviceClient.from('vault_sealed_letter_bodies').delete().eq('letter_id', meta.id);
+  await serviceClient.from('vault_sealed_letters').delete().eq('id', meta.id);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -1019,6 +1126,7 @@ async function main() {
   await g19();
   await g20();
   await g21();
+  await g22();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);
