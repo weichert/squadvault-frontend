@@ -13,10 +13,11 @@
 // Replaces the pre-build empty-state stub. charter-row.tsx on the community
 // page already links here.
 import { createAdminClient } from "@/lib/supabase/server";
-import { getLeague } from "@/lib/league";
+import { getLeague, getViewer } from "@/lib/league";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { MemberInvitePanel, type InviteFranchise } from "@/components/members/member-invite-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -55,12 +56,32 @@ export default async function MembersPage({ params }: Props) {
   const league = await getLeague(id);
   if (!league) notFound();
   const admin = createAdminClient();
+  const viewer = await getViewer(id);
 
   const { data: franchisesData } = (await admin
     .from("franchises")
     .select("canonical_franchise_id, owner_display_name, charter_member")
     .eq("league_id", league.id)
     .order("canonical_franchise_id", { ascending: true })) as { data: FranchiseRow[] | null };
+
+  // Commissioner-only: the franchise uuids + current linkage state feed the invite
+  // control. Fetched only when the viewer is the commissioner so the public surface and
+  // its query are unchanged for everyone else.
+  let inviteFranchises: InviteFranchise[] = [];
+  if (viewer.isCommissioner) {
+    const { data: linkRows } = (await admin
+      .from("franchises")
+      .select("id, canonical_franchise_id, owner_display_name, member_user_id")
+      .eq("league_id", league.id)
+      .order("canonical_franchise_id", { ascending: true })) as {
+      data: { id: string; canonical_franchise_id: string; owner_display_name: string; member_user_id: string | null }[] | null;
+    };
+    inviteFranchises = (linkRows ?? []).map((f) => ({
+      id: f.id,
+      name: f.owner_display_name,
+      linked: !!f.member_user_id,
+    }));
+  }
 
   const franchises = franchisesData ?? [];
 
@@ -146,6 +167,10 @@ export default async function MembersPage({ params }: Props) {
               );
             })}
           </div>
+        )}
+
+        {viewer.isCommissioner && inviteFranchises.length > 0 && (
+          <MemberInvitePanel franchises={inviteFranchises} />
         )}
 
       </div>
