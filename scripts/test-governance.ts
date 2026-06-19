@@ -1101,6 +1101,112 @@ async function g22() {
   await serviceClient.from('vault_sealed_letters').delete().eq('id', meta.id);
 }
 
+// ── G23: testimony never contaminates the event ledger (the L.1 PAYLOAD) ─
+// Inverse-of-G11 discipline: a MISSING table/probe/policy FAILS this test; absence must never
+// read as a granted-deny pass. The separation invariant is "testimony has no FK/trigger/write
+// path to the canonical events ledger, and its provenance stamp is non-strippable." The FK /
+// trigger catalog is not reachable via PostgREST, so the structural proof runs through the
+// SECURITY DEFINER testimony_separation_probe() helper (migration 021), booleans only.
+async function g23() {
+  console.log('\nG23 — testimony never contaminates the event ledger: no write path, fails closed (RLS, L.1)');
+
+  // STRUCTURAL — the load-bearing separation proof.
+  const { data: probeData, error: probeErr } = await serviceClient.rpc('testimony_separation_probe' as never);
+  const probe = (probeData as
+    | { sessions_table_exists: boolean; exchanges_table_exists: boolean; provenance_not_null: boolean; no_ledger_fk: boolean; no_triggers: boolean }[]
+    | null)?.[0];
+  if (probeErr || !probe) {
+    fail('G23', `testimony_separation_probe() unavailable — migration 021 not applied? (${probeErr ? (probeErr as { message?: string }).message : 'no rows'})`);
+    return;
+  }
+  if (!probe.sessions_table_exists) {
+    fail('G23', 'member_history_sessions missing — migration 020 not applied');
+    return;
+  }
+  if (!probe.exchanges_table_exists) {
+    fail('G23', 'member_history_exchanges missing — migration 020 not applied');
+    return;
+  }
+  if (probe.provenance_not_null) {
+    pass('G23: member_history_exchanges.provenance is present and NOT NULL (non-strippable S1 stamp)');
+  } else {
+    fail('G23', 'member_history_exchanges.provenance is missing or nullable — the testimony stamp is strippable');
+  }
+  if (probe.no_ledger_fk) {
+    pass('G23: testimony tables have NO foreign key to any fact/event-ledger table (no structural write path into the ledger)');
+  } else {
+    fail('G23', 'a testimony table has a FK to a fact/event-ledger table — THE SEPARATION LEAKS (testimony could be read as / merged into an event fact)');
+  }
+  if (probe.no_triggers) {
+    pass('G23: testimony tables carry NO trigger (no trigger can copy a remembered datum into a fact table)');
+  } else {
+    fail('G23', 'a testimony table carries a trigger — a write path to the event ledger may exist');
+  }
+
+  // BEHAVIORAL — anon can author neither a session nor an exchange.
+  const { error: sessInsErr } = await anonClient.from('member_history_sessions').insert({
+    league_id: DEMO_LEAGUE_ID,
+    member_user_id: '00000000-0000-0000-0000-0000000000bb',
+    franchise_id: '00000000-0000-0000-0000-0000000000aa',
+  });
+  assertRlsInsertDenied('G23', 'member_history_sessions', sessInsErr);
+
+  const { error: exInsErr } = await anonClient.from('member_history_exchanges').insert({
+    session_id: '00000000-0000-0000-0000-0000000000ee',
+    turn: 1,
+    speaker: 'MEMBER',
+    content: 'governance_probe',
+  });
+  assertRlsInsertDenied('G23', 'member_history_exchanges', exInsErr);
+
+  // BEHAVIORAL on a REAL row — seed a session + exchange via service role, then assert an anon
+  // SELECT of the exchange returns nothing. We just seeded it, so an empty read is a genuine
+  // RLS denial (author + admin only), not a missing-table vacuum (the G11 false-pass guard).
+  const { data: fr } = (await serviceClient
+    .from('franchises')
+    .select('id, league_id, member_user_id')
+    .not('member_user_id', 'is', null)
+    .limit(1)
+    .maybeSingle()) as { data: { id: string; league_id: string; member_user_id: string } | null };
+  if (!fr) {
+    console.log('     (G23 behavioral seed skipped: no franchise with a member_user_id; the structural separation proof above stands)');
+    return;
+  }
+
+  const { data: sess } = (await serviceClient
+    .from('member_history_sessions')
+    .insert({ league_id: fr.league_id, member_user_id: fr.member_user_id, franchise_id: fr.id })
+    .select('id')
+    .single()) as { data: { id: string } | null };
+  if (!sess) {
+    fail('G23', 'Could not seed member_history_sessions via service role');
+    return;
+  }
+
+  const { error: seedExErr } = await serviceClient
+    .from('member_history_exchanges')
+    .insert({ session_id: sess.id, turn: 1, speaker: 'MEMBER', content: 'GOVERNANCE_SEPARATION_PROBE' });
+  if (seedExErr) {
+    fail('G23', `Could not seed member_history_exchanges via service role: ${(seedExErr as { message?: string }).message}`);
+    await serviceClient.from('member_history_sessions').delete().eq('id', sess.id);
+    return;
+  }
+
+  const { data: anonEx } = await anonClient
+    .from('member_history_exchanges')
+    .select('id, content')
+    .eq('session_id', sess.id);
+  if (!anonEx || anonEx.length === 0) {
+    pass('G23: Anon SELECT of a seeded exchange returns nothing (RLS denies a real row — author + admin only)');
+  } else {
+    fail('G23', `Anon read a testimony exchange — RLS FAILURE (${anonEx.length})`);
+  }
+
+  // Cleanup — service role bypasses the append-only RLS for test teardown.
+  await serviceClient.from('member_history_exchanges').delete().eq('session_id', sess.id);
+  await serviceClient.from('member_history_sessions').delete().eq('id', sess.id);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -1127,6 +1233,7 @@ async function main() {
   await g20();
   await g21();
   await g22();
+  await g23();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);
