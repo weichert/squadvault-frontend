@@ -539,6 +539,10 @@ export type Database = {
       // L.3 (migration 018): read-only seal-fails-closed introspection for G22. Returns
       // booleans about vault_sealed_letter_bodies' existence + policy shape; no body access.
       vault_seal_probe:   { Args: Record<never, never>; Returns: { body_table_exists: boolean; body_has_read_policy: boolean; body_has_insert_policy: boolean; meta_table_exists: boolean }[] };
+      // L.1 (migration 021): read-only testimony-separation introspection for G23. Returns
+      // booleans proving the two-layer separation (no FK/trigger write path to the events
+      // ledger); fails closed when an object is missing. No testimony content.
+      testimony_separation_probe: { Args: Record<never, never>; Returns: { sessions_table_exists: boolean; exchanges_table_exists: boolean; provenance_not_null: boolean; no_ledger_fk: boolean; no_triggers: boolean }[] };
     };
   };
 };
