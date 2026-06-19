@@ -34,7 +34,8 @@ Trophy Room, members (stub), and the full Commissioner Founding Session.
 | M4 | Surface surge: audience-split rendering, Trophy Room, Part VIII nav, role-aware 403, community section 7.1, F1 Rivalry Chronicle | Done | `97dd41c`, `8d0ae36`, `98b0724`, `8b7ba23`, `0bcf7fb`, `64d18ad`, `9e9b953`, `4f2e4e4`, `57bb1d8` |
 | M5 | Commissioner Founding Session (State 3) + edge cases (F-4) | Done | `2012e0d`..`bbfc1c0`, `f68bc4a`..`d876d84` |
 | Post-M5 | Deploy recovery + hardening: login Suspense build-fix, CI, `.nvmrc`, `vercel.json` framework guard, continuity scaffold | In progress | `b4219a0`, `397c215`, + this scaffold |
-| W.6 | Member consent (D-V/D-X): `member_consent_events` foundation + member consent panel + write path; `founding_sessions.consent` reinterpreted as league-defaults layer | Done | `d58191b`, `06cf568`, `6c2ed32`, `248895c` |
+| W.6 | Member consent (D-V/D-X): `member_consent_events` foundation + member consent panel + write path; `founding_sessions.consent` reinterpreted as league-defaults layer. **NB:** migration 010 was committed here but only *applied to prod* 2026-06-18 in the E2.3 session (table + `member_consent_current` view were absent on prod until then; G11 false-passed on the missing table). | Done | `d58191b`, `06cf568`, `6c2ed32`, `248895c` |
+| E2.3 | **Member onboarding minimal** (D-SEQ-2): magic-link invite + ratified franchise linkage. Migration 016 `franchise_member_links` (append-only, commissioner-write, no UPDATE/DELETE; sibling of 012/014/015); commissioner-only invite route + panel; `franchises.member_user_id` kept as derived pointer; G21 gov test. Discharged on 016-live + gov **129/0** (G21 active) + a real confirmed member linked (3 append rows + pointer) + read-model 2a-silence fail-closed via `member_consent_current`. Surfaced + applied the unapplied W.6 migration 010 (founder-approved). | Done | `0a72b16`, `6e49c26`, merge `5521637` |
 | W.1 | A/V Room **Increment 1**: fail-closed room, photo ingest, five-kind provenance tagging, vacuous-tag rejection, correction-by-supersession, ratification, withdrawal, honest gaps; video present-but-not-playable (deferred) | Inc 1 done; video + member-testimony deferred | `c21e858`, `df79a4f`, `c284053`, `7eee29d`, `65da2e6` |
 | W.1 | A/V Room **video-ingest hardening** (no playback): client-side size pre-check (D1), specific upload-failure reasons (D2), poster-frame as a derived rendition (D3, image-only). Makes the 50 MB cap honest; does not raise it (large-file ingest stays blocked on D-W1-V1). | Done | `7601f8c`, `b97b19c`, `99dafc0` |
 
@@ -49,21 +50,18 @@ labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
 - **Voice bridge** — founding Voice Profile -> engine recap voice. Cross-repo;
   build only when deliberately designed. (Engine never reads
   `voice_profile_id` today.)
-- **E2.3-minimal — member onboarding (invite + ratified franchise linkage)** —
-  **BUILT 2026-06-12, pending founder apply + click-through** (branch
-  `feat/e2-3-minimal-member-onboarding`). Ruled scope D-SEQ-2 (engine Fable DECIDE
-  2026-06-12); founder picked the binding mechanism = **invite + ratify at issue**. One
-  commissioner action (members-page control, commissioner-only) issues a Supabase magic-link
-  invite to a member email AND records the linkage: migration 016 `franchise_member_links`
-  (append-only, commissioner-write, no UPDATE/DELETE — sibling of 012/014/015), with
-  `franchises.member_user_id` kept as the derived pointer existing readers consume. G21 gov
-  test added (probe-skip until 016 applied). Gate semantics CONSUMED, not touched — this is
-  what finally makes the 2a-silence / 2b-playback gates exercisable with a real member.
-  DISCHARGE held on: migration 016 live + gov 117+/0 + one real invite click-through (2a
-  silent-without-grant, renders-with-grant, commissioner id still works). Memo
-  `_observations/OBSERVATIONS_2026_06_12_E2_3_MINIMAL_BUILD.md`. Local `npm run build` fails
-  identically on `main` (`8cd2474`) — pre-existing/environmental, not this unit; CI is the
-  authority.
+- **E2.3-minimal — member onboarding** — **DISCHARGED 2026-06-18** (merge `5521637`,
+  PR #23; see Milestones table). Discharge basis: migration 016 live (in fact already
+  applied to prod 2026-06-13 during build-session click-throughs), governance **129/0**
+  with G21 active, a real confirmed member linked (`franchise_member_links` = 3 append
+  rows + `franchises` pointer), and the read-model 2a-silence verified fail-closed via
+  `member_consent_current`. Surfaced + closed a prod gap: W.6 migration 010
+  `member_consent_events` had never been applied to prod (G11 false-passed on the missing
+  table); applied this session, founder-approved. Residual (not blocking): the
+  `renders-with-grant` leg is correct by construction but was not live-exercised; **Bug B**
+  (implicit-flow `/auth/callback` reads only `?code` and no-ops, so the commissioner-claim
+  block may never fire) is a separate flagged unit. Memo
+  `_observations/OBSERVATIONS_2026_06_18_E2_3_MINIMAL_DISCHARGE.md`.
 - **A/V Room — member testimony (Increment 2)** — build-gated on **E2.3**
   (member<->franchise identity linkage). No member-facing write path exists yet;
   the 6.6 fail-closed 2a-silence path is structurally unexercisable until a
