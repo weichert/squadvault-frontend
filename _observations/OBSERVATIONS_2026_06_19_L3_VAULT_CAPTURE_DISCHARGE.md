@@ -98,3 +98,12 @@ Docket: E2.3 DISCHARGED -> L.3 capture DISCHARGED (this) -> L.1 first wave (Aug 
 -> W.1 Inc 2. Docket item 2 (L.3) stays in-flight only for its reveal successor (season-end);
 the capture obligation for the 08-15 draft is met. Founder call at close: advance to item 3
 (L.1), or hold.
+
+## Test-data scrub (2026-06-19)
+
+Vault test-data scrub 2026-06-19 (pre-launch, one-time). The L.3 acceptance-test letter
+(sealed by member 279af3cd during G22 acceptance) and its sealed_testimony GRANT were
+removed via service-role before any genuine season letter existed. Recorded as an explicit
+one-time test-hygiene exception — NOT a precedent for deleting sealed letters. The
+terminal/append-only seal invariant stands unbroken for all season-of-record letters; the
+first genuine 2026 entry will be the inaugural Vault fact.
