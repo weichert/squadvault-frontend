@@ -254,7 +254,12 @@ export type MemberConsentCategory =
   // L.3 The Vault (migration 017, D-L3-4). Consent-at-writing for a sealed letter; carries
   // no rendering_class. The GRANT covers in-ceremony reveal only (republication is a
   // distinct future consent act, D-SEQ-6 held in-ceremony-only).
-  | 'sealed_testimony';
+  | 'sealed_testimony'
+  // L.1 Historian Interviews (migration 019, S4). Consent-at-interview for captured
+  // oral-history testimony; carries no rendering_class. GRANT precedes capture (no exchange
+  // stored without it, spec 6.4); revocable-forward (withholds future display, never
+  // rewrites the captured record). A dedicated category, distinct from attributed_quotes.
+  | 'oral_history_testimony';
 
 export type MemberConsentEventType = 'GRANT' | 'REVOKE';
 

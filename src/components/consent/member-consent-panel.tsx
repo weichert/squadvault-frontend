@@ -49,6 +49,7 @@ const CATEGORY_LABEL: Record<MemberConsentCategory, string> = {
   attributed_quotes: 'Your words, attributed',
   synthesized_voice: 'Synthesized voice',
   sealed_testimony: 'Sealed letter (the Vault)',
+  oral_history_testimony: 'Oral-history interview (the Historian)',
 };
 
 export function MemberConsentPanel({
