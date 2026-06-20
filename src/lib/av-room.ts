@@ -282,6 +282,115 @@ export async function loadRoomState(
   return { ratified, entries: roomEntries };
 }
 
+// W.1 Increment 2 (spec 5.6 / 5.7): the "as remembered by [member]" caption layer. A caption
+// is the member-CAPTION layer - structurally separate from the human-ratified provenance FACT
+// layer (loadRoomState above). The two are NEVER merged; this function deliberately lives apart
+// so a caption can never be folded into ProvenancePanel data.
+export const MEDIA_CAPTION_CATEGORY = 'media_caption' as const;
+
+// One caption as the room presents it: attributed to the authoring member, body verbatim.
+export type DisplayCaption = {
+  id: string;
+  mediaEntryId: string;
+  body: string;
+  authorName: string | null;
+  recordedAt: string;
+};
+
+// Load the DISPLAYABLE captions for a league's items, keyed by media_entry_id. A caption shows
+// IFF (spec 5.7): it is the latest in its supersession chain, its author holds a CURRENT
+// media_caption GRANT (revocable-forward: a REVOKE withholds future display), and no display
+// withdrawal stands against it. The captured rows are never edited - "current" is a derived
+// read over the append-only logs, exactly like loadRoomState. Returns an empty map on any
+// missing-table condition (graceful before migration 023 is applied).
+export async function loadCaptionsForLeague(
+  admin: AdminClient,
+  leagueUuid: string,
+  entryIds: string[],
+): Promise<Map<string, DisplayCaption[]>> {
+  const byEntry = new Map<string, DisplayCaption[]>();
+  if (entryIds.length === 0) return byEntry;
+
+  const { data: capRows, error: capErr } = (await admin
+    .from('media_captions')
+    .select('id, media_entry_id, author_user_id, body, recorded_at, supersedes')
+    .in('media_entry_id', entryIds)
+    .order('recorded_at', { ascending: false })) as {
+    data: {
+      id: string;
+      media_entry_id: string;
+      author_user_id: string;
+      body: string;
+      recorded_at: string;
+      supersedes: string | null;
+    }[] | null;
+    error: { code?: string } | null;
+  };
+  if (capErr || !capRows || capRows.length === 0) return byEntry;
+
+  // Supersession: a correction names what it supersedes; the superseded caption drops out.
+  const superseded = new Set(capRows.map((c) => c.supersedes).filter((x): x is string => !!x));
+  const current = capRows.filter((c) => !superseded.has(c.id));
+  if (current.length === 0) return byEntry;
+
+  // Display withdrawal: a caption is withheld iff a withdrawal stands against its caption_id.
+  // (Caption withdrawals are withdrawal-only this increment - no reinstatement path was minted;
+  // the captured row is never touched.) Graceful if the caption_id column is absent.
+  const withdrawnCaptions = new Set<string>();
+  {
+    const { data: wRows } = (await admin
+      .from('media_display_withdrawals')
+      .select('caption_id')
+      .in('caption_id', current.map((c) => c.id))) as {
+      data: { caption_id: string | null }[] | null;
+    };
+    for (const w of wRows ?? []) if (w.caption_id) withdrawnCaptions.add(w.caption_id);
+  }
+
+  // Grant gate: only captions whose AUTHOR holds a current media_caption GRANT display.
+  const authorIds = Array.from(new Set(current.map((c) => c.author_user_id)));
+  const grantedAuthors = new Set<string>();
+  const nameByAuthor = new Map<string, string>();
+  {
+    const { data: grants } = (await admin
+      .from('member_consent_current')
+      .select('member_user_id, current_state')
+      .eq('league_id', leagueUuid)
+      .eq('category', MEDIA_CAPTION_CATEGORY)
+      .in('member_user_id', authorIds)) as {
+      data: { member_user_id: string; current_state: string }[] | null;
+    };
+    for (const g of grants ?? []) if (g.current_state === 'GRANT') grantedAuthors.add(g.member_user_id);
+
+    const { data: members } = (await admin
+      .from('franchises')
+      .select('member_user_id, owner_display_name')
+      .eq('league_id', leagueUuid)
+      .in('member_user_id', authorIds)) as {
+      data: { member_user_id: string | null; owner_display_name: string }[] | null;
+    };
+    for (const m of members ?? []) {
+      if (m.member_user_id) nameByAuthor.set(m.member_user_id, m.owner_display_name);
+    }
+  }
+
+  // Oldest-first within an item (chronological account order); only granted + not-withdrawn.
+  for (const c of [...current].reverse()) {
+    if (withdrawnCaptions.has(c.id)) continue;
+    if (!grantedAuthors.has(c.author_user_id)) continue;
+    const list = byEntry.get(c.media_entry_id) ?? [];
+    list.push({
+      id: c.id,
+      mediaEntryId: c.media_entry_id,
+      body: c.body,
+      authorName: nameByAuthor.get(c.author_user_id) ?? null,
+      recordedAt: c.recorded_at,
+    });
+    byEntry.set(c.media_entry_id, list);
+  }
+  return byEntry;
+}
+
 // D-W1-A: the 2b consent category (recorded voice) - the second playback-gate leg. Inert
 // but real until E2.3: when members can hold grants, this leg becomes live with NO schema
 // change. Distinct from the 2a (media_appearance) category that gates identified display.

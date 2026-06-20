@@ -1207,6 +1207,103 @@ async function g23() {
   await serviceClient.from('member_history_sessions').delete().eq('id', sess.id);
 }
 
+// ── G24: a member caption never contaminates the media FACT layer (the W.1 Inc 2 PAYLOAD) ─
+// Inverse-of-G11 discipline: a MISSING table/probe/policy FAILS this test; absence must never
+// read as a granted-deny pass. The separation invariant (sharper than L.1's): a caption may FK
+// the ITEM layer (media_entries — the allowed attach point) but has NO FK/trigger/write path to
+// the human-ratified FACT layer (media_provenance_tag_events) OR the event ledger, and its
+// provenance stamp is non-strippable. The FK/trigger catalog is not reachable via PostgREST, so
+// the structural proof runs through the SECURITY DEFINER caption_separation_probe() (migration
+// 024), booleans only.
+async function g24() {
+  console.log('\nG24 — a member caption never contaminates the media FACT layer: no write path, fails closed (RLS, W.1 Inc 2)');
+
+  // STRUCTURAL — the load-bearing separation proof.
+  const { data: probeData, error: probeErr } = await serviceClient.rpc('caption_separation_probe' as never);
+  const probe = (probeData as
+    | { captions_table_exists: boolean; provenance_not_null: boolean; no_fact_layer_fk: boolean; no_triggers: boolean }[]
+    | null)?.[0];
+  if (probeErr || !probe) {
+    fail('G24', `caption_separation_probe() unavailable — migration 024 not applied? (${probeErr ? (probeErr as { message?: string }).message : 'no rows'})`);
+    return;
+  }
+  if (!probe.captions_table_exists) {
+    fail('G24', 'media_captions missing — migration 023 not applied');
+    return;
+  }
+  pass('G24: media_captions exists');
+  if (probe.provenance_not_null) {
+    pass('G24: media_captions.provenance is present and NOT NULL (non-strippable, value-pinned MEMBER_CAPTION stamp)');
+  } else {
+    fail('G24', 'media_captions.provenance is missing or nullable — the caption stamp is strippable');
+  }
+  if (probe.no_fact_layer_fk) {
+    pass('G24: media_captions has NO foreign key to the FACT layer (media_provenance_tag_events) or the event ledger — only the media_entries item-attach is permitted');
+  } else {
+    fail('G24', 'media_captions has a FK into the FACT layer or the event ledger — THE SEPARATION LEAKS (a caption could be read as / merged into a ratified provenance fact)');
+  }
+  if (probe.no_triggers) {
+    pass('G24: media_captions carries NO trigger (no trigger can copy a caption into a fact table)');
+  } else {
+    fail('G24', 'media_captions carries a trigger — a write path into the FACT layer may exist');
+  }
+
+  // BEHAVIORAL — anon cannot author a caption.
+  const { error: capInsErr } = await anonClient.from('media_captions').insert({
+    media_entry_id: '00000000-0000-0000-0000-0000000000cc',
+    author_user_id: '00000000-0000-0000-0000-0000000000bb',
+    body: 'governance_probe',
+  });
+  assertRlsInsertDenied('G24', 'media_captions', capInsErr);
+
+  // BEHAVIORAL on a REAL row — seed a caption via service role on a real media_entry, then
+  // assert an anon SELECT returns nothing. We just seeded it, so an empty read is a genuine RLS
+  // denial (league-authenticated only; anon is in no league), not a missing-table vacuum.
+  const { data: entry } = (await serviceClient
+    .from('media_entries')
+    .select('id, league_id')
+    .limit(1)
+    .maybeSingle()) as { data: { id: string; league_id: string } | null };
+  if (!entry) {
+    console.log('     (G24 behavioral seed skipped: no media_entries row; the structural separation proof above stands)');
+    return;
+  }
+  const { data: fr } = (await serviceClient
+    .from('franchises')
+    .select('member_user_id')
+    .eq('league_id', entry.league_id)
+    .not('member_user_id', 'is', null)
+    .limit(1)
+    .maybeSingle()) as { data: { member_user_id: string } | null };
+  if (!fr) {
+    console.log('     (G24 behavioral seed skipped: no franchise member in the entry league; the structural separation proof above stands)');
+    return;
+  }
+
+  const { data: seeded, error: seedErr } = (await serviceClient
+    .from('media_captions')
+    .insert({ media_entry_id: entry.id, author_user_id: fr.member_user_id, body: 'GOVERNANCE_SEPARATION_PROBE' })
+    .select('id')
+    .single()) as { data: { id: string } | null; error: { message?: string } | null };
+  if (seedErr || !seeded) {
+    fail('G24', `Could not seed media_captions via service role: ${seedErr ? seedErr.message : 'no row'}`);
+    return;
+  }
+
+  const { data: anonCap } = await anonClient
+    .from('media_captions')
+    .select('id, body')
+    .eq('id', seeded.id);
+  if (!anonCap || anonCap.length === 0) {
+    pass('G24: Anon SELECT of a seeded caption returns nothing (RLS denies a real row — league-authenticated only)');
+  } else {
+    fail('G24', `Anon read a caption — RLS FAILURE (${anonCap.length})`);
+  }
+
+  // Cleanup — service role bypasses the append-only RLS for test teardown.
+  await serviceClient.from('media_captions').delete().eq('id', seeded.id);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -1234,6 +1331,7 @@ async function main() {
   await g21();
   await g22();
   await g23();
+  await g24();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);

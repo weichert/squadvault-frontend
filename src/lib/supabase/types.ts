@@ -259,7 +259,13 @@ export type MemberConsentCategory =
   // oral-history testimony; carries no rendering_class. GRANT precedes capture (no exchange
   // stored without it, spec 6.4); revocable-forward (withholds future display, never
   // rewrites the captured record). A dedicated category, distinct from attributed_quotes.
-  | 'oral_history_testimony';
+  | 'oral_history_testimony'
+  // W.1 Increment 2 member captions (migration 022, D-W1I2-3). Consent for an attributed
+  // member CAPTION on an A/V Room item; carries no rendering_class. GRANT precedes capture
+  // (no caption stored without it, spec 6.4); revocable-forward (withholds future display,
+  // never rewrites the captured row). A dedicated category (revocation granularity over
+  // attributed_quotes), distinct from oral_history_testimony.
+  | 'media_caption';
 
 export type MemberConsentEventType = 'GRANT' | 'REVOKE';
 
@@ -357,6 +363,11 @@ export interface MediaDisplayWithdrawal {
   ratified_by: string | null;
   note: string | null;
   recorded_at: string;
+  // W.1 Increment 2 (migration 023): a caption display-withdrawal targets a caption_id
+  // (the caption is withdrawn from display iff its latest withdrawal stands). Nullable;
+  // an item withdrawal carries media_entry_id, a caption withdrawal carries caption_id.
+  // Optional in the type ahead of universal column presence so the typed client compiles.
+  caption_id?: string | null;
 }
 
 // Reinstatement of a withdrawn item (spec 5.5 / D5). Append-only sibling of the
@@ -466,6 +477,22 @@ export interface MemberHistoryExchange {
   recorded_at: string;
 }
 
+// W.1 Increment 2 member captions (migration 023). A consented, attributed, append-only
+// member account ABOUT one A/V Room item ("as remembered by [member]"). media_entry_id is the
+// ONLY permitted FK target (the item attach point); the human-ratified FACT layer
+// (media_provenance_tag_events) and the event ledger stay WALLED (proven by
+// caption_separation_probe). provenance is the non-strippable, value-pinned MEMBER_CAPTION
+// stamp. A correction is a new superseding row, never an edit.
+export interface MediaCaption {
+  id: string;
+  media_entry_id: string;
+  author_user_id: string;
+  body: string;
+  provenance: 'MEMBER_CAPTION';
+  recorded_at: string;
+  supersedes: string | null;
+}
+
 export interface CommissionerNote {
   id: string;
   artifact_id: string;
@@ -528,6 +555,7 @@ export type Database = {
       vault_sealed_letter_bodies: { Row: VaultSealedLetterBody; Insert: VaultSealedLetterBody; Update: never };
       member_history_sessions: { Row: MemberHistorySession; Insert: Omit<MemberHistorySession, 'id' | 'recorded_at' | 'state'> & { state?: MemberHistorySessionState }; Update: never };
       member_history_exchanges: { Row: MemberHistoryExchange; Insert: Omit<MemberHistoryExchange, 'id' | 'recorded_at' | 'provenance'> & { provenance?: 'MEMBER_TESTIMONY' }; Update: never };
+      media_captions: { Row: MediaCaption; Insert: Omit<MediaCaption, 'id' | 'recorded_at' | 'provenance'> & { provenance?: 'MEMBER_CAPTION' }; Update: never };
     };
     Views: {
       member_consent_current: { Row: MemberConsentCurrent };
@@ -543,6 +571,11 @@ export type Database = {
       // booleans proving the two-layer separation (no FK/trigger write path to the events
       // ledger); fails closed when an object is missing. No testimony content.
       testimony_separation_probe: { Args: Record<never, never>; Returns: { sessions_table_exists: boolean; exchanges_table_exists: boolean; provenance_not_null: boolean; no_ledger_fk: boolean; no_triggers: boolean }[] };
+      // W.1 Inc 2 (migration 024): read-only caption-separation introspection for G24. Returns
+      // booleans proving a caption may FK only the item layer (media_entries) and has no
+      // FK/trigger into the FACT layer (media_provenance_tag_events) or the ledger; fails
+      // closed when media_captions is missing. No caption content.
+      caption_separation_probe: { Args: Record<never, never>; Returns: { captions_table_exists: boolean; provenance_not_null: boolean; no_fact_layer_fk: boolean; no_triggers: boolean }[] };
     };
   };
 };
