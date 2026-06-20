@@ -50,6 +50,7 @@ const CATEGORY_LABEL: Record<MemberConsentCategory, string> = {
   synthesized_voice: 'Synthesized voice',
   sealed_testimony: 'Sealed letter (the Vault)',
   oral_history_testimony: 'Oral-history interview (the Historian)',
+  media_caption: 'Caption on an A/V Room item',
 };
 
 export function MemberConsentPanel({

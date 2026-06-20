@@ -18,9 +18,16 @@ import { redirect, notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getLeague, getViewer } from '@/lib/league';
 import { createAdminClient } from '@/lib/supabase/server';
-import { loadRoomState, isLeagueMember, type RoomEntry } from '@/lib/av-room';
+import {
+  loadRoomState,
+  loadCaptionsForLeague,
+  isLeagueMember,
+  type RoomEntry,
+  type DisplayCaption,
+} from '@/lib/av-room';
 import { RoomImage } from '@/components/av-room/room-image';
 import { RoomVideo } from '@/components/av-room/room-video';
+import { CaptionComposer } from '@/components/av-room/caption-composer';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +90,45 @@ function ProvenancePanel({ re }: { re: RoomEntry }) {
   );
 }
 
+// W.1 Increment 2 (spec 5.6): the "as remembered by [member]" CAPTIONS layer. STRUCTURALLY
+// SEPARATE from ProvenancePanel above - a different heading, a left rule, italic member voice -
+// so a caption can never be read as a verified provenance tag (the two-layer rendering
+// invariant, 6.2). Captions are attributed and unmerged (6.3): two members' accounts on one
+// item stay two accounts, never a synthesized consensus. No counts, no reactions (6.6).
+function CaptionsPanel({ captions }: { captions: DisplayCaption[] }) {
+  if (captions.length === 0) return null;
+  return (
+    <section
+      aria-label="As remembered by members"
+      style={{
+        marginTop: 10,
+        paddingLeft: 10,
+        borderLeft: '2px solid var(--vault-gold-dim)',
+      }}
+    >
+      <h3
+        className="font-mono"
+        style={{ margin: 0, fontSize: '9px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--vault-gold-dim)' }}
+      >
+        As remembered by
+      </h3>
+      {captions.map((c) => (
+        <figure key={c.id} style={{ margin: '6px 0 0' }}>
+          <blockquote
+            className="font-ceremonial"
+            style={{ margin: 0, fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', color: 'var(--vault-text)', lineHeight: 1.45 }}
+          >
+            {c.body}
+          </blockquote>
+          <figcaption className="font-ui" style={{ marginTop: 2, fontSize: '0.72rem', color: 'var(--vault-text3)' }}>
+            — {c.authorName ?? 'a member'}
+          </figcaption>
+        </figure>
+      ))}
+    </section>
+  );
+}
+
 export default async function AvRoomPage({ params }: Props) {
   const { id } = await params;
 
@@ -125,6 +171,26 @@ export default async function AvRoomPage({ params }: Props) {
   const photos = live.filter((re) => re.entry.media_kind === 'photo');
   const videos = live.filter((re) => re.entry.media_kind === 'video');
   const ordered = [...photos, ...videos];
+
+  // W.1 Inc 2: the remembered-account layer. Captions are loaded SEPARATELY from the provenance
+  // read-model and rendered in a structurally-distinct panel (never merged, 6.2). Only captions
+  // whose author holds a current media_caption GRANT and that are not withdrawn display (5.7).
+  const captionsByEntry = await loadCaptionsForLeague(
+    admin,
+    league.id,
+    ordered.map((re) => re.entry.id),
+  );
+
+  // The caption composer shows ONLY to franchise-linked MEMBERS of this league (a caption is
+  // member-authored; the commissioner cannot proxy one, D-W1I2-5). Resolve once.
+  const { data: viewerFranchise } = (await admin
+    .from('franchises')
+    .select('id')
+    .eq('league_id', league.id)
+    .eq('member_user_id', viewer.userId)
+    .limit(1)
+    .maybeSingle()) as { data: { id: string } | null };
+  const viewerIsMember = !!viewerFranchise;
 
   // D-W1-A: the latest voice attestation per video, passed structured to RoomVideo (it
   // formats the trust-legible line in viewer-local time and suppresses Play on a
@@ -250,6 +316,8 @@ export default async function AvRoomPage({ params }: Props) {
                   )}
                   <figcaption>
                     <ProvenancePanel re={re} />
+                    <CaptionsPanel captions={captionsByEntry.get(re.entry.id) ?? []} />
+                    {viewerIsMember && <CaptionComposer mediaEntryId={re.entry.id} />}
                   </figcaption>
                 </figure>
               );
