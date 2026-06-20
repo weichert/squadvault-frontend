@@ -40,13 +40,13 @@ async function mintMemberSession(): Promise<{ cookie: string; accessToken: strin
   const ssr = createServerClient(URL, ANON, {
     realtime: { transport: wsTransport },
     cookies: {
-      getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+      getAll: () => Array.from(jar).map(([name, value]) => ({ name, value })),
       setAll: (cs) => cs.forEach(({ name, value }) => jar.set(name, value)),
     },
   });
   await ssr.auth.setSession({ access_token: otp.session.access_token, refresh_token: otp.session.refresh_token });
   return {
-    cookie: [...jar].map(([n, v]) => `${n}=${v}`).join('; '),
+    cookie: Array.from(jar).map(([n, v]) => `${n}=${v}`).join('; '),
     accessToken: otp.session.access_token,
   };
 }
