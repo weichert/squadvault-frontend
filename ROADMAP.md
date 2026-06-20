@@ -40,6 +40,7 @@ Trophy Room, members (stub), and the full Commissioner Founding Session.
 | L.1 | **Historian Interviews - capture-only first wave** (D-L1-1..6, S1..S6; spec engine `c9d32d5`): consented, attributed, append-only oral-history capture extending the founding pattern to members. Migration **019** widens the consent CHECK to add `oral_history_testimony` (010/017 idiom, founder-applied, GRANT-precedes-capture); migration **020** is the two-table append-only split - `member_history_sessions` (insert-once, member-identity-keyed via the franchises pointer) + `member_history_exchanges` (one row/turn, provenance NOT NULL `MEMBER_TESTIMONY`, author/admin-only RLS, no commissioner read); migration **021** `testimony_separation_probe()` proves THE PAYLOAD (no FK/trigger write path to the events ledger). Capture surface at `/league/[id]/history` reuses `lib/founding/*` by composition (diverge on per-turn-INSERT persistence). **G23** separation-fails-closed (inverse-of-G11). Discharged on gov **141/0** + 019/020/021 live on prod + a real member completed an interview end-to-end on the deployed routes (NEGATIVE: capture refused with no grant; GRANT precedes the first exchange; testimony attributed + unmerged; probe all-true). **DISPLAY half deferred** ("as remembered by" successor; pairs the two-layer rendering). | Capture done; display deferred | `e216bce`, `63a71ad`, `761fcf1`, `7a1894b`, merge `50741bf` |
 | W.1 | A/V Room **Increment 1**: fail-closed room, photo ingest, five-kind provenance tagging, vacuous-tag rejection, correction-by-supersession, ratification, withdrawal, honest gaps; video present-but-not-playable (deferred) | Inc 1 done; video + member-testimony deferred | `c21e858`, `df79a4f`, `c284053`, `7eee29d`, `65da2e6` |
 | W.1 | A/V Room **video-ingest hardening** (no playback): client-side size pre-check (D1), specific upload-failure reasons (D2), poster-frame as a derived rendition (D3, image-only). Makes the 50 MB cap honest; does not raise it (large-file ingest stays blocked on D-W1-V1). | Done | `7601f8c`, `b97b19c`, `99dafc0` |
+| W.1 | A/V Room **Increment 2 - member captions (capture + two-layer display)** (D-W1I2-1..6; spec engine `905cb1c`): a consented, attributed, append-only member CAPTION on an A/V Room item, captured and displayed beside - and visibly distinct from - the human-ratified provenance facts (the two-layer rendering invariant, built here for the first time). Migration **022** widens the consent CHECK to add `media_caption` (019 idiom, founder-applied, GRANT-precedes-capture); **023** is the `media_captions` append-only table (`media_entry_id` the ONLY permitted FK = the item attach point; FACT layer + ledger walled; non-strippable value-pinned `MEMBER_CAPTION` stamp; member-only INSERT, no UPDATE/DELETE) + a nullable `caption_id` reuse of `media_display_withdrawals` (No-New-Foundations); **024** `caption_separation_probe()` proves THE PAYLOAD (no FK/trigger from a caption into `media_provenance_tag_events` or the ledger). Capture route `POST /api/av-room/caption` (GRANT-precedes-capture, route-enforced) + a structurally-distinct "as remembered by" panel beside the verified provenance panel, member-only composer. **G24** separation-fails-closed (inverse-of-G11). Discharged on gov **147/0** + 022/023/024 live on prod + a real franchise-linked member captioned end-to-end on the route (NEGATIVE: no grant -> refused, nothing stored; POSITIVE: GRANT precedes caption, verbatim + attributed + append-only, renders in the distinct panel; REVOCABLE-FORWARD: REVOKE withholds display, captured row intact). **MARGINALIA successor deferred** (communal multi-author annotation). | Done | `3f75597`, `dcbe2f5`, `3c66c33`, `699f0c6`, merge `b653c9c` |
 
 Milestone numbering past M3 was assigned retroactively (work shipped without
 labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
@@ -74,11 +75,20 @@ labels); see `_observations/OBSERVATIONS_2026_06_04_CONTINUITY_SCAFFOLD.md`.
   scrubbed post-proof (service role, one-time test hygiene; the `d298a2a` precedent). The
   **DISPLAY successor** ("as remembered by" rendering + commissioner read-at-display) is
   deferred, not foreclosed. Memo `_observations/OBSERVATIONS_2026_06_19_L1_HISTORIAN_CAPTURE_DISCHARGE.md`.
-- **A/V Room — member testimony (Increment 2)** — build-gated on **E2.3**
-  (member<->franchise identity linkage). No member-facing write path exists yet;
-  the 6.6 fail-closed 2a-silence path is structurally unexercisable until a
-  franchise carries a linked `member_user_id` (spec 8.1 anchors the first live
-  test there). See `_observations/OBSERVATIONS_2026_06_10_AV_ROOM_INCREMENT_1_CLICKTHROUGH.md`.
+- **A/V Room — member captions (Increment 2)** — **DISCHARGED 2026-06-19**
+  (merge `b653c9c`, PR #26; see Milestones table). Discharge basis: migrations 022/023/024
+  live on prod `qcaxemuydxlzpzgnnnoa`; governance **147/0** with G24 active
+  (`caption_separation_probe` all-true: only the `media_entries` item-attach FK, no FK/trigger
+  into the FACT layer or ledger); a real franchise-linked member (member `279af3cd`, PFL Buddies)
+  captioned an item end-to-end against the live route — NEGATIVE (no grant -> refused, nothing
+  stored), POSITIVE (GRANT precedes the caption in `recorded_at`; body verbatim, attributed,
+  append-only; renders in the visibly-distinct "as remembered by" panel, never merged into the
+  provenance panel), and REVOCABLE-FORWARD (member-authored REVOKE withholds display, the captured
+  row stays intact). Acceptance data scrubbed post-proof (service role; the `d298a2a` precedent).
+  Display-withdrawal shape: reused `media_display_withdrawals` via a new nullable `caption_id`
+  target column (No-New-Foundations). The **MARGINALIA successor** (communal multi-author
+  annotation; "annotate another member's item"; still no reaction/engagement counts) is deferred,
+  not foreclosed. Memo `_observations/OBSERVATIONS_2026_06_19_W1_INC2_CAPTIONS_DISCHARGE.md`.
 
 ### A/V Room — video increment (next, on the proven Inc 1 foundation)
 Hardening (no playback) shipped 2026-06-10 — `7601f8c`, `b97b19c`, `99dafc0`:
