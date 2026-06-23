@@ -181,7 +181,7 @@ export function ChampionshipPackage({ pkg }: { pkg: ChampionshipPackage }) {
           {champions.length > 0 ? (
             <>
               <p className="font-ceremonial text-vault-text" style={{ fontSize: '1.45rem', marginTop: 18 }}>
-                {champions.length} {champions.length === 1 ? 'name' : 'names'} engraved
+                {`${champions.length} ${champions.length === 1 ? 'name' : 'names'} engraved`}
               </p>
               <Drill summary={`The cumulative record (${champions.length})`}>
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
