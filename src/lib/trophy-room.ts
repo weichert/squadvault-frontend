@@ -196,7 +196,7 @@ export type LiveRecord = {
 
 export type LiveRecords = { records: LiveRecord[] };
 
-type FsrRow = { franchise_id: string; season: number; wins: number; losses: number; ties: number; result: string };
+type FsrRow = { franchise_id: string; season: number; wins: number; losses: number; ties: number; result: string; points_against?: number | null; blowout_wins_60?: number | null };
 
 function winPct(w: number, l: number, t: number): number | null {
   const g = w + l + t;
@@ -234,6 +234,35 @@ export async function loadLiveRecords(admin: AdminClient, leagueUuid: string): P
     .eq('league_id', leagueUuid)
     .order('season', { ascending: true })) as { data: FsrRow[] | null };
   const rows = fsrData ?? [];
+
+  // W.5 Inc 2 Wave 2 columns (points_against + blowout_wins_60) - a SEPARATE, GRACEFUL read so the
+  // Wave 1 records keep working before migration 027 is applied. The Iron Curtain + Executioner
+  // render ONLY when the columns exist AND every row is populated (post-backfill); a missing column
+  // (pre-027) or any null leaves them unrendered (silence over speculation, not a guessed value).
+  let hasWave2 = false;
+  {
+    const { data: w2, error: w2err } = (await admin
+      .from('franchise_season_records')
+      .select('franchise_id, season, points_against, blowout_wins_60')
+      .eq('league_id', leagueUuid)) as {
+      data: { franchise_id: string; season: number; points_against: number | null; blowout_wins_60: number | null }[] | null;
+      error: { code?: string } | null;
+    };
+    if (!w2err && w2 && w2.length > 0 && rows.length > 0) {
+      const byKey = new Map(w2.map((r) => [`${r.franchise_id}:${r.season}`, r]));
+      let allPresent = true;
+      for (const r of rows) {
+        const v = byKey.get(`${r.franchise_id}:${r.season}`);
+        if (v && v.points_against != null && v.blowout_wins_60 != null) {
+          r.points_against = v.points_against;
+          r.blowout_wins_60 = v.blowout_wins_60;
+        } else {
+          allPresent = false;
+        }
+      }
+      hasWave2 = allPresent;
+    }
+  }
 
   // Name resolution (the loadChampionshipPackage pattern): era-correct for a given season, with the
   // current name as the all-time identity / defensive fallback.
@@ -280,11 +309,15 @@ export async function loadLiveRecords(admin: AdminClient, leagueUuid: string): P
   // Generic aggregate-record builder for #24/#25/#26 (all-time franchise aggregates).
   function aggregateRecord(opts: {
     docketNumber: number; trophyName: string; qualification: string;
-    // per-franchise score from running totals; eligibility filter; value formatter
+    // per-franchise score from running totals; eligibility filter; direction; qualifier; formatter
     score: (s: RunState, fid: string) => number;
     eligible?: (s: RunState, fid: string) => boolean;
+    dir?: 'max' | 'min'; // default max (most). 'min' for best-low records (Iron Curtain).
+    qualifies?: (v: number) => boolean; // whether a leader value is a real record (default: > 0)
     fmt: (v: number) => string;
   }): LiveRecord {
+    const dir = opts.dir ?? 'max';
+    const qualifies = opts.qualifies ?? ((v: number) => v > EPS);
     const run = new RunState();
     const history: LiveRecordHistoryEntry[] = [];
     let prevKey = '';
@@ -296,8 +329,8 @@ export async function loadLiveRecords(admin: AdminClient, leagueUuid: string): P
         score.set(fid, opts.score(run, fid));
         if (elig && opts.eligible!(run, fid)) elig.add(fid);
       }
-      const ld = leaders(score, elig, 'max');
-      if (ld && ld.value > EPS) {
+      const ld = leaders(score, elig, dir);
+      if (ld && qualifies(ld.value)) {
         const key = `${ld.fids.slice().sort().join(',')}|${ld.value.toFixed(6)}`;
         if (key !== prevKey) {
           history.push({ season, names: ld.fids.map((f) => currentName(f) ?? '(unknown)'), valueText: opts.fmt(ld.value) });
@@ -309,14 +342,14 @@ export async function loadLiveRecords(admin: AdminClient, leagueUuid: string): P
     const score = new Map<string, number>();
     const elig = opts.eligible ? new Set<string>() : null;
     for (const fid of run.fids()) { score.set(fid, opts.score(run, fid)); if (elig && opts.eligible!(run, fid)) elig.add(fid); }
-    const ld = leaders(score, elig, 'max');
-    const holders = ld && ld.value > EPS ? allTimeHolders(ld.fids) : [];
+    const ld = leaders(score, elig, dir);
+    const holders = ld && qualifies(ld.value) ? allTimeHolders(ld.fids) : [];
     return {
       docketNumber: opts.docketNumber,
       docketId: latestSeason != null ? `TR-LRC-${opts.docketNumber}-${latestSeason}` : `TR-LRC-${opts.docketNumber}`,
       trophyName: opts.trophyName,
       qualification: opts.qualification,
-      valueText: ld && ld.value > EPS ? opts.fmt(ld.value) : '',
+      valueText: ld && qualifies(ld.value) ? opts.fmt(ld.value) : '',
       holders,
       history,
     };
@@ -385,21 +418,50 @@ export async function loadLiveRecords(admin: AdminClient, leagueUuid: string): P
     });
   }
 
+  // W.5 Inc 2 Wave 2 - Group B (render only when the engine-derived columns are present + backfilled).
+  if (hasWave2) {
+    // #27 The Executioner - most wins by 60+ points (all decided games). Max.
+    records.push(aggregateRecord({
+      docketNumber: 27, trophyName: 'The Executioner',
+      qualification: 'Most wins by 60 or more points.',
+      score: (s, fid) => s.agg(fid).blowout60,
+      fmt: (v) => `${v} blowout${v === 1 ? '' : 's'} (60+)`,
+    }));
+    // #28 The Iron Curtain - best (lowest) all-time regular-season points-allowed average. Min.
+    records.push(aggregateRecord({
+      docketNumber: 28, trophyName: 'The Iron Curtain',
+      qualification: 'Best all-time points-allowed average (regular season).',
+      score: (s, fid) => { const a = s.agg(fid); return a.regGames > 0 ? a.pa / a.regGames : Number.POSITIVE_INFINITY; },
+      eligible: (s, fid) => s.agg(fid).regGames > 0,
+      dir: 'min',
+      qualifies: (v) => Number.isFinite(v) && v > 0,
+      fmt: (v) => `${v.toFixed(1)} pts allowed/game`,
+    }));
+  }
+
   return { records };
 }
 
 // Running per-franchise totals, advanced one season at a time (the leader-over-time replay).
+// pa/regGames/blowout60 are the W.5 Inc 2 Wave 2 accumulators (zero when those columns are absent).
+// regGames = games minus a championship appearance (CHAMPION/RUNNER_UP play the one week >= champ
+// week), the regular-season denominator for the Iron Curtain average.
+type Agg = { w: number; l: number; t: number; titles: number; runnerUps: number; pa: number; regGames: number; blowout60: number };
 class RunState {
-  private m = new Map<string, { w: number; l: number; t: number; titles: number; runnerUps: number }>();
-  apply(seasonRows: { franchise_id: string; wins: number; losses: number; ties: number; result: string }[]) {
+  private m = new Map<string, Agg>();
+  apply(seasonRows: FsrRow[]) {
     for (const r of seasonRows) {
-      const a = this.m.get(r.franchise_id) ?? { w: 0, l: 0, t: 0, titles: 0, runnerUps: 0 };
+      const a = this.m.get(r.franchise_id) ?? { w: 0, l: 0, t: 0, titles: 0, runnerUps: 0, pa: 0, regGames: 0, blowout60: 0 };
       a.w += r.wins; a.l += r.losses; a.t += r.ties;
+      const isFinalist = r.result === 'CHAMPION' || r.result === 'RUNNER_UP';
       if (r.result === 'CHAMPION') a.titles += 1;
       if (r.result === 'RUNNER_UP') a.runnerUps += 1;
+      a.pa += r.points_against ?? 0;
+      a.blowout60 += r.blowout_wins_60 ?? 0;
+      a.regGames += (r.wins + r.losses + r.ties) - (isFinalist ? 1 : 0);
       this.m.set(r.franchise_id, a);
     }
   }
-  agg(fid: string) { return this.m.get(fid) ?? { w: 0, l: 0, t: 0, titles: 0, runnerUps: 0 }; }
+  agg(fid: string): Agg { return this.m.get(fid) ?? { w: 0, l: 0, t: 0, titles: 0, runnerUps: 0, pa: 0, regGames: 0, blowout60: 0 }; }
   fids(): string[] { return Array.from(this.m.keys()); }
 }
