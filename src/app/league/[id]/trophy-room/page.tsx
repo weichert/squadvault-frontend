@@ -16,6 +16,9 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { TrustBar } from "@/components/ui/trust-bar";
 import type { TrophyProvenance } from "@/lib/supabase/types";
+import { PROVENANCE_LABEL, PROVENANCE_STYLE } from "@/lib/trophy-provenance";
+import { loadChampionshipPackage } from "@/lib/trophy-room";
+import { ChampionshipPackage } from "@/components/trophy-room/championship-package";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
 // caching so newly-entered trophy entries surface without a hard reload. See
@@ -54,30 +57,20 @@ type SeasonNameRow = {
   team_name: string;
 };
 
-// Provenance label text per Design Brief sections 2.5 and 7.6.
-// Always visible on every entry; does not disappear on hover/scroll
-// (section 9 anti-pattern).
-const PROVENANCE_LABEL: Record<TrophyProvenance, string> = {
-  CANONICAL:             "ENTERED INTO THE RECORD",
-  COMMISSIONER_ATTESTED: "COMMISSIONER ATTESTED",
-  DEMO:                  "DEMO",
-};
-
-// Token colors per Design Brief section 2.4 mapped to provenance.
-const PROVENANCE_STYLE: Record<
-  TrophyProvenance,
-  { color: string; borderColor: string }
-> = {
-  CANONICAL:             { color: "#8B7035", borderColor: "rgba(139, 112, 53, 0.5)" },
-  COMMISSIONER_ATTESTED: { color: "#3B7A7A", borderColor: "rgba(59, 122, 122, 0.5)" },
-  DEMO:                  { color: "#8B6E2A", borderColor: "rgba(139, 110, 42, 0.5)" },
-};
+// Provenance label/style: the shared module (lib/trophy-provenance), consumed by both this
+// championship list and the Championship Package band so a trust label means the same everywhere
+// (spec section 6; extraction flagged in the Trophy Room tighten memo). Always visible per the
+// section 9 anti-pattern.
 
 export default async function TrophyRoomPage({ params }: Props) {
   const { id } = await params;
   const league = await getLeague(id);
   if (!league) notFound();
   const admin = createAdminClient();
+
+  // W.5 Championship Package - the featured custody-aware band (the Belt's derived holder + chain,
+  // the Ring + League Trophy derived off the championship record). Distinct from the flat list below.
+  const pkg = await loadChampionshipPackage(admin, league.id);
 
   // Fetch championship entries, season descending. Two-query pattern (entries
   // then franchises by id) mirrors the recap archive - avoids PostgREST
@@ -155,6 +148,13 @@ export default async function TrophyRoomPage({ params }: Props) {
             provenance - entered into the record or commissioner attested.
           </p>
         </div>
+
+        {/* W.5 Championship Package - the featured custody band, above the chronological list. */}
+        <ChampionshipPackage pkg={pkg} />
+
+        <h2 className="font-mono" style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--vault-gold-dim)", marginBottom: 14 }}>
+          Championship Record
+        </h2>
 
         {entries.length === 0 ? (
           /* Empty state - principled silence per section 9 anti-pattern */
