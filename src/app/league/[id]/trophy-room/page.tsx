@@ -11,7 +11,7 @@
 // See engine _observations/OBSERVATIONS_2026_05_30_TROPHY_ROOM_UI_SHIPMENT.md
 // for the five-decision scope record.
 import { createAdminClient } from "@/lib/supabase/server";
-import { getLeague } from "@/lib/league";
+import { getLeague, getViewer } from "@/lib/league";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { TrustBar } from "@/components/ui/trust-bar";
@@ -19,6 +19,7 @@ import type { TrophyProvenance } from "@/lib/supabase/types";
 import { PROVENANCE_LABEL, PROVENANCE_STYLE } from "@/lib/trophy-provenance";
 import { loadChampionshipPackage } from "@/lib/trophy-room";
 import { ChampionshipPackage } from "@/components/trophy-room/championship-package";
+import { BeltRatifyForm } from "@/components/trophy-room/belt-ratify-form";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
 // caching so newly-entered trophy entries surface without a hard reload. See
@@ -71,6 +72,19 @@ export default async function TrophyRoomPage({ params }: Props) {
   // W.5 Championship Package - the featured custody-aware band (the Belt's derived holder + chain,
   // the Ring + League Trophy derived off the championship record). Distinct from the flat list below.
   const pkg = await loadChampionshipPackage(admin, league.id);
+
+  // The Belt ratify control renders ONLY for the league commissioner (the route + RLS are the hard
+  // guarantee; this is the UI gate). Resolve the viewer and, if commissioner, the franchise options.
+  const viewer = await getViewer(id);
+  let ratifyFranchises: { id: string; name: string }[] = [];
+  if (viewer.isCommissioner) {
+    const { data: frData } = (await admin
+      .from("franchises")
+      .select("id, owner_display_name")
+      .eq("league_id", league.id)
+      .order("owner_display_name")) as { data: { id: string; owner_display_name: string }[] | null };
+    ratifyFranchises = (frData ?? []).map((f) => ({ id: f.id, name: f.owner_display_name }));
+  }
 
   // Fetch championship entries, season descending. Two-query pattern (entries
   // then franchises by id) mirrors the recap archive - avoids PostgREST
@@ -148,6 +162,11 @@ export default async function TrophyRoomPage({ params }: Props) {
             provenance - entered into the record or commissioner attested.
           </p>
         </div>
+
+        {/* W.5 - the commissioner-only Belt ratify control (the route + RLS gate the write). */}
+        {viewer.isCommissioner && (
+          <BeltRatifyForm leagueId={league.id} franchises={ratifyFranchises} />
+        )}
 
         {/* W.5 Championship Package - the featured custody band, above the chronological list. */}
         <ChampionshipPackage pkg={pkg} />
