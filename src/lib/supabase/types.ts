@@ -211,6 +211,23 @@ export interface TrophyRoomEntry {
   created_at: string;
 }
 
+// W.5 Trophy Room - Championship Package (migration 025). The append-only custody TRANSFER
+// ledger: one row per time a traveling trophy (the Belt) changes hands. The current holder is a
+// DERIVED read (the latest event's to_franchise per league+trophy), NEVER a stored column (C1).
+// Commissioner-ratified manual facts (Manual Fact Import frame); append-only (no UPDATE/DELETE).
+export interface TrophyCustodyEvent {
+  id: string;
+  league_id: string;
+  trophy_id: string;            // taxonomy/Docket catalog code; the Belt = 'TR-CP-1'
+  from_franchise: string | null; // prior holder; null for the origin event
+  to_franchise: string;          // new holder; the derived current holder reads the latest of these
+  occasion: string | null;       // the heist narrative; an honest gap when absent
+  season: number;
+  week: number | null;
+  ratified_by: string;           // the acting commissioner (= auth.uid())
+  ratified_at: string;
+}
+
 export interface FoundingSession {
   id: string;
   league_id: string;
@@ -538,6 +555,7 @@ export type Database = {
       approval_events:   { Row: ApprovalEvent;   Insert: Omit<ApprovalEvent, 'id' | 'created_at'>; Update: never };
       docket_ids:        { Row: DocketId;        Insert: Omit<DocketId, 'id' | 'created_at'>; Update: never };
       trophy_room_entries: { Row: TrophyRoomEntry; Insert: Omit<TrophyRoomEntry, 'id' | 'created_at'>; Update: Partial<TrophyRoomEntry> };
+      trophy_custody_events: { Row: TrophyCustodyEvent; Insert: Omit<TrophyCustodyEvent, 'id' | 'ratified_at'> & { ratified_at?: string }; Update: never };
       founding_sessions: { Row: FoundingSession; Insert: Omit<FoundingSession, 'id' | 'created_at' | 'updated_at'>; Update: Partial<FoundingSession> };
       commissioner_notes: { Row: CommissionerNote; Insert: Omit<CommissionerNote, 'id' | 'created_at'>; Update: never };
       sync_log:          { Row: SyncLog;         Insert: Omit<SyncLog, 'id' | 'created_at'>; Update: never };
@@ -576,6 +594,10 @@ export type Database = {
       // FK/trigger into the FACT layer (media_provenance_tag_events) or the ledger; fails
       // closed when media_captions is missing. No caption content.
       caption_separation_probe: { Args: Record<never, never>; Returns: { captions_table_exists: boolean; provenance_not_null: boolean; no_fact_layer_fk: boolean; no_triggers: boolean }[] };
+      // W.5 (migration 026): read-only custody-integrity introspection for G25. Booleans proving
+      // trophy_custody_events is append-only (no UPDATE/DELETE policy) and carries no stored holder
+      // column (current holder is a DERIVED read, C1); fails closed when the table is missing.
+      custody_integrity_probe: { Args: Record<never, never>; Returns: { custody_table_exists: boolean; rls_enabled: boolean; no_update_policy: boolean; no_delete_policy: boolean; no_holder_column: boolean }[] };
     };
   };
 };
