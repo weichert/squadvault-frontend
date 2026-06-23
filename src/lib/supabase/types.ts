@@ -143,6 +143,11 @@ export interface FranchiseSeasonRecord {
   result: '' | 'CHAMPION' | 'RUNNER_UP';
   provenance: string;
   created_at: string;
+  // W.5 Inc 2 Wave 2 (migration 027): regular-season points allowed + blowout-60 wins, engine-derived
+  // and immutable. Optional/nullable in the type ahead of universal column presence so the typed
+  // client compiles and the Wave 1 reads keep working before 027 is applied.
+  points_against?: number | null;
+  blowout_wins_60?: number | null;
 }
 
 export interface Artifact {
