@@ -17,8 +17,9 @@ import type { Metadata } from "next";
 import { TrustBar } from "@/components/ui/trust-bar";
 import type { TrophyProvenance } from "@/lib/supabase/types";
 import { PROVENANCE_LABEL, PROVENANCE_STYLE } from "@/lib/trophy-provenance";
-import { loadChampionshipPackage } from "@/lib/trophy-room";
+import { loadChampionshipPackage, loadLiveRecords } from "@/lib/trophy-room";
 import { ChampionshipPackage } from "@/components/trophy-room/championship-package";
+import { LiveRecords } from "@/components/trophy-room/live-records";
 import { BeltRatifyForm } from "@/components/trophy-room/belt-ratify-form";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
@@ -72,6 +73,10 @@ export default async function TrophyRoomPage({ params }: Props) {
   // W.5 Championship Package - the featured custody-aware band (the Belt's derived holder + chain,
   // the Ring + League Trophy derived off the championship record). Distinct from the flat list below.
   const pkg = await loadChampionshipPackage(admin, league.id);
+
+  // W.5 Inc 2 Wave 1 - the Live Records section (4 Group-A plaques, derived off the championship/
+  // season record; distinct from the Championship Package band and the chronological list below).
+  const live = await loadLiveRecords(admin, league.id);
 
   // The Belt ratify control renders ONLY for the league commissioner (the route + RLS are the hard
   // guarantee; this is the UI gate). Resolve the viewer and, if commissioner, the franchise options.
@@ -170,6 +175,9 @@ export default async function TrophyRoomPage({ params }: Props) {
 
         {/* W.5 Championship Package - the featured custody band, above the chronological list. */}
         <ChampionshipPackage pkg={pkg} />
+
+        {/* W.5 Inc 2 Wave 1 - the Live Records section (derived traveling records). */}
+        <LiveRecords live={live} />
 
         <h2 className="font-mono" style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--vault-gold-dim)", marginBottom: 14 }}>
           Championship Record
