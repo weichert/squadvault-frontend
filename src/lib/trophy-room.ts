@@ -623,5 +623,42 @@ export async function loadSeasonAwards(admin: AdminClient, leagueUuid: string): 
     permanentLists.push({ docketNumber: 35, docketId: 'TR-LRC-35', trophyName: 'The Perfect Storm', qualification: 'A winless season - every one, kept.', entries });
   }
 
+  // W.5 Inc 3 Wave B1 - the weekly-score-derived awards from season_award_winners (graceful: table
+  // absent -> these render nothing, Wave A unaffected). franchise_id is the engine canonical code.
+  {
+    const { data: saw, error } = (await admin
+      .from('season_award_winners')
+      .select('award_id, season, franchise_id, value')
+      .eq('league_id', leagueUuid)) as { data: { award_id: string; season: number; franchise_id: string; value: number | null }[] | null; error: { code?: string } | null };
+    if (!error && saw && saw.length > 0) {
+      const currentNameByCanon = new Map<string, string>();
+      for (const [uuid, canon] of Array.from(canonicalById)) { const n = currentNameById.get(uuid); if (n) currentNameByCanon.set(canon, n); }
+      const eraNameCanon = (canon: string, season: number): string | null => eraNameByKey.get(`${canon}:${season}`) ?? currentNameByCanon.get(canon) ?? null;
+
+      // #4 The Cannon + #12 The Black Rose - all-time max single value; per-season rows = history.
+      const allTimeCard = (award: string, docket: number, trophyName: string, qualification: string, fmt: (v: number) => string): LiveRecord | null => {
+        const aw = saw.filter((r) => r.award_id === award && r.value != null);
+        if (aw.length === 0) return null;
+        const best = Math.max(...aw.map((r) => r.value as number));
+        const holders: LiveRecordHolder[] = aw.filter((r) => r.value === best).map((r) => ({ franchiseId: r.franchise_id, name: eraNameCanon(r.franchise_id, r.season), season: r.season }));
+        const bySeason = new Map<number, { fids: string[]; value: number }>();
+        for (const r of aw) { const cur = bySeason.get(r.season); const v = r.value as number; if (!cur || v > cur.value) bySeason.set(r.season, { fids: [r.franchise_id], value: v }); else if (v === cur.value) cur.fids.push(r.franchise_id); }
+        const history: LiveRecordHistoryEntry[] = Array.from(bySeason.keys()).sort((a, b) => a - b).map((s) => { const e = bySeason.get(s)!; return { season: s, names: e.fids.map((f) => eraNameCanon(f, s) ?? '(unknown)'), valueText: fmt(e.value) }; });
+        return { docketNumber: docket, docketId: `TR-LRC-${docket}`, trophyName, qualification, valueText: fmt(best), holders, history };
+      };
+      const cannon = allTimeCard('4', 4, 'The Cannon', 'The highest single-week score in league history.', (v) => `${v} points`);
+      const rose = allTimeCard('12', 12, 'The Black Rose', 'The highest score in a losing effort.', (v) => `${v} points`);
+      if (cannon) permanentCards.push(cannon);
+      if (rose) permanentCards.push(rose);
+
+      // #33 The One-Point Club (list; C6) - winners of championships decided by margin < 2.
+      const opc = saw.filter((r) => r.award_id === '33').sort((a, b) => b.season - a.season);
+      if (opc.length > 0) {
+        const entries: LiveRecordListEntry[] = opc.map((r) => ({ season: r.season, name: eraNameCanon(r.franchise_id, r.season), valueText: `won by ${r.value} (${r.season})` }));
+        permanentLists.push({ docketNumber: 33, docketId: 'TR-LRC-33', trophyName: 'The One-Point Club', qualification: 'Won a championship decided by less than two points.', entries });
+      }
+    }
+  }
+
   return { annual, permanentCards, permanentLists };
 }
