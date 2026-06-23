@@ -1304,6 +1304,83 @@ async function g24() {
   await serviceClient.from('media_captions').delete().eq('id', seeded.id);
 }
 
+// ── G25: trophy custody is an append-only ledger; current holder is DERIVED, never stored (C1, W.5) ─
+// Inverse-of-G11 discipline: a MISSING table/probe FAILS this test; absence must never read as a
+// granted-deny pass. The C1 invariant is "the current holder is a derived read off the latest event's
+// to_franchise — no stored holder column, no in-place UPDATE, no DELETE." The pg_policy / pg_attribute
+// catalog is not reachable via PostgREST, so the structural proof runs through the SECURITY DEFINER
+// custody_integrity_probe() helper (migration 026), booleans only.
+async function g25() {
+  console.log('\nG25 — trophy custody is append-only; current holder is DERIVED, never stored (C1, W.5)');
+
+  // STRUCTURAL — the load-bearing C1 proof.
+  const { data: probeData, error: probeErr } = await serviceClient.rpc('custody_integrity_probe' as never);
+  const probe = (probeData as
+    | { custody_table_exists: boolean; rls_enabled: boolean; no_update_policy: boolean; no_delete_policy: boolean; no_holder_column: boolean }[]
+    | null)?.[0];
+  if (probeErr || !probe) {
+    fail('G25', `custody_integrity_probe() unavailable — migration 026 not applied? (${probeErr ? (probeErr as { message?: string }).message : 'no rows'})`);
+    return;
+  }
+  if (!probe.custody_table_exists) {
+    fail('G25', 'trophy_custody_events missing — migration 025 not applied');
+    return;
+  }
+  pass('G25: trophy_custody_events exists');
+  if (probe.rls_enabled) pass('G25: row level security is enabled (append-only default-deny)');
+  else fail('G25', 'trophy_custody_events has RLS disabled — append-only is unenforced');
+  if (probe.no_update_policy) pass('G25: NO UPDATE policy (no in-place edit — a correction is a new event)');
+  else fail('G25', 'trophy_custody_events has an UPDATE policy — the ledger is rewritable');
+  if (probe.no_delete_policy) pass('G25: NO DELETE policy (the ledger is permanent)');
+  else fail('G25', 'trophy_custody_events has a DELETE policy — custody history can be erased');
+  if (probe.no_holder_column) pass('G25: NO stored holder/state column (C1: current holder is a DERIVED read of the latest to_franchise)');
+  else fail('G25', 'trophy_custody_events carries a stored holder/state column — C1 VIOLATED (mutable current-holder state)');
+
+  // BEHAVIORAL — anon cannot author a custody event (commissioner-only ledger).
+  const { error: anonInsErr } = await anonClient.from('trophy_custody_events').insert({
+    league_id: DEMO_LEAGUE_ID,
+    trophy_id: 'TR-CP-1',
+    to_franchise: '00000000-0000-0000-0000-0000000000aa',
+    season: 2025,
+    ratified_by: '00000000-0000-0000-0000-0000000000bb',
+  });
+  assertRlsInsertDenied('G25', 'trophy_custody_events', anonInsErr);
+
+  // BEHAVIORAL on a REAL row — seed a custody event via service role on a real league + franchise,
+  // then assert an anon SELECT returns nothing (league-authenticated only; anon is in no league).
+  const { data: fr } = (await serviceClient
+    .from('franchises')
+    .select('id, league_id, member_user_id')
+    .not('member_user_id', 'is', null)
+    .limit(1)
+    .maybeSingle()) as { data: { id: string; league_id: string; member_user_id: string } | null };
+  if (!fr) {
+    console.log('     (G25 behavioral seed skipped: no franchise with a member_user_id; the structural proof above stands)');
+    return;
+  }
+  const { data: seeded, error: seedErr } = (await serviceClient
+    .from('trophy_custody_events')
+    .insert({ league_id: fr.league_id, trophy_id: 'TR-CP-1-GOVPROBE', to_franchise: fr.id, season: 2025, ratified_by: fr.member_user_id })
+    .select('id')
+    .single()) as { data: { id: string } | null; error: { message?: string } | null };
+  if (seedErr || !seeded) {
+    fail('G25', `Could not seed trophy_custody_events via service role: ${seedErr ? seedErr.message : 'no row'}`);
+    return;
+  }
+  const { data: anonRead } = await anonClient
+    .from('trophy_custody_events')
+    .select('id')
+    .eq('id', seeded.id);
+  if (!anonRead || anonRead.length === 0) {
+    pass('G25: Anon SELECT of a seeded custody event returns nothing (RLS denies a real row — league-authenticated only)');
+  } else {
+    fail('G25', `Anon read a custody event — RLS FAILURE (${anonRead.length})`);
+  }
+
+  // Cleanup — service role bypasses the append-only RLS for test teardown.
+  await serviceClient.from('trophy_custody_events').delete().eq('id', seeded.id);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════');
@@ -1332,6 +1409,7 @@ async function main() {
   await g22();
   await g23();
   await g24();
+  await g25();
 
   console.log('\n═══════════════════════════════════════════════════');
   console.log(`  Results: ${passed} passed, ${failed} failed`);
