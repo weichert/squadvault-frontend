@@ -15,7 +15,7 @@ function holderLine(h: LiveRecordHolder): string {
   return h.season != null ? `${name} (${h.season})` : name;
 }
 
-function Card({ rec }: { rec: LiveRecord }) {
+export function TrophyCard({ rec }: { rec: LiveRecord }) {
   const s = PROVENANCE_STYLE.CANONICAL;
   return (
     <article style={{ background: 'var(--vault-s1)', border: '1px solid rgba(139, 112, 53, 0.4)', borderRadius: 4, overflow: 'hidden' }}>
@@ -84,16 +84,22 @@ function Card({ rec }: { rec: LiveRecord }) {
   );
 }
 
-export function LiveRecords({ live }: { live: LiveRecords }) {
-  if (live.records.length === 0) return null;
+// A titled grid of Trophy Cards - reused by Live Records (inc-2 Wave 1) and the inc-3 Wave A
+// Annual / Permanent sections. Renders nothing when empty.
+export function RecordSection({ title, records }: { title: string; records: LiveRecord[] }) {
+  if (records.length === 0) return null;
   return (
     <section className="mb-12">
       <h2 className="font-mono" style={{ fontSize: '10px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--vault-gold-dim)', marginBottom: 14 }}>
-        Live Records
+        {title}
       </h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-        {live.records.map((rec) => <Card key={rec.docketNumber} rec={rec} />)}
+        {records.map((rec) => <TrophyCard key={rec.docketNumber} rec={rec} />)}
       </div>
     </section>
   );
+}
+
+export function LiveRecords({ live }: { live: LiveRecords }) {
+  return <RecordSection title="Live Records" records={live.records} />;
 }
