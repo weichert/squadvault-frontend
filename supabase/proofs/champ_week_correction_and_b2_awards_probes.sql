@@ -182,6 +182,21 @@ FROM b WHERE wp = season_max AND season IN (2016,2019)
 GROUP BY season ORDER BY season;
 -- EXPECT: 2016->0006,0010  2019->0002,0005  (champion's title win removed -> a second team ties)
 
--- 4d. The Climb (#8, biggest YoY win-pct gain) is a second-order read of the corrected W-L - its two
---     flips (2012 -> 0008, 2015 -> 0005) follow mechanically once 4a holds. Verified engine-side against
---     the artifact (section-9.6 sweep == exactly 10 plaque changes) - the frontend renders it from the corrected W-L.
+-- 4d. The Climb (#8, biggest year-over-year win-pct gain) - a DERIVED read of the corrected W-L
+--      (no stored column), so it is asserted directly from franchise_season_records. This is the
+--      kind of second-order read that slipped past the engine-side preview, so it is a standing check.
+WITH wp AS (
+  SELECT f.canonical_franchise_id AS code, r.season,
+         (r.wins::numeric / NULLIF(r.wins + r.losses + r.ties, 0)) AS pct
+  FROM franchise_season_records r
+  JOIN franchises f ON f.id = r.franchise_id
+  WHERE r.league_id = (SELECT id FROM leagues WHERE canonical_id = '70985')),
+gain AS (
+  SELECT c.season, c.code, c.pct - p.pct AS delta
+  FROM wp c JOIN wp p ON p.code = c.code AND p.season = c.season - 1)
+SELECT season, string_agg(code, ',' ORDER BY code) AS climb_holder
+FROM gain g
+WHERE season IN (2012, 2015)
+  AND delta = (SELECT max(delta) FROM gain g2 WHERE g2.season = g.season)
+GROUP BY season ORDER BY season;
+-- EXPECT: 2012 -> 0008  2015 -> 0005  (verified live on prod 2026-06-24)
