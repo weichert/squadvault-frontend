@@ -141,3 +141,47 @@ WHERE league_id = (SELECT id FROM leagues WHERE canonical_id = '70985')
   AND award_id = '13' AND season = 2011
 ORDER BY detail_key;
 -- EXPECT keys: player_id, position, started_points, weeks
+
+-- ============================================================================
+-- 4. MIGRATION 030 PROOF - W-L + points_for regular-season correction - run AFTER 030
+--    030 re-points wins/losses/points_for to regular-season (exclude the championship final)
+--    for all 16 seasons. Supersedes 029's W-L for 2021+ and adds the 2010-2020 finalists.
+-- ============================================================================
+
+-- 4a. Corrected W-L + PF anchors (the finalists' title game no longer counts).
+SELECT f.canonical_franchise_id AS code, r.season, r.wins, r.losses, r.points_for, r.result
+FROM franchise_season_records r
+JOIN franchises f ON f.id = r.franchise_id
+WHERE r.league_id = (SELECT id FROM leagues WHERE canonical_id = '70985')
+  AND (f.canonical_franchise_id, r.season) IN (('0005',2024),('0001',2021),('0004',2015))
+ORDER BY code, season;
+-- EXPECT: 0004|2015|12|3|1590.5|CHAMPION   0001|2021|10|6|1690.1|CHAMPION   0005|2024|10|6|1917.1|CHAMPION
+--         (each was champion - the title win + its points are now excluded - 11-6 -> 10-6, 13-3 -> 12-3)
+
+-- 4b. The Engine (#11, most points in a season) - the 6 PF-driven flips land on the corrected leader.
+WITH e AS (
+  SELECT r.season, f.canonical_franchise_id AS code, r.points_for,
+         max(r.points_for) OVER (PARTITION BY r.season) AS season_max
+  FROM franchise_season_records r JOIN franchises f ON f.id = r.franchise_id
+  WHERE r.league_id = (SELECT id FROM leagues WHERE canonical_id = '70985'))
+SELECT season, string_agg(code, ',' ORDER BY code) AS engine_holder, round(season_max,2) AS pf
+FROM e WHERE points_for = season_max AND season IN (2010,2015,2016,2019,2020,2023)
+GROUP BY season, season_max ORDER BY season;
+-- EXPECT: 2010->0002 (1682.5)  2015->0009 (1691.0)  2016->0002 (1585.0)
+--         2019->0009 (1719.1)  2020->0001 (1782.25) 2023->0006 (1924.85)
+
+-- 4c. The Banner (#10, best regular-season win pct) - the 2 W-L-driven ties.
+WITH b AS (
+  SELECT r.season, f.canonical_franchise_id AS code,
+         (r.wins::numeric / NULLIF(r.wins+r.losses+r.ties,0)) AS wp,
+         max(r.wins::numeric / NULLIF(r.wins+r.losses+r.ties,0)) OVER (PARTITION BY r.season) AS season_max
+  FROM franchise_season_records r JOIN franchises f ON f.id = r.franchise_id
+  WHERE r.league_id = (SELECT id FROM leagues WHERE canonical_id = '70985'))
+SELECT season, string_agg(code, ',' ORDER BY code) AS banner_holders
+FROM b WHERE wp = season_max AND season IN (2016,2019)
+GROUP BY season ORDER BY season;
+-- EXPECT: 2016->0006,0010  2019->0002,0005  (champion's title win removed -> a second team ties)
+
+-- 4d. The Climb (#8, biggest YoY win-pct gain) is a second-order read of the corrected W-L - its two
+--     flips (2012 -> 0008, 2015 -> 0005) follow mechanically once 4a holds. Verified engine-side against
+--     the artifact (section-9.6 sweep == exactly 10 plaque changes) - the frontend renders it from the corrected W-L.
