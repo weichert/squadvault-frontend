@@ -96,3 +96,48 @@ FROM franchise_season_records
 WHERE league_id = (SELECT id FROM leagues WHERE canonical_id = '70985') AND season <= 2020;
 -- EXPECT: pre2021_rows=110  (total_wins / total_pa identical to the pre-apply values - 029 never
 --         touches season <= 2020; capture these in the pre-apply probe and confirm they match)
+
+-- ============================================================================
+-- 3. APPLY A - GROUP C PROOF (positional awards #13-18) - run AFTER seed 004
+--    Extends section 1 to cover the six positional awards added with Group C.
+-- ============================================================================
+
+-- 3a. All six Group C awards present with the expected row counts.
+SELECT award_id, count(*) AS rows
+FROM season_award_winners
+WHERE league_id = (SELECT id FROM leagues WHERE canonical_id = '70985')
+  AND award_id IN ('13','14','15','16','17','18')
+GROUP BY award_id ORDER BY award_id;
+-- EXPECT: 13->16  14->16  15->16  16->16  17->17  18->16   (97 rows; #17 PK has one co-holder tie)
+
+-- 3b. All-time leader per position (the max started-points season) lands on the known star season.
+SELECT award_id, season, franchise_id, value, detail->>'player_id' AS player_id, detail->>'position' AS position
+FROM season_award_winners s
+WHERE league_id = (SELECT id FROM leagues WHERE canonical_id = '70985')
+  AND award_id IN ('13','14','15','16','17','18')
+  AND value = (SELECT max(value) FROM season_award_winners s2
+               WHERE s2.league_id = s.league_id AND s2.award_id = s.award_id)
+ORDER BY award_id;
+-- EXPECT (award -> season, franchise, value):
+--   13 The Signal Caller (QB)  -> 2011, 0009, 724.0   (Drew Brees)
+--   14 The Workhorse (RB)      -> 2019, 0009, 369.1   (Christian McCaffrey)
+--   15 The Deep Threat (WR)    -> 2021, 0007, 309.1   (Cooper Kupp)
+--   16 The Tight Window (TE)   -> 2020, 0002, 260.3   (Travis Kelce)
+--   17 The Boot (PK)           -> 2024, 0002, 194.1   (Brandon Aubrey)
+--   18 The Wall (Def)          -> 2019, 0004, 171.0   (Patriots, New England)
+
+-- 3c. The one Group C co-holder tie - #17 PK 2011, two franchises at 131.0 (distinct kickers).
+SELECT season, franchise_id, value, detail->>'player_id' AS player_id
+FROM season_award_winners
+WHERE league_id = (SELECT id FROM leagues WHERE canonical_id = '70985')
+  AND award_id = '17' AND season = 2011
+ORDER BY franchise_id;
+-- EXPECT: two rows - 0004 / 131.0 / 1383  and  0005 / 131.0 / 8742  (cross-franchise C6 tie; unique key holds)
+
+-- 3d. detail shape (factual fields only - no editorializing), sampled on the QB all-time leader.
+SELECT jsonb_object_keys(detail) AS detail_key
+FROM season_award_winners
+WHERE league_id = (SELECT id FROM leagues WHERE canonical_id = '70985')
+  AND award_id = '13' AND season = 2011
+ORDER BY detail_key;
+-- EXPECT keys: player_id, position, started_points, weeks
