@@ -503,6 +503,17 @@ type AwardCardRow = {
   detail?: { player_name?: string | null } | null;
 };
 
+// Render-only name format: the seed/detail keep player_directory's canonical "Last, First"; the display
+// reads "First Last". Split on the FIRST comma only ("Beckham Jr., Odell" -> "Odell Beckham Jr."; the
+// "New England Patriots" D/ST shape works the same). No comma -> return unchanged (fail-safe).
+export function formatPlayerName(raw: string): string {
+  const i = raw.indexOf(',');
+  if (i === -1) return raw;
+  const last = raw.slice(0, i).trim();
+  const rest = raw.slice(i + 1).trim();
+  return rest ? `${rest} ${last}` : last;
+}
+
 // All-time best-ever card off season_award_winners (the Cannon/Black Rose idiom, generalized).
 // `dir` is the direction of the headline extreme (max, or min for #21 The Patience Premium). The
 // holder carries the engine-denormalized `player_name` when the row has one (#13-23); rows without it
@@ -524,7 +535,7 @@ function allTimeCard(
   const best = dir === 'max' ? Math.max(...vals) : Math.min(...vals);
   const holders: LiveRecordHolder[] = aw.filter((r) => r.value === best).map((r) => ({
     franchiseId: r.franchise_id, name: eraNameCanon(r.franchise_id, r.season), season: r.season,
-    playerName: r.detail?.player_name ?? null,
+    playerName: r.detail?.player_name ? formatPlayerName(r.detail.player_name) : null,
   }));
   const bySeason = new Map<number, { fids: string[]; value: number }>();
   for (const r of aw) {
