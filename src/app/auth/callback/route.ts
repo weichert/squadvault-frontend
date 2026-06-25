@@ -24,7 +24,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/types";
-import { resolveAuthSession } from "@/lib/auth/callback";
+import { resolveAuthSession, safeRedirectPath } from "@/lib/auth/callback";
 
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
@@ -78,7 +78,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Sanitize redirect — only allow relative paths to prevent open redirect
-  const safeRedirect = redirect.startsWith("/") ? redirect : "/";
+  // Resolve the destination to a safe same-origin path: a relative path, a same-origin
+  // absolute URL (the email-template `&redirect={{ .RedirectTo }}` carry-through that lands
+  // an invited member on their league consent page), or a self-referential callback URL
+  // that nests the real destination. Cross-origin collapses to "/" (no open redirect).
+  const safeRedirect = safeRedirectPath(redirect, origin);
   return NextResponse.redirect(`${origin}${safeRedirect}`);
 }

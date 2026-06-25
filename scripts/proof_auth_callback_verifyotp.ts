@@ -6,7 +6,7 @@
 // no server. Run: npx tsx scripts/proof_auth_callback_verifyotp.ts
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../src/lib/supabase/types';
-import { resolveAuthSession } from '../src/lib/auth/callback';
+import { resolveAuthSession, safeRedirectPath } from '../src/lib/auth/callback';
 
 let fail = 0;
 const ok = (c: boolean, m: string) => { console.log(`  ${c ? 'OK  ' : 'FAIL'} ${m}`); if (!c) fail++; };
@@ -89,11 +89,28 @@ async function main() {
     ok(r.userId === undefined && r.userEmail === undefined, 'verifyOtp error returns empty (no throw)');
   }
 
-  // 6. the open-redirect guard the route applies (mirrors route.ts) - relative kept, absolute dropped.
+  // 6. safeRedirectPath - the same-origin destination guard the route applies. Carries the
+  //    consent destination through the email template while refusing every open-redirect vector.
   {
-    const safe = (r: string) => (r.startsWith('/') ? r : '/');
-    ok(safe('/league/70985/consent') === '/league/70985/consent', 'relative redirect preserved');
-    ok(safe('https://evil.example/steal') === '/', 'absolute redirect rejected -> /');
+    const O = 'https://app.example';
+    // accepted same-origin destinations
+    ok(safeRedirectPath('/league/70985/consent', O) === '/league/70985/consent', 'relative path preserved');
+    ok(safeRedirectPath('/', O) === '/', 'bare "/" preserved');
+    ok(safeRedirectPath('/x?a=1#h', O) === '/x?a=1#h', 'query + hash preserved');
+    ok(safeRedirectPath(`${O}/league/70985/consent`, O) === '/league/70985/consent', 'same-origin absolute -> path (the {{ .RedirectTo }} carry-through)');
+    // self-referential callback URL nesting the real destination (callers pass the callback URL as redirectTo)
+    ok(safeRedirectPath(`${O}/auth/callback?redirect=${encodeURIComponent('/league/70985/consent')}`, O) === '/league/70985/consent', 'nested callback URL unwrapped to inner destination');
+    ok(safeRedirectPath(`${O}/auth/callback`, O) === '/', 'callback URL with no nested redirect -> /');
+    // open-redirect vectors - all collapse to "/"
+    ok(safeRedirectPath('https://evil.example/steal', O) === '/', 'cross-origin absolute rejected -> /');
+    ok(safeRedirectPath('//evil.example', O) === '/', 'protocol-relative rejected -> /');
+    ok(safeRedirectPath(`${O}/auth/callback?redirect=https://evil.example`, O) === '/', 'nested cross-origin re-validated and rejected -> /');
+    ok(safeRedirectPath(`${O}/auth/callback?redirect=${encodeURIComponent('//evil.example')}`, O) === '/', 'nested protocol-relative rejected -> /');
+    // a non-URL string resolves as a relative path against our origin -> stays same-origin (safe), never cross-origin.
+    ok(safeRedirectPath('not-a-url', O).startsWith('/') && new URL(safeRedirectPath('not-a-url', O), O).origin === O, 'non-URL string stays same-origin (safe)');
+    // every accepted result is a same-origin relative path (so `${origin}${path}` is well-formed)
+    const samples = ['/a', `${O}/b`, `${O}/auth/callback?redirect=/c`, 'https://evil.example', '//evil.example'];
+    ok(samples.every((s) => safeRedirectPath(s, O).startsWith('/')), 'every result starts with "/" (well-formed, same-origin)');
   }
 
   console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
