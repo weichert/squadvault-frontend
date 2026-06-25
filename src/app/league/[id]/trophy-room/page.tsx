@@ -17,8 +17,9 @@ import type { Metadata } from "next";
 import { TrustBar } from "@/components/ui/trust-bar";
 import type { TrophyProvenance } from "@/lib/supabase/types";
 import { PROVENANCE_LABEL, PROVENANCE_STYLE } from "@/lib/trophy-provenance";
-import { loadChampionshipPackage, loadLiveRecords, loadSeasonAwards, loadPlayerAndAuctionAwards } from "@/lib/trophy-room";
+import { loadChampionshipPackage, loadLiveRecords, loadSeasonAwards, loadPlayerAndAuctionAwards, loadFoundersSeal } from "@/lib/trophy-room";
 import { ChampionshipPackage } from "@/components/trophy-room/championship-package";
+import { FoundersSeal } from "@/components/trophy-room/founders-seal";
 import { LiveRecords } from "@/components/trophy-room/live-records";
 import { SeasonAwards } from "@/components/trophy-room/season-awards";
 import { PlayerAuctionAwards } from "@/components/trophy-room/player-auction-awards";
@@ -75,6 +76,9 @@ export default async function TrophyRoomPage({ params }: Props) {
   // W.5 Championship Package - the featured custody-aware band (the Belt's derived holder + chain,
   // the Ring + League Trophy derived off the championship record). Distinct from the flat list below.
   const pkg = await loadChampionshipPackage(admin, league.id);
+
+  // Trophy #31 The Founder's Seal - the league's ATTESTED origin statement (migration 031).
+  const foundersSeal = await loadFoundersSeal(admin, league.id);
 
   // W.5 Inc 2 Wave 1 - the Live Records section (4 Group-A plaques, derived off the championship/
   // season record; distinct from the Championship Package band and the chronological list below).
@@ -182,6 +186,10 @@ export default async function TrophyRoomPage({ params }: Props) {
         {viewer.isCommissioner && (
           <BeltRatifyForm leagueId={league.id} franchises={ratifyFranchises} />
         )}
+
+        {/* Trophy #31 The Founder's Seal - the league's ATTESTED origin statement, near the top.
+            Renders nothing until migration 031 seats the entry. */}
+        <FoundersSeal seal={foundersSeal} />
 
         {/* W.5 Championship Package - the featured custody band, above the chronological list. */}
         <ChampionshipPackage pkg={pkg} />

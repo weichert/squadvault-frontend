@@ -777,3 +777,25 @@ export async function loadPlayerAndAuctionAwards(admin: AdminClient, leagueUuid:
 
   return { positional: build(POSITIONAL_CATALOG), auction: build(AUCTION_CATALOG) };
 }
+
+// ---- Trophy #31 The Founder's Seal (ATTESTED league-origin statement) ----
+// A single league-level trophy_room_entries row (entry_type FOUNDERS_SEAL, season/franchise NULL),
+// ATTESTED by human testimony - NEVER canonical (the founding predates the digital era). Render reads
+// it directly; absent -> null -> the band renders nothing (silence before migration 031 lands).
+
+export type FoundersSeal = {
+  title: string;
+  description: string | null; // the engraving body
+  basis: string | null; // the attestation basis (commissioner_note) - who attested, when
+};
+
+export async function loadFoundersSeal(admin: AdminClient, leagueUuid: string): Promise<FoundersSeal | null> {
+  const { data, error } = (await admin
+    .from('trophy_room_entries')
+    .select('title, description, commissioner_note')
+    .eq('league_id', leagueUuid)
+    .eq('entry_type', 'FOUNDERS_SEAL')
+    .maybeSingle()) as { data: { title: string; description: string | null; commissioner_note: string | null } | null; error: { code?: string } | null };
+  if (error || !data) return null;
+  return { title: data.title, description: data.description, basis: data.commissioner_note };
+}
