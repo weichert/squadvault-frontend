@@ -213,14 +213,20 @@ Done + still open:
   (`#access_token`). Fix: new pure `src/lib/auth/callback.ts` `resolveAuthSession` —
   `token_hash + type -> verifyOtp` (SSR-correct, invite-capable, cross-device), `?code=`
   kept as harmless fallback; route builds the SSR client always so verifyOtp writes the
-  session cookie; commissioner-claim + open-redirect guard unchanged. Proof
-  `scripts/proof_auth_callback_verifyotp.ts` 14/14; type-check + build green. **End-to-end
+  session cookie; commissioner-claim unchanged. Proof
+  `scripts/proof_auth_callback_verifyotp.ts`; type-check + build green. **End-to-end
   needs the FOUNDER to switch the Email Templates (Magic Link `type=email`, Invite
-  `type=invite`, Confirm signup `type=signup`) to the `token_hash` link** — v1 omits the
-  nested `redirect` param (lands on `/`; carrying the consent destination is a small
-  follow-up: relax the guard to same-origin-absolute + pass the final destination as
-  `redirectTo`). Pre-Draft-Weekend (~2026-08-15) gate. Close-out
+  `type=invite`, Confirm signup `type=signup`) to the `token_hash` link.** Pre-Draft-Weekend
+  (~2026-08-15) gate. Close-out
   `_observations/OBSERVATIONS_2026_06_24_BUG_B_AUTH_CALLBACK_VERIFYOTP.md`.
+  - **Follow-up — redirect carry-through (same-origin guard) — DONE (this PR).** `safeRedirectPath`
+    replaces the `startsWith("/")` guard: accepts relative paths, same-origin absolute URLs (the
+    `{{ .RedirectTo }}` carry-through), and a self-referential callback URL nesting the real
+    destination (unwrapped) — every cross-origin / protocol-relative vector collapses to `/`
+    (strictly tighter than before; each unwrap layer re-validated). **No caller changes, no
+    allowlist dependency.** Lets the FOUNDER safely append `&redirect={{ .RedirectTo }}` to the
+    templates so an invited member lands on `/league/<id>/consent`. Proof now 24/24. Close-out
+    `_observations/OBSERVATIONS_2026_06_24_BUG_B_REDIRECT_CARRYTHROUGH.md`.
 
 ### Deferred polish (decisions, mostly, not code)
 - Full Member Office (stub today).

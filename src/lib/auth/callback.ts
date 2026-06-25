@@ -34,3 +34,31 @@ export async function resolveAuthSession(
   }
   return {};
 }
+
+// Resolve the post-auth destination to a safe, same-origin RELATIVE path. Accepts:
+//  - a relative path (the common case), reduced to path + query + hash;
+//  - a same-origin ABSOLUTE URL (the email-template carry-through, where the template's
+//    {{ .RedirectTo }} expands to a full URL on our own origin), reduced to its path;
+//  - a same-origin /auth/callback URL that NESTS the real destination in its own
+//    ?redirect= (the callers pass the callback URL as Supabase's redirectTo, so
+//    {{ .RedirectTo }} is that callback URL), unwrapped to the inner destination.
+// Anything cross-origin, protocol-relative, or malformed collapses to "/" - no open
+// redirect. Each unwrap layer is re-validated against the origin, so a nested
+// cross-origin target cannot smuggle through; depth-capped against a crafted redirect
+// chain. The return always starts with "/", so `${origin}${path}` is well-formed.
+const MAX_UNWRAP_DEPTH = 3;
+export function safeRedirectPath(redirect: string, origin: string, depth = 0): string {
+  if (depth > MAX_UNWRAP_DEPTH) return "/";
+  let url: URL;
+  try {
+    url = new URL(redirect, origin);
+  } catch {
+    return "/";
+  }
+  if (url.origin !== origin) return "/";
+  if (url.pathname === "/auth/callback") {
+    const nested = url.searchParams.get("redirect");
+    return nested ? safeRedirectPath(nested, origin, depth + 1) : "/";
+  }
+  return url.pathname + url.search + url.hash;
+}
