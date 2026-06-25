@@ -227,6 +227,14 @@ Done + still open:
     allowlist dependency.** Lets the FOUNDER safely append `&redirect={{ .RedirectTo }}` to the
     templates so an invited member lands on `/league/<id>/consent`. Proof now 24/24. Close-out
     `_observations/OBSERVATIONS_2026_06_24_BUG_B_REDIRECT_CARRYTHROUGH.md`.
+  - **Follow-up — invite consent-redirect used the UUID, not canonical_id — DONE (this PR).** The
+    invite route built `/league/${franchise.league_id}/consent` from the `leagues(id)` UUID FK, but
+    `/league/[id]` routes resolve `[id]` via `getLeague` keyed on `canonical_id`, so an authenticated
+    invitee 404'd at the consent landing. Fix resolves canonical_id from the UUID for the URL only
+    (every DB write keeps the UUID FK); scope-checked as the sole UUID-sourced `/league/` URL in
+    `src`. Proof `scripts/proof_invite_consent_canonical_id.ts` 9/9 (read-only live data: UUID
+    `00000000-..-001` -> canonical `70985`); type-check + build green. Close-out
+    `_observations/OBSERVATIONS_2026_06_25_INVITE_CONSENT_CANONICAL_ID.md`.
 
 ### Deferred polish (decisions, mostly, not code)
 - Full Member Office (stub today).

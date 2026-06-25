@@ -98,8 +98,20 @@ export async function POST(req: NextRequest) {
 
   // Issue the magic-link invite. Supabase sends the email; the redirect lands the member
   // on their consent surface so the first thing they can do is record 2a/2b grants.
+  // The /league/[id] routes resolve [id] via getLeague, which keys on canonical_id - NOT
+  // the leagues UUID. franchise.league_id is the UUID FK, so the redirect URL must carry
+  // the canonical_id or the member lands on a 404 after authenticating. The FK is correct
+  // for every DB write below; only this URL needs the canonical id.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-  const leagueRedirect = `/league/${franchise.league_id}/consent`;
+  const { data: leagueRow } = (await admin
+    .from('leagues')
+    .select('canonical_id')
+    .eq('id', franchise.league_id)
+    .maybeSingle()) as { data: { canonical_id: string } | null };
+  if (!leagueRow?.canonical_id) {
+    return NextResponse.json({ error: 'League not found.' }, { status: 404 });
+  }
+  const leagueRedirect = `/league/${leagueRow.canonical_id}/consent`;
   let memberUserId: string;
   let alreadyRegistered = false;
 
