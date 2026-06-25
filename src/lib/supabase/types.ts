@@ -34,7 +34,8 @@ export type TrophyEntryType =
   | 'CHAMPIONSHIP'
   | 'PHYSICAL_TROPHY'
   | 'COMMISSIONER_ATTESTED'
-  | 'SHAME_RECORD';
+  | 'SHAME_RECORD'
+  | 'FOUNDERS_SEAL';
 
 export type FrictionStage =
   | 'intake'
