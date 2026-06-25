@@ -6,6 +6,7 @@
 // (CANONICAL = engine-derived facts), a <details> drill-in for the leader-over-time history. No
 // counts-as-contest, no leaderboard, no live counter (boundary) - the value and its history are
 // displayed as record, not competition.
+import { Fragment } from 'react';
 import { TrustBar } from '@/components/ui/trust-bar';
 import { PROVENANCE_LABEL, PROVENANCE_STYLE } from '@/lib/trophy-provenance';
 import type { LiveRecord, LiveRecordHolder, LiveRecords } from '@/lib/trophy-room';
@@ -36,9 +37,15 @@ export function TrophyCard({ rec }: { rec: LiveRecord }) {
           {rec.holders.length > 0 ? (
             <>
               {rec.holders.map((h, i) => (
-                <p key={i} className="font-ceremonial text-vault-text" style={{ fontSize: '1.35rem', letterSpacing: '0.01em', marginTop: i === 0 ? 4 : 1 }}>
-                  {holderLine(h)}
-                </p>
+                <Fragment key={i}>
+                  <p className="font-ceremonial text-vault-text" style={{ fontSize: '1.35rem', letterSpacing: '0.01em', marginTop: i === 0 ? 4 : 1 }}>
+                    {holderLine(h)}
+                  </p>
+                  {/* Option A: the named player, only when present (#13-23). Absent -> byte-identical. */}
+                  {h.playerName && (
+                    <p className="font-ui text-vault-text2" style={{ fontSize: '0.8rem', letterSpacing: '0.01em', marginTop: 1 }}>{h.playerName}</p>
+                  )}
+                </Fragment>
               ))}
               {rec.valueText && (
                 <p className="font-ui text-vault-text2" style={{ fontSize: '0.85rem', marginTop: 3 }}>{rec.valueText}</p>
