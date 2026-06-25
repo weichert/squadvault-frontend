@@ -17,10 +17,11 @@ import type { Metadata } from "next";
 import { TrustBar } from "@/components/ui/trust-bar";
 import type { TrophyProvenance } from "@/lib/supabase/types";
 import { PROVENANCE_LABEL, PROVENANCE_STYLE } from "@/lib/trophy-provenance";
-import { loadChampionshipPackage, loadLiveRecords, loadSeasonAwards } from "@/lib/trophy-room";
+import { loadChampionshipPackage, loadLiveRecords, loadSeasonAwards, loadPlayerAndAuctionAwards } from "@/lib/trophy-room";
 import { ChampionshipPackage } from "@/components/trophy-room/championship-package";
 import { LiveRecords } from "@/components/trophy-room/live-records";
 import { SeasonAwards } from "@/components/trophy-room/season-awards";
+import { PlayerAuctionAwards } from "@/components/trophy-room/player-auction-awards";
 import { BeltRatifyForm } from "@/components/trophy-room/belt-ratify-form";
 
 // Server Component reading live Supabase state. Skip Next.js route segment
@@ -82,6 +83,10 @@ export default async function TrophyRoomPage({ params }: Props) {
   // W.5 Inc 3 Wave A - the Annual + Permanent award sections (8 derived reads off
   // franchise_season_records; The Sieve self-gates on points_against). Distinct from Live Records.
   const awards = await loadSeasonAwards(admin, league.id);
+
+  // W.5 display unit - Player & Auction records (#13-23, named via Option A). Two all-time best-ever
+  // sections off season_award_winners; each omitted when empty (e.g. before the seed-004 apply).
+  const playerAuction = await loadPlayerAndAuctionAwards(admin, league.id);
 
   // The Belt ratify control renders ONLY for the league commissioner (the route + RLS are the hard
   // guarantee; this is the UI gate). Resolve the viewer and, if commissioner, the franchise options.
@@ -186,6 +191,9 @@ export default async function TrophyRoomPage({ params }: Props) {
 
         {/* W.5 Inc 3 Wave A - Annual grants + Permanent records. */}
         <SeasonAwards awards={awards} />
+
+        {/* W.5 display unit - Player & Auction records (#13-23, named). Omitted when empty. */}
+        <PlayerAuctionAwards awards={playerAuction} />
 
         <h2 className="font-mono" style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--vault-gold-dim)", marginBottom: 14 }}>
           Championship Record

@@ -176,6 +176,7 @@ export type LiveRecordHolder = {
   franchiseId: string;
   name: string | null; // era-correct for season-specific records (The Floor); current name for all-time
   season: number | null; // the season for The Floor; null for all-time aggregates
+  playerName?: string | null; // Option A: the named player for #13-23 cards (denormalized; absent elsewhere)
 };
 
 export type LiveRecordHistoryEntry = {
@@ -492,6 +493,51 @@ export type SeasonAwards = {
 const fmtDelta = (v: number): string => `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(3).replace(/^0/, '')}`;
 const fmtRecord = (w: number, l: number, t: number): string => (t > 0 ? `${w}-${l}-${t}` : `${w}-${l}`);
 
+// A season_award_winners row as read for the all-time cards. `detail` is the engine-embedded jsonb
+// (Option A carries `player_name`); absent for the #4/#12 callers that select without it.
+type AwardCardRow = {
+  award_id: string;
+  season: number;
+  franchise_id: string; // engine canonical code ('0001'..) for season_award_winners
+  value: number | null;
+  detail?: { player_name?: string | null } | null;
+};
+
+// All-time best-ever card off season_award_winners (the Cannon/Black Rose idiom, generalized).
+// `dir` is the direction of the headline extreme (max, or min for #21 The Patience Premium). The
+// holder carries the engine-denormalized `player_name` when the row has one (#13-23); rows without it
+// (#4/#12) yield `playerName: null` and render byte-identical. Module-scope so the new player/auction
+// loader shares it; `eraNameCanon` (canonical code -> era-correct name) is passed in.
+function allTimeCard(
+  rows: AwardCardRow[],
+  award: string,
+  docket: number,
+  trophyName: string,
+  qualification: string,
+  fmt: (v: number) => string,
+  eraNameCanon: (canon: string, season: number) => string | null,
+  dir: 'max' | 'min' = 'max',
+): LiveRecord | null {
+  const aw = rows.filter((r) => r.award_id === award && r.value != null);
+  if (aw.length === 0) return null;
+  const vals = aw.map((r) => r.value as number);
+  const best = dir === 'max' ? Math.max(...vals) : Math.min(...vals);
+  const holders: LiveRecordHolder[] = aw.filter((r) => r.value === best).map((r) => ({
+    franchiseId: r.franchise_id, name: eraNameCanon(r.franchise_id, r.season), season: r.season,
+    playerName: r.detail?.player_name ?? null,
+  }));
+  const bySeason = new Map<number, { fids: string[]; value: number }>();
+  for (const r of aw) {
+    const cur = bySeason.get(r.season); const v = r.value as number;
+    if (!cur || (dir === 'max' ? v > cur.value : v < cur.value)) bySeason.set(r.season, { fids: [r.franchise_id], value: v });
+    else if (v === cur.value) cur.fids.push(r.franchise_id);
+  }
+  const history: LiveRecordHistoryEntry[] = Array.from(bySeason.keys()).sort((a, b) => a - b).map((s) => {
+    const e = bySeason.get(s)!; return { season: s, names: e.fids.map((f) => eraNameCanon(f, s) ?? '(unknown)'), valueText: fmt(e.value) };
+  });
+  return { docketNumber: docket, docketId: `TR-LRC-${docket}`, trophyName, qualification, valueText: fmt(best), holders, history };
+}
+
 export async function loadSeasonAwards(admin: AdminClient, leagueUuid: string): Promise<SeasonAwards> {
   const { data: fsrData } = (await admin
     .from('franchise_season_records')
@@ -636,18 +682,9 @@ export async function loadSeasonAwards(admin: AdminClient, leagueUuid: string): 
       const eraNameCanon = (canon: string, season: number): string | null => eraNameByKey.get(`${canon}:${season}`) ?? currentNameByCanon.get(canon) ?? null;
 
       // #4 The Cannon + #12 The Black Rose - all-time max single value; per-season rows = history.
-      const allTimeCard = (award: string, docket: number, trophyName: string, qualification: string, fmt: (v: number) => string): LiveRecord | null => {
-        const aw = saw.filter((r) => r.award_id === award && r.value != null);
-        if (aw.length === 0) return null;
-        const best = Math.max(...aw.map((r) => r.value as number));
-        const holders: LiveRecordHolder[] = aw.filter((r) => r.value === best).map((r) => ({ franchiseId: r.franchise_id, name: eraNameCanon(r.franchise_id, r.season), season: r.season }));
-        const bySeason = new Map<number, { fids: string[]; value: number }>();
-        for (const r of aw) { const cur = bySeason.get(r.season); const v = r.value as number; if (!cur || v > cur.value) bySeason.set(r.season, { fids: [r.franchise_id], value: v }); else if (v === cur.value) cur.fids.push(r.franchise_id); }
-        const history: LiveRecordHistoryEntry[] = Array.from(bySeason.keys()).sort((a, b) => a - b).map((s) => { const e = bySeason.get(s)!; return { season: s, names: e.fids.map((f) => eraNameCanon(f, s) ?? '(unknown)'), valueText: fmt(e.value) }; });
-        return { docketNumber: docket, docketId: `TR-LRC-${docket}`, trophyName, qualification, valueText: fmt(best), holders, history };
-      };
-      const cannon = allTimeCard('4', 4, 'The Cannon', 'The highest single-week score in league history.', (v) => `${v} points`);
-      const rose = allTimeCard('12', 12, 'The Black Rose', 'The highest score in a losing effort.', (v) => `${v} points`);
+      // (Uses the module-scope allTimeCard at its defaults; `saw` here has no `detail` -> no player line.)
+      const cannon = allTimeCard(saw, '4', 4, 'The Cannon', 'The highest single-week score in league history.', (v) => `${v} points`, eraNameCanon);
+      const rose = allTimeCard(saw, '12', 12, 'The Black Rose', 'The highest score in a losing effort.', (v) => `${v} points`, eraNameCanon);
       if (cannon) permanentCards.push(cannon);
       if (rose) permanentCards.push(rose);
 
@@ -661,4 +698,71 @@ export async function loadSeasonAwards(admin: AdminClient, leagueUuid: string): 
   }
 
   return { annual, permanentCards, permanentLists };
+}
+
+// ---- W.5 display unit: Player & Auction awards (#13-23) ----
+// All-time best-ever cards off season_award_winners, named via Option A (detail.player_name).
+// Two sections: Positional (#13-18, all 16 seasons) and Auction & Acquisition (#19-23; the auction
+// four span only the 7 auction seasons, #23 spans 16). Zero-row awards are omitted (silence).
+
+export type PlayerAuctionAwards = { positional: LiveRecord[]; auction: LiveRecord[] };
+
+type AwardCatalogEntry = {
+  award: string; docket: number; name: string; qualification: string;
+  fmt: (v: number) => string; dir: 'max' | 'min';
+};
+
+const POSITIONAL_CATALOG: AwardCatalogEntry[] = [
+  { award: '13', docket: 13, name: 'The Signal Caller', qualification: 'The highest started-QB total in a single season.', fmt: (v) => `${v} points`, dir: 'max' },
+  { award: '14', docket: 14, name: 'The Workhorse', qualification: 'The highest started-RB total in a single season.', fmt: (v) => `${v} points`, dir: 'max' },
+  { award: '15', docket: 15, name: 'The Deep Threat', qualification: 'The highest started-WR total in a single season.', fmt: (v) => `${v} points`, dir: 'max' },
+  { award: '16', docket: 16, name: 'The Tight Window', qualification: 'The highest started-TE total in a single season.', fmt: (v) => `${v} points`, dir: 'max' },
+  { award: '17', docket: 17, name: 'The Boot', qualification: 'The highest started-K total in a single season.', fmt: (v) => `${v} points`, dir: 'max' },
+  { award: '18', docket: 18, name: 'The Wall', qualification: 'The highest started-DEF total in a single season.', fmt: (v) => `${v} points`, dir: 'max' },
+];
+
+const AUCTION_CATALOG: AwardCatalogEntry[] = [
+  { award: '19', docket: 19, name: 'The Steal', qualification: 'The best points-per-dollar among started auction picks.', fmt: (v) => `${v} points per dollar`, dir: 'max' },
+  { award: '20', docket: 20, name: 'The Burning Money', qualification: 'The highest auction bid that returned no started value.', fmt: (v) => `$${v}`, dir: 'max' },
+  { award: '21', docket: 21, name: 'The Patience Premium', qualification: 'The most efficient auction - the fewest dollars per started point.', fmt: (v) => `$${v} per started point`, dir: 'min' },
+  { award: '22', docket: 22, name: 'The Whale', qualification: 'The highest single auction bid in league history.', fmt: (v) => `$${v}`, dir: 'max' },
+  { award: '23', docket: 23, name: 'The Lifeline', qualification: 'The best in-season pickup - the most started points after acquisition.', fmt: (v) => `${v} points`, dir: 'max' },
+];
+
+export async function loadPlayerAndAuctionAwards(admin: AdminClient, leagueUuid: string): Promise<PlayerAuctionAwards> {
+  const ids = [...POSITIONAL_CATALOG, ...AUCTION_CATALOG].map((c) => c.award);
+  const { data: saw, error } = (await admin
+    .from('season_award_winners')
+    .select('award_id, season, franchise_id, value, detail')
+    .eq('league_id', leagueUuid)
+    .in('award_id', ids)) as { data: AwardCardRow[] | null; error: { code?: string } | null };
+  if (error || !saw || saw.length === 0) return { positional: [], auction: [] };
+
+  // Era-name resolution keyed by the engine canonical code (season_award_winners.franchise_id is the
+  // canonical code, not a UUID). Same maps the existing season-award reader builds.
+  const currentNameByCanon = new Map<string, string>();
+  {
+    const { data: frRows } = (await admin
+      .from('franchises')
+      .select('canonical_franchise_id, owner_display_name')
+      .eq('league_id', leagueUuid)) as { data: { canonical_franchise_id: string; owner_display_name: string }[] | null };
+    for (const f of frRows ?? []) currentNameByCanon.set(f.canonical_franchise_id, f.owner_display_name);
+  }
+  const eraNameByKey = new Map<string, string>();
+  {
+    const { data: snRows } = (await admin
+      .from('franchise_season_names')
+      .select('canonical_franchise_id, season, team_name')
+      .eq('league_id', leagueUuid)) as { data: { canonical_franchise_id: string; season: number; team_name: string }[] | null };
+    for (const r of snRows ?? []) eraNameByKey.set(`${r.canonical_franchise_id}:${r.season}`, r.team_name);
+  }
+  const eraNameCanon = (canon: string, season: number): string | null =>
+    eraNameByKey.get(`${canon}:${season}`) ?? currentNameByCanon.get(canon) ?? null;
+
+  const build = (catalog: AwardCatalogEntry[]): LiveRecord[] =>
+    catalog
+      .map((c) => allTimeCard(saw, c.award, c.docket, c.name, c.qualification, c.fmt, eraNameCanon, c.dir))
+      .filter((r): r is LiveRecord => r !== null);
+
+  return { positional: build(POSITIONAL_CATALOG), auction: build(AUCTION_CATALOG) };
 }
