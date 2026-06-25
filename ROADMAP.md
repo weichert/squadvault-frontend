@@ -206,6 +206,21 @@ Done + still open:
 - CI live on push/PR (this scaffold).
 - `vercel.json` framework guard (this scaffold).
 - `leagues.docket_code` governed column — when a second real league onboards.
+- **Bug B — auth callback no-op (token_hash + verifyOtp) — CODE DONE; FOUNDER template
+  action PENDING (this PR).** `/auth/callback` only acted inside `if (code)` /
+  `exchangeCodeForSession` (PKCE) — which cannot work for server-minted invites (no
+  code-verifier in the member's browser) and cannot read the default fragment link
+  (`#access_token`). Fix: new pure `src/lib/auth/callback.ts` `resolveAuthSession` —
+  `token_hash + type -> verifyOtp` (SSR-correct, invite-capable, cross-device), `?code=`
+  kept as harmless fallback; route builds the SSR client always so verifyOtp writes the
+  session cookie; commissioner-claim + open-redirect guard unchanged. Proof
+  `scripts/proof_auth_callback_verifyotp.ts` 14/14; type-check + build green. **End-to-end
+  needs the FOUNDER to switch the Email Templates (Magic Link `type=email`, Invite
+  `type=invite`, Confirm signup `type=signup`) to the `token_hash` link** — v1 omits the
+  nested `redirect` param (lands on `/`; carrying the consent destination is a small
+  follow-up: relax the guard to same-origin-absolute + pass the final destination as
+  `redirectTo`). Pre-Draft-Weekend (~2026-08-15) gate. Close-out
+  `_observations/OBSERVATIONS_2026_06_24_BUG_B_AUTH_CALLBACK_VERIFYOTP.md`.
 
 ### Deferred polish (decisions, mostly, not code)
 - Full Member Office (stub today).
