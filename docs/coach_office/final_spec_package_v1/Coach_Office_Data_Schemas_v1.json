@@ -1,0 +1,84 @@
+{
+  "coach_office_profile": {
+    "office_id": "office_example",
+    "league_id": "league_example",
+    "coach_id": "coach_example",
+    "team_name": "Example Team",
+    "display_name": "Example Coach",
+    "office_theme": "lake_tahoe_executive",
+    "base_scene_asset_id": "coach_office_hero_default",
+    "hotspot_map_id": "coach_office_hotspots_v1",
+    "voice_profile_id": "league_voice_default"
+  },
+  "league_voice_profile": {
+    "league_id": "league_example",
+    "voice_profile_id": "adult_banter_default",
+    "tone_family": "adult_banter",
+    "edge_level": 3,
+    "visible_board_profanity": false,
+    "private_note_profanity": true,
+    "rivalry_jabs": true,
+    "crass_humor": "mild",
+    "personal_attacks": false,
+    "screenshot_safe_default": true,
+    "commissioner_review_required": false
+  },
+  "media_record": {
+    "media_id": "media_example",
+    "league_id": "league_example",
+    "media_type": "photo",
+    "related_coach_ids": [
+      "coach_001",
+      "coach_002"
+    ],
+    "season": 2025,
+    "week_index": null,
+    "visibility": "relationship_only",
+    "surfaces": [
+      "office_frame",
+      "gallery",
+      "hidden_hotspot"
+    ],
+    "approved": true,
+    "caption": "Example caption.",
+    "thumbnail_asset_id": "thumb_example",
+    "full_asset_id": "media_full_example",
+    "source": "onboarding"
+  },
+  "easter_egg_record": {
+    "easter_egg_id": "egg_example",
+    "league_id": "league_example",
+    "office_owner_id": "coach_001",
+    "related_coach_ids": [
+      "coach_002"
+    ],
+    "hotspot_id": "desk_drawer",
+    "visibility": "relationship_only",
+    "egg_type": "receipts_folder",
+    "content_refs": [
+      "media_example",
+      "lore_example"
+    ],
+    "title": "Receipts",
+    "description": "Some paperwork never stops being funny.",
+    "reveal_behavior": "modal",
+    "approved": true
+  },
+  "cutout_record": {
+    "cutout_id": "cutout_example",
+    "league_id": "league_example",
+    "coach_id": "coach_001",
+    "asset_id": "cutout_asset_example",
+    "style": "illustrated",
+    "visibility": "relationship_only",
+    "approved": true,
+    "allowed_surfaces": [
+      "hero_room",
+      "easter_egg",
+      "board_detail",
+      "photo_gallery"
+    ],
+    "default_scale": 0.42,
+    "caption": "Example cutout caption."
+  }
+}
