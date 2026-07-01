@@ -9,7 +9,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import type { League } from "@/lib/league";
-import { loadChampionshipPackage } from "@/lib/trophy-room";
+import {
+  loadChampionshipPackage,
+  loadLiveRecords,
+  loadSeasonAwards,
+  type LiveRecord,
+} from "@/lib/trophy-room";
 
 type AdminClient = SupabaseClient<Database>;
 
@@ -32,4 +37,46 @@ export async function resolveCoachChampionships(
   return pkg.champions
     .filter((c) => c.franchiseId === franchiseUuid)
     .map((c) => ({ season: c.season, title: c.title, teamName: c.eraName }));
+}
+
+// Phase 2b: the traveling / annual / permanent records this coach CURRENTLY holds -
+// the derived-holder trophies from the Trophy Room (Live Records #24-30, annual grants,
+// permanent cards), filtered to this coach's franchise. A record's holder is a derived
+// read (never stored, multi-valued on tie); we keep only those where this franchise is a
+// current holder. Nothing invented - a coach holding none yields an empty list.
+//
+// Excluded (deferred): permanent multi-lists (name-keyed, no franchise id) and the
+// player/auction awards (#13-23, keyed by engine canonical code, a different domain).
+export type CoachHeldRecord = {
+  trophyName: string;
+  qualification: string;
+  valueText: string;
+};
+
+export async function resolveCoachHeldRecords(
+  admin: AdminClient,
+  league: League,
+  franchiseUuid: string,
+): Promise<CoachHeldRecord[]> {
+  const [live, awards] = await Promise.all([
+    loadLiveRecords(admin, league.id),
+    loadSeasonAwards(admin, league.id),
+  ]);
+
+  const held: CoachHeldRecord[] = [];
+  const collect = (records: LiveRecord[]) => {
+    for (const r of records) {
+      if (r.holders.some((h) => h.franchiseId === franchiseUuid)) {
+        held.push({
+          trophyName: r.trophyName,
+          qualification: r.qualification,
+          valueText: r.valueText,
+        });
+      }
+    }
+  };
+  collect(live.records);
+  collect(awards.annual);
+  collect(awards.permanentCards);
+  return held;
 }

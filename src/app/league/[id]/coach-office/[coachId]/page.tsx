@@ -15,7 +15,10 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { COACH_OFFICE_HOTSPOTS_V1 } from "@/lib/coach-office/hotspots";
 import { resolveCoachOfficeProfile } from "@/lib/coach-office/profile";
-import { resolveCoachChampionships } from "@/lib/coach-office/resolvers";
+import {
+  resolveCoachChampionships,
+  resolveCoachHeldRecords,
+} from "@/lib/coach-office/resolvers";
 import { OfficeShell } from "@/components/coach-office/office-shell";
 import { TrophyCaseView } from "@/components/coach-office/trophy-case-view";
 import { RingBoxView } from "@/components/coach-office/ring-box-view";
@@ -44,18 +47,20 @@ export default async function CoachOfficePage({ params }: Props) {
   const profile = await resolveCoachOfficeProfile(admin, league, coachId);
   if (!profile) notFound();
 
-  // The coach's championships (derived, era-correct, never invented) - one list, two
-  // views: the Trophy Case (trophies) and the Ring Box (rings).
-  const championships = await resolveCoachChampionships(
-    admin,
-    league,
-    profile.franchiseUuid,
-  );
+  // The coach's championships (derived, era-correct, never invented) power both the
+  // Ring Box (rings) and the Trophy Case (trophies). Phase 2b adds the traveling/annual/
+  // permanent records the coach currently holds to the Trophy Case.
+  const [championships, heldRecords] = await Promise.all([
+    resolveCoachChampionships(admin, league, profile.franchiseUuid),
+    resolveCoachHeldRecords(admin, league, profile.franchiseUuid),
+  ]);
 
   // Content map keyed by hotspot_id. Only the owner-personalized hotspots get a body;
   // the rest fall back to the placeholder modal.
   const content = {
-    trophy_case: <TrophyCaseView championships={championships} />,
+    trophy_case: (
+      <TrophyCaseView championships={championships} heldRecords={heldRecords} />
+    ),
     championship_ring_box: <RingBoxView rings={championships} />,
   };
 
