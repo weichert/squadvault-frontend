@@ -1,13 +1,17 @@
 // src/components/coach-office/office-shell.tsx
-// Coach Office Phase 1 static shell. Renders a NEUTRAL PLACEHOLDER scene at the
-// manifest's aspect ratio, overlays each hotspot at a position COMPUTED from the
-// manifest (pixel coords -> percentage of image_width/image_height), and opens a
-// placeholder modal on activation. Below the md breakpoint it renders a hotspot
-// list fallback with >=44px tap targets. All geometry comes from the passed-in
-// HotspotMap; this component carries no coordinate literal.
+// Coach Office shell. Renders a NEUTRAL PLACEHOLDER scene at the manifest's aspect
+// ratio, overlays each hotspot at a position COMPUTED from the manifest (pixel coords
+// -> percentage of image_width/image_height), and opens a modal on activation. Below
+// the md breakpoint it renders a hotspot list fallback with >=44px tap targets. All
+// geometry comes from the passed-in HotspotMap; this component carries no coordinate
+// literal.
+//
+// Phase 2: an optional `content` map keyed by hotspot_id supplies the modal body for
+// personalized hotspots (Trophy Case, Ring Box). Hotspots without an entry fall back
+// to the placeholder modal (board, photos, cutout - later phases).
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Hotspot, HotspotMap } from "@/lib/coach-office/types";
 import { HotspotModal } from "./hotspot-modal";
 
@@ -15,7 +19,13 @@ function pct(value: number, total: number): string {
   return `${(value / total) * 100}%`;
 }
 
-export function OfficeShell({ map }: { map: HotspotMap }) {
+export function OfficeShell({
+  map,
+  content,
+}: {
+  map: HotspotMap;
+  content?: Record<string, ReactNode>;
+}) {
   const [selected, setSelected] = useState<Hotspot | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -108,7 +118,11 @@ export function OfficeShell({ map }: { map: HotspotMap }) {
       </div>
 
       {selected && (
-        <HotspotModal hotspot={selected} onClose={() => setSelected(null)} />
+        <HotspotModal
+          hotspot={selected}
+          content={content?.[selected.hotspot_id]}
+          onClose={() => setSelected(null)}
+        />
       )}
     </>
   );
