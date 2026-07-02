@@ -9,10 +9,15 @@
 // Phase 2: an optional `content` map keyed by hotspot_id supplies the modal body for
 // personalized hotspots (Trophy Case, Ring Box). Hotspots without an entry fall back
 // to the placeholder modal (board, photos, cutout - later phases).
+//
+// Phase 3: an optional `viewerContext` carries the viewer's relationship to this
+// office. It is threaded down to the modal for future phases ONLY - this component
+// does not branch on it, and no hotspot is shown, hidden, or altered by it.
 "use client";
 
 import { useState, type ReactNode } from "react";
 import type { Hotspot, HotspotMap } from "@/lib/coach-office/types";
+import type { CoachOfficeViewerContext } from "@/lib/coach-office/viewer-context";
 import { HotspotModal } from "./hotspot-modal";
 
 function pct(value: number, total: number): string {
@@ -22,9 +27,11 @@ function pct(value: number, total: number): string {
 export function OfficeShell({
   map,
   content,
+  viewerContext,
 }: {
   map: HotspotMap;
   content?: Record<string, ReactNode>;
+  viewerContext?: CoachOfficeViewerContext;
 }) {
   const [selected, setSelected] = useState<Hotspot | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -121,6 +128,7 @@ export function OfficeShell({
         <HotspotModal
           hotspot={selected}
           content={content?.[selected.hotspot_id]}
+          viewerContext={viewerContext}
           onClose={() => setSelected(null)}
         />
       )}
