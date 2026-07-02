@@ -4,18 +4,26 @@
 // "coming soon" placeholder (hotspots without content yet). Accessible dialog:
 // role="dialog"/aria-modal, focus moves to Close on open, Escape and backdrop close it,
 // Tab is trapped within the dialog, and focus is restored to the trigger on close.
+//
+// Phase 3: an optional `viewerContext` is threaded in for future relationship-aware
+// surfaces. It does NOT change what is rendered - the only use here is a neutral,
+// debug-safe `data-viewer-relationship` attribute on the dialog root. No content is
+// gated, shown, or hidden by it.
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Hotspot } from "@/lib/coach-office/types";
+import type { CoachOfficeViewerContext } from "@/lib/coach-office/viewer-context";
 
 export function HotspotModal({
   hotspot,
   content,
+  viewerContext,
   onClose,
 }: {
   hotspot: Hotspot;
   content?: ReactNode;
+  viewerContext?: CoachOfficeViewerContext;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -68,6 +76,7 @@ export function HotspotModal({
         role="dialog"
         aria-modal="true"
         aria-label={hotspot.label}
+        data-viewer-relationship={viewerContext?.relationship}
         className="vault-card w-full"
         style={{ maxWidth: 420, background: "var(--vault-s1)" }}
         onClick={(e) => e.stopPropagation()}

@@ -9,7 +9,7 @@
 // to this coach. Board, Framed Photos, and Cardboard Cutout stay placeholders (later
 // phases). Reads only; nothing invented; coachId (canonical_franchise_id) is resolved
 // from data, never hard-coded. Base scene remains the D-4 placeholder.
-import { getLeague } from "@/lib/league";
+import { getLeague, getViewer } from "@/lib/league";
 import { createAdminClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -19,6 +19,7 @@ import {
   resolveCoachChampionships,
   resolveCoachHeldRecords,
 } from "@/lib/coach-office/resolvers";
+import { resolveCoachOfficeViewerContext } from "@/lib/coach-office/viewer-context";
 import { OfficeShell } from "@/components/coach-office/office-shell";
 import { TrophyCaseView } from "@/components/coach-office/trophy-case-view";
 import { RingBoxView } from "@/components/coach-office/ring-box-view";
@@ -55,6 +56,17 @@ export default async function CoachOfficePage({ params }: Props) {
     resolveCoachHeldRecords(admin, league, profile.franchiseUuid),
   ]);
 
+  // Phase 3: resolve the viewer's relationship to this office (OWNER / COMMISSIONER /
+  // LEAGUE_MATE / PUBLIC_OR_UNKNOWN). The context is threaded into the shell for future
+  // phases ONLY - nothing below branches on it, and no content is filtered by it yet.
+  const viewer = await getViewer(id);
+  const viewerContext = await resolveCoachOfficeViewerContext(
+    admin,
+    league,
+    viewer,
+    profile,
+  );
+
   // Content map keyed by hotspot_id. Only the owner-personalized hotspots get a body;
   // the rest fall back to the placeholder modal.
   const content = {
@@ -84,7 +96,11 @@ export default async function CoachOfficePage({ params }: Props) {
           />
         </div>
 
-        <OfficeShell map={COACH_OFFICE_HOTSPOTS_V1} content={content} />
+        <OfficeShell
+          map={COACH_OFFICE_HOTSPOTS_V1}
+          content={content}
+          viewerContext={viewerContext}
+        />
       </div>
     </main>
   );
