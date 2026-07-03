@@ -56,6 +56,21 @@ relationship-specific content should we show?" (later phases).
 | set | != office | false | LEAGUE_MATE |
 | set | null | false | PUBLIC_OR_UNKNOWN |
 
+## Viewer reachability (all four classes are live)
+
+The classifier is exhaustive, and this surface does not exclude any class on its
+own. In particular, the coach office page applies NO anonymous redirect (unlike
+`src/app/league/[id]/office/page.tsx`, which self-redirects anon to sign-in);
+reachability is otherwise governed by `middleware.ts`. Reconciliation note (Gate 2,
+2026-07-04): `middleware.ts` is coded to redirect anon on all `/league/*` (line 30),
+yet observed production serves the base `/league/[id]` to a session-less browser -
+only self-gating pages like `/office` bounce, and they bounce at the page layer, not
+via this middleware rule. So PUBLIC_OR_UNKNOWN is a LIVE class here: the office
+renders its public/derived content to anonymous viewers, exactly as the anon-visible
+league home does. The consent invariant holds for it regardless - the office has no
+consent-scoped content to withhold. The middleware code-vs-prod discrepancy is out
+of CO.3 scope and is recorded as a finding, not changed here (no logic change).
+
 ## Invariants held
 
 - No content filtered: no consumer reads the capability booleans to gate anything.
