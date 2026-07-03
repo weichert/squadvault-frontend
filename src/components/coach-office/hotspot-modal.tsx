@@ -1,19 +1,21 @@
 // src/components/coach-office/hotspot-modal.tsx
-// Coach Office Phase 1 placeholder modal. Opened when a hotspot is activated;
-// shows the hotspot's manifest label and a "coming soon" empty state. No content
-// resolver runs in Phase 1. Accessible dialog: role="dialog"/aria-modal, focus
-// moves to Close on open, Escape and backdrop close it, Tab is trapped within the
-// dialog, and focus is restored to the trigger on close (acceptance criterion 3).
+// Coach Office modal. Opened when a hotspot is activated; shows the hotspot's manifest
+// label and either a provided content body (Phase 2 personalized hotspots) or a
+// "coming soon" placeholder (hotspots without content yet). Accessible dialog:
+// role="dialog"/aria-modal, focus moves to Close on open, Escape and backdrop close it,
+// Tab is trapped within the dialog, and focus is restored to the trigger on close.
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { Hotspot } from "@/lib/coach-office/types";
 
 export function HotspotModal({
   hotspot,
+  content,
   onClose,
 }: {
   hotspot: Hotspot;
+  content?: ReactNode;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -93,9 +95,11 @@ export function HotspotModal({
             CLOSE
           </button>
         </div>
-        <p className="font-ui text-sm text-vault-text2 mt-4 leading-relaxed">
-          This feature is coming soon.
-        </p>
+        {content ?? (
+          <p className="font-ui text-sm text-vault-text2 mt-4 leading-relaxed">
+            This feature is coming soon.
+          </p>
+        )}
       </div>
     </div>
   );
