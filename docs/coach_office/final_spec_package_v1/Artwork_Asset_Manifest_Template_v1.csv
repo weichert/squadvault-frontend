@@ -1,0 +1,9 @@
+asset_id,asset_type,description,required_for_mvp,notes
+"coach_office_hero_default","hero_scene","Default coach office hero room","yes","Lake Tahoe office base"
+"coach_office_hero_blank_board","hero_scene","Hero scene with clean board surface","yes","Dynamic text overlay target"
+"ring_box_open_populated","detail_view","Open ring box with populated rings","yes","Driven by ring resolver"
+"trophy_case_closeup_empty","detail_view","Empty trophy case close-up","yes","Driven by trophy resolver"
+"board_closeup_blank","detail_view","Blank board detail view","yes","Dynamic board content target"
+"cardboard_cutout_template_full_body","transparent_asset","Full-body cardboard cutout template","yes","Reusable by any league"
+"cutout_shadow_base","transparent_asset","Cutout floor shadow/base stand","yes","For compositing"
+"desk_drawer_receipts_view","detail_view","Desk drawer/receipts Easter egg view","yes","Hidden hotspot detail"
