@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     default: 'SquadVault — Your League\'s Permanent Record',
   },
   description: 'The Clubhouse where your league\'s verified history lives.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://squadvault.com'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://squadvault.vercel.app'),
   openGraph: {
     type: 'website',
     siteName: 'SquadVault',
