@@ -1,0 +1,102 @@
+{
+  "manifest_id": "w2_clubhouse_hotspots_v1",
+  "note": "Hotspot geometry for the W.2 Clubhouse room. Coordinates are in master-image pixel space (image_width x image_height); components scale to the rendered size. HOTSPOT ORDER IS THE SINGLE SOURCE OF TAB/READING ORDER - a spatial walk of the room (left->right, foreground before background), asserted by the schema test. Wiring types: route (href, {id} = league canonical id; gated destinations enforce their own bounce), pending (dignified modal), inert (hover acknowledgment only). plate = optional transparent object layer placed over the master at its in-scene position; null where no clean plate has landed (hotspot drawn on the master, no parallax). The banner zone carries a runtime text layer (never baked into art).",
+  "image_width": 3344,
+  "image_height": 1882,
+  "banner": {
+    "zone": { "x": 1480, "y": 150, "width": 1290, "height": 240 },
+    "align": "center"
+  },
+  "hotspots": [
+    {
+      "id": "trophy_case",
+      "label": "Trophy Room",
+      "aria_label": "Trophy case — enter the Trophy Room",
+      "zone": { "x": 95, "y": 285, "width": 545, "height": 770 },
+      "wiring": { "type": "route", "href": "/league/{id}/trophy-room", "gated": false },
+      "plate": null,
+      "depth_band": 1
+    },
+    {
+      "id": "desk_lamp",
+      "label": "The Office",
+      "aria_label": "Desk and lamp — enter the Office",
+      "zone": { "x": 20, "y": 1075, "width": 620, "height": 400 },
+      "wiring": { "type": "route", "href": "/league/{id}/office", "gated": true },
+      "plate": null,
+      "depth_band": 3
+    },
+    {
+      "id": "phone",
+      "label": "Cordless Phone",
+      "aria_label": "Cordless phone — a quiet fixture of the room",
+      "zone": { "x": 245, "y": 1150, "width": 205, "height": 230 },
+      "wiring": { "type": "inert" },
+      "plate": null,
+      "depth_band": 3
+    },
+    {
+      "id": "answering_machine",
+      "label": "Answering Machine",
+      "aria_label": "Answering machine — pending, opens a notice",
+      "zone": { "x": 460, "y": 1245, "width": 390, "height": 215 },
+      "wiring": { "type": "pending", "title": "The Answering Machine", "body": "No messages yet. The machine is patient." },
+      "plate": null,
+      "depth_band": 3
+    },
+    {
+      "id": "guitar",
+      "label": "Guitar",
+      "aria_label": "Electric guitar — a quiet fixture of the room",
+      "zone": { "x": 1320, "y": 650, "width": 150, "height": 520 },
+      "wiring": { "type": "inert" },
+      "plate": null,
+      "depth_band": 2
+    },
+    {
+      "id": "hearth",
+      "label": "Hearth",
+      "aria_label": "Hearth — the still heart of the room",
+      "zone": { "x": 1890, "y": 820, "width": 560, "height": 360 },
+      "wiring": { "type": "inert" },
+      "plate": { "src": "/clubhouse/w2_plate_10_hearth.webp", "x": 1870, "y": 760, "width": 600, "height": 440 },
+      "depth_band": 0
+    },
+    {
+      "id": "mantel",
+      "label": "A/V Room",
+      "aria_label": "Mantel photos — enter the A/V Room",
+      "zone": { "x": 1740, "y": 470, "width": 760, "height": 210 },
+      "wiring": { "type": "route", "href": "/league/{id}/av-room", "gated": true },
+      "plate": { "src": "/clubhouse/w2_plate_02_mantel.webp", "x": 1720, "y": 440, "width": 820, "height": 280 },
+      "depth_band": 1
+    },
+    {
+      "id": "corkboard",
+      "label": "Corkboard",
+      "aria_label": "Corkboard — pending, opens a notice",
+      "zone": { "x": 2925, "y": 490, "width": 405, "height": 395 },
+      "wiring": { "type": "pending", "title": "The Corkboard", "body": "The corkboard hangs waiting. Notes arrive with the season." },
+      "plate": { "src": "/clubhouse/w2_plate_03_corkboard.webp", "x": 2880, "y": 430, "width": 470, "height": 470 },
+      "depth_band": 1
+    },
+    {
+      "id": "boombox",
+      "label": "Boombox",
+      "aria_label": "Boombox — a quiet fixture of the room",
+      "zone": { "x": 2680, "y": 950, "width": 300, "height": 210 },
+      "wiring": { "type": "inert" },
+      "plate": { "src": "/clubhouse/w2_plate_04_boombox.webp", "x": 2660, "y": 930, "width": 340, "height": 250 },
+      "depth_band": 2
+    },
+    {
+      "id": "safe",
+      "label": "The Vault",
+      "aria_label": "Safe — enter The Vault",
+      "zone": { "x": 3040, "y": 1000, "width": 300, "height": 395 },
+      "wiring": { "type": "route", "href": "/league/{id}/vault", "gated": true },
+      "plate": { "src": "/clubhouse/w2_plate_05_safe.webp", "x": 3000, "y": 960, "width": 344, "height": 380 },
+      "depth_band": 2
+    }
+  ]
+}
