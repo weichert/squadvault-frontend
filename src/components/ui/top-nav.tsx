@@ -47,6 +47,14 @@ type Tab = {
 
 const PUBLIC_TABS: ReadonlyArray<Tab> = [
   {
+    // Additive entry (W.2): the illustrated room is the "front door" to the
+    // surfaces below. Placement (first slot) proposed for founder confirmation
+    // at G2; nothing else removed or reordered.
+    label: "Clubhouse",
+    href: (id) => `/league/${id}/clubhouse`,
+    isActive: (pathname, id) => pathname.startsWith(`/league/${id}/clubhouse`),
+  },
+  {
     label: "Community",
     href: (id) => `/league/${id}`,
     isActive: (pathname, id) => pathname === `/league/${id}`,

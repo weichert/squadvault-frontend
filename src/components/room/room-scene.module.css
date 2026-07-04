@@ -1,0 +1,156 @@
+/* Room-agnostic layered scene — master base, plates, banner text, hotspots,
+   parallax, and the mobile pan-crop. Coordinates come from the manifest; this
+   file carries only presentation. */
+
+.roomFrame {
+  position: relative;
+  width: 100%;
+  background: #14100c;
+}
+
+.viewport {
+  width: 100%;
+  background: #14100c;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3344 / 1882; /* master native aspect — plates/hotspots map as % */
+  container-type: inline-size; /* lets banner text scale with the stage (cqw) */
+  overflow: hidden;
+}
+
+.master {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%; /* keep the fireplace central */
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* A plate: an absolutely-positioned transparent object over the master. Its
+   left/top/width come inline from manifest px (as %). It translates a few px on
+   pointer move via the --px/--py custom props set by the component. */
+.plate {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform;
+  transition: transform 120ms ease-out;
+  transform: translate3d(var(--px, 0px), var(--py, 0px), 0);
+}
+
+/* Runtime banner text surface (never baked into art). */
+.banner {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  z-index: 20;
+  padding: 0 1cqw;
+}
+.bannerText {
+  width: 100%;
+  font-size: 2.4cqw;
+  letter-spacing: 0.06em;
+  color: #e8d8a8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  line-height: 1.1;
+}
+
+/* Hotspot: an interactive zone with a warm glow on hover/focus. focus-visible
+   gives keyboard users the same affordance as hover. */
+.hotspot {
+  position: absolute;
+  display: block;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 10px;
+  outline: none;
+  z-index: 30;
+  -webkit-tap-highlight-color: transparent;
+  transition: box-shadow 160ms ease-out, background-color 160ms ease-out;
+}
+.hotspot:hover,
+.hotspot:focus-visible {
+  background-color: rgba(214, 168, 92, 0.10);
+  box-shadow:
+    0 0 24px 6px rgba(214, 168, 92, 0.28),
+    inset 0 0 12px 2px rgba(214, 168, 92, 0.18);
+}
+.hotspot:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(214, 168, 92, 0.9),
+    0 0 24px 6px rgba(214, 168, 92, 0.28);
+}
+
+/* Inert character object: hover acknowledgment only, not a tab stop. */
+.inert {
+  position: absolute;
+  z-index: 30;
+  border-radius: 10px;
+  pointer-events: auto;
+  transition: box-shadow 200ms ease-out;
+}
+.inert:hover {
+  box-shadow: 0 0 18px 4px rgba(214, 168, 92, 0.16);
+}
+
+/* ── Mobile pan-crop (below md) ──────────────────────────────────────────────
+   The stage grows taller than the viewport and pans horizontally so every
+   hotspot stays reachable. Edge-glow hints invite the pan (G1 rider 4). */
+@media (max-width: 767px) {
+  .viewport {
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .viewport::-webkit-scrollbar {
+    display: none;
+  }
+  .stage {
+    width: auto;
+    height: min(78svh, 620px);
+    /* width is derived from height * aspect-ratio, so it overflows -> pan */
+  }
+  /* warm edge glows signalling the room continues off-screen (overlay the frame,
+     do not scroll with the stage) */
+  .edgeHint {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 44px;
+    pointer-events: none;
+    z-index: 40;
+  }
+  .edgeHintLeft {
+    left: 0;
+    background: linear-gradient(to right, rgba(214, 168, 92, 0.20), transparent);
+  }
+  .edgeHintRight {
+    right: 0;
+    background: linear-gradient(to left, rgba(214, 168, 92, 0.20), transparent);
+  }
+}
+@media (min-width: 768px) {
+  .edgeHint {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plate {
+    transition: none;
+    transform: none !important;
+  }
+}
