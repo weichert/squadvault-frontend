@@ -1,0 +1,83 @@
+{
+  "manifest_id": "w2_clubhouse_hotspots_v1",
+  "note": "Hotspot geometry for the W.2 Clubhouse room. Coordinates are in master-image pixel space (image_width x image_height); components scale to the rendered size. HOTSPOT ORDER IS THE SINGLE SOURCE OF TAB/READING ORDER - a spatial walk of the room (left->right, foreground before background), asserted by the schema test. Wiring types: route (href, {id} = league canonical id; gated destinations enforce their own bounce), pending (dignified modal), inert (hover acknowledgment only). plate = optional transparent object layer placed over the master at its in-scene position; null where no clean plate has landed (hotspot drawn on the master, no parallax). The banner carries a curved runtime text layer (SVG textPath baseline + rotation, geometry in image px; text supplied at render time, never baked into art).",
+  "image_width": 3344,
+  "image_height": 1882,
+  "banner": {
+    "text_path": "M1590,239 Q2110,309 2630,239",
+    "rotate_deg": -7,
+    "rotate_origin": { "x": 2110, "y": 262 },
+    "font_size": 104,
+    "font_size_mobile": 101,
+    "letter_spacing": 3,
+    "align": "center",
+    "light": 55,
+    "fabric": 65,
+    "fabric_blend": "soft-light"
+  },
+  "hotspots": [
+    {
+      "id": "trophy_case",
+      "label": "Trophy Room",
+      "aria_label": "Trophy case — enter the Trophy Room",
+      "zone": { "x": 95, "y": 285, "width": 545, "height": 770 },
+      "wiring": { "type": "route", "href": "/league/{id}/trophy-room", "gated": false },
+      "plate": null,
+      "depth_band": 1
+    },
+    {
+      "id": "desk_lamp",
+      "label": "The Office",
+      "aria_label": "Desk and lamp — enter the Office",
+      "zone": { "x": 20, "y": 1075, "width": 620, "height": 400 },
+      "wiring": { "type": "route", "href": "/league/{id}/office", "gated": true },
+      "plate": null,
+      "depth_band": 3
+    },
+    {
+      "id": "answering_machine",
+      "label": "Answering Machine",
+      "aria_label": "Answering machine — pending, opens a notice",
+      "zone": { "x": 460, "y": 1245, "width": 390, "height": 215 },
+      "wiring": { "type": "pending", "title": "The Answering Machine", "body": "No messages yet. The machine is patient." },
+      "plate": null,
+      "depth_band": 3
+    },
+    {
+      "id": "laptop",
+      "label": "League Home",
+      "aria_label": "Laptop — open the league home",
+      "zone": { "x": 1615, "y": 1150, "width": 365, "height": 260 },
+      "wiring": { "type": "route", "href": "/league/{id}", "gated": false },
+      "plate": null,
+      "depth_band": 3
+    },
+    {
+      "id": "mantel",
+      "label": "A/V Room",
+      "aria_label": "Mantel photos — enter the A/V Room",
+      "zone": { "x": 1740, "y": 470, "width": 760, "height": 210 },
+      "wiring": { "type": "route", "href": "/league/{id}/av-room", "gated": true },
+      "plate": { "src": "/clubhouse/w2_plate_02_mantel.webp", "x": 1720, "y": 440, "width": 820, "height": 280 },
+      "depth_band": 1
+    },
+    {
+      "id": "corkboard",
+      "label": "Corkboard",
+      "aria_label": "Corkboard — pending, opens a notice",
+      "zone": { "x": 2925, "y": 490, "width": 405, "height": 395 },
+      "wiring": { "type": "pending", "title": "The Corkboard", "body": "The corkboard hangs waiting. Notes arrive with the season." },
+      "plate": { "src": "/clubhouse/w2_plate_03_corkboard.webp", "x": 2880, "y": 430, "width": 470, "height": 470 },
+      "depth_band": 1
+    },
+    {
+      "id": "safe",
+      "label": "The Vault",
+      "aria_label": "Safe — enter The Vault",
+      "zone": { "x": 3040, "y": 1000, "width": 300, "height": 395 },
+      "wiring": { "type": "route", "href": "/league/{id}/vault", "gated": true },
+      "plate": { "src": "/clubhouse/w2_plate_05_safe.webp", "x": 3000, "y": 960, "width": 344, "height": 380 },
+      "depth_band": 2
+    }
+  ]
+}
