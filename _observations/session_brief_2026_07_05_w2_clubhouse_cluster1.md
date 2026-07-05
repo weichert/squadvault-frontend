@@ -46,3 +46,7 @@ Room live at the route; every hotspot either routes to a real surface or present
 ## 6. Out of scope
 
 Coach Office room build (own brief) · ambient audio/fire animation (ratified future layers) · W.3 corkboard content · L.1 voicemail · replacing existing nav · any engine changes.
+
+## Amendment Log
+
+- 2026-07-04 — G3 failed on plate registration 2026-07-04; remediated to master-only v1 per founder ruling; registered-cutout parallax deferred to a follow-on unit (plates must derive from master pixels via alpha mattes, not independent renders).
