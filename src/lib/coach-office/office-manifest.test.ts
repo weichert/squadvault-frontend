@@ -15,8 +15,10 @@ const manifest = JSON.parse(
   readFileSync(path.join(ROOT, "public", "coach-office", "hotspots.json"), "utf8"),
 ) as RoomManifest;
 
-// Spatial reading order: left -> right across the interim art. Single source of tab order.
-const EXPECTED_ORDER = ["trophy_case", "office_board", "championship_ring_box"];
+// Spatial reading order: left -> right across the clean CO-hero. Single source of tab
+// order. (Updated with the 2026-07-05 hero swap: the trophy case moved to the right of
+// the art, so the walk is now board -> ring box -> trophy case.)
+const EXPECTED_ORDER = ["office_board", "championship_ring_box", "trophy_case"];
 
 // v2, omitted from v1 (D-2). Must not appear.
 const V2_HOTSPOTS = ["framed_photos", "cardboard_cutout_slot"];
@@ -26,10 +28,10 @@ function isNum(v: unknown): v is number {
 }
 
 describe("coach office manifest — shape (T1.1)", () => {
-  it("has the required top-level fields at the interim hero's dimensions", () => {
+  it("has the required top-level fields at the clean CO-hero's dimensions", () => {
     expect(manifest.manifest_id).toBe("coach_office_hotspots_v1");
-    expect(manifest.image_width).toBe(1447);
-    expect(manifest.image_height).toBe(1087);
+    expect(manifest.image_width).toBe(1448);
+    expect(manifest.image_height).toBe(1086);
     expect(Array.isArray(manifest.hotspots)).toBe(true);
   });
 });
