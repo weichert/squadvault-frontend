@@ -1,7 +1,7 @@
 // src/components/coach-office/ring-box-view.tsx
 // Ring Box modal body - Phase 2. Renders one ring per championship the coach holds
 // (derived, never invented). Empty box -> principled empty state. Presentational
-// server component; rendered inside the (client) HotspotModal via the RSC slot pattern.
+// server component; rendered inside the (client) RoomModal via the RSC slot pattern.
 import type { CoachChampionship } from "@/lib/coach-office/resolvers";
 
 export function RingBoxView({ rings }: { rings: CoachChampionship[] }) {

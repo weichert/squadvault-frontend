@@ -1,19 +1,22 @@
 // src/components/room/room-modal.tsx
-// Room-agnostic pending-state modal. Reuses the Coach Office accessible-dialog
-// pattern verbatim (role="dialog"/aria-modal, focus moves to Close on open, Escape
-// and backdrop close, Tab trapped within the dialog, focus restored to the trigger
-// on close). Presents a title + a dignified body line - never a dead end.
+// Room-agnostic dialog. Reuses the Coach Office accessible-dialog pattern verbatim
+// (role="dialog"/aria-modal, focus moves to Close on open, Escape and backdrop close,
+// Tab trapped within the dialog, focus restored to the trigger on close). Presents a
+// title plus EITHER a dignified `body` line (pending wiring) OR a `children` content
+// node (detail wiring - a resolver-driven body). Never a dead end.
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export function RoomModal({
   title,
   body,
+  children,
   onClose,
 }: {
   title: string;
-  body: string;
+  body?: string;
+  children?: ReactNode;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -91,9 +94,11 @@ export function RoomModal({
             CLOSE
           </button>
         </div>
-        <p className="font-ui text-sm text-vault-text2 mt-4 leading-relaxed">
-          {body}
-        </p>
+        {children ?? (
+          <p className="font-ui text-sm text-vault-text2 mt-4 leading-relaxed">
+            {body}
+          </p>
+        )}
       </div>
     </div>
   );

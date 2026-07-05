@@ -18,6 +18,10 @@
 
 # misc
 .DS_Store
+
+# founder asset source folder (pristine PNG originals; scratch). Only the
+# web-optimized derivatives under public/coach-office/ + public/clubhouse/ ship.
+/SquadVault Images/
 *.pem
 
 # debug
