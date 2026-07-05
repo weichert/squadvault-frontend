@@ -20,6 +20,15 @@ import styles from "./room-scene.module.css";
 // A few px of travel per depth band — subtle, per the brief ("<= a few px").
 const PARALLAX_PX_PER_BAND = 4;
 
+// v1 ships MASTER-ONLY (G3 remediation 2026-07-04). The layered plates were
+// independent renders, not pixel-registered cutouts of the master's objects, so
+// they misregistered / doubled / occluded. Plates are removed from the scene here
+// (they stay in public/clubhouse/ to serve as modal detail views later). The
+// parallax machinery below is intentionally KEPT but ships disabled - it turns on
+// only when registered cutout plates (alpha mattes derived from master pixels)
+// land in a follow-on unit. Flip this to re-enable.
+const SCENE_PLATES_ENABLED: boolean = false;
+
 interface Props {
   masterSrc: string;
   masterAlt: string;
@@ -110,7 +119,7 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
   }, []);
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (reduced) return;
+    if (!SCENE_PLATES_ENABLED || reduced) return; // no plates -> nothing to parallax
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
     const nx = ((e.clientX - rect.left) / rect.width - 0.5) * 2; // -1..1
@@ -142,19 +151,20 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
               draggable={false}
             />
 
-            {/* Plates: transparent objects at their in-scene positions, parallaxed
-                by depth band (static under reduced-motion). */}
-            {plateHotspots.map((h) => (
-              <img
-                key={h.id}
-                className={styles.plate}
-                style={plateStyle(h.plate as PlatePlacement, manifest, offset, h.depth_band, reduced)}
-                src={(h.plate as PlatePlacement).src}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-              />
-            ))}
+            {/* Plates: DISABLED in v1 (master-only). Kept behind the flag until
+                registered cutout plates land; parallaxed by depth band when on. */}
+            {SCENE_PLATES_ENABLED &&
+              plateHotspots.map((h) => (
+                <img
+                  key={h.id}
+                  className={styles.plate}
+                  style={plateStyle(h.plate as PlatePlacement, manifest, offset, h.depth_band, reduced)}
+                  src={(h.plate as PlatePlacement).src}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                />
+              ))}
 
             {/* Banner: runtime text surface (from data, never baked). */}
             {bannerText && manifest.banner && (

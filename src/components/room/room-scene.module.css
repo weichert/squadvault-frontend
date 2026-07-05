@@ -61,6 +61,11 @@
   color: #e8d8a8;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   line-height: 1.1;
+  /* Sit the text on the banner's painted cloth plane (G3 remediation R2): tilt
+     back slightly and follow the drape's downward-right slope, tuned visually
+     against the master's banner angle. Reads as painted, not floating. */
+  transform: perspective(1000px) rotateX(10deg) rotateZ(4deg);
+  transform-origin: center center;
 }
 
 /* Hotspot: an interactive zone with a warm glow on hover/focus. focus-visible
