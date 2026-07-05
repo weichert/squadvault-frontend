@@ -15,23 +15,25 @@ const manifest = JSON.parse(
 ) as RoomManifest;
 
 // Spatial reading order (G2 ruling): left->right, foreground before background.
+// Active-Objects trim (2026-07-04): the four inert character objects (phone,
+// guitar, boombox, hearth) were dropped; the laptop was added as a route to the
+// league home. Every remaining hotspot has a destination or a dignified pending.
 const EXPECTED_ORDER = [
   "trophy_case",
   "desk_lamp",
-  "phone",
   "answering_machine",
-  "guitar",
-  "hearth",
+  "laptop",
   "mantel",
   "corkboard",
-  "boombox",
   "safe",
 ];
 
-// Route hotspot id -> the app route segment it must resolve to.
+// Route hotspot id -> the app route segment it must resolve to. "" = the league
+// home (/league/[id], no segment).
 const ROUTE_SEGMENTS: Record<string, string> = {
   trophy_case: "trophy-room",
   desk_lamp: "office",
+  laptop: "",
   mantel: "av-room",
   safe: "vault",
 };
@@ -63,10 +65,10 @@ describe("clubhouse manifest — shape", () => {
     expect(["soft-light", "overlay", "multiply", "none"]).toContain(b.fabric_blend);
   });
 
-  it("has exactly ten hotspots with unique ids", () => {
-    expect(manifest.hotspots).toHaveLength(10);
+  it("has exactly seven hotspots with unique ids", () => {
+    expect(manifest.hotspots).toHaveLength(7);
     const ids = manifest.hotspots.map((h) => h.id);
-    expect(new Set(ids).size).toBe(10);
+    expect(new Set(ids).size).toBe(7);
   });
 });
 
@@ -118,8 +120,14 @@ describe("clubhouse manifest — routes trace to existing surfaces", () => {
       if (h.wiring.type !== "route") continue;
       const seg = ROUTE_SEGMENTS[h.id];
       expect(seg, `no expected segment for route hotspot ${h.id}`).toBeDefined();
-      expect(h.wiring.href).toBe(`/league/{id}/${seg}`);
-      expect(existsSync(path.join(ROOT, "src", "app", "league", "[id]", seg))).toBe(true);
+      if (seg === "") {
+        // league home: /league/[id] with no child segment.
+        expect(h.wiring.href).toBe("/league/{id}");
+        expect(existsSync(path.join(ROOT, "src", "app", "league", "[id]", "page.tsx"))).toBe(true);
+      } else {
+        expect(h.wiring.href).toBe(`/league/{id}/${seg}`);
+        expect(existsSync(path.join(ROOT, "src", "app", "league", "[id]", seg))).toBe(true);
+      }
     }
   });
 });

@@ -43,7 +43,7 @@ export interface RoomHotspot {
   // null where no clean plate has landed: the hotspot is drawn on the master, no
   // parallax, upgraded per-plate later with zero API change.
   plate: PlatePlacement | null;
-  // 0 = deepest (hearth) ... 3 = foreground (desk). Drives parallax magnitude.
+  // 0 = deepest ... 3 = foreground (desk / laptop). Drives parallax magnitude.
   depth_band: number;
 }
 

@@ -34,15 +34,6 @@
       "depth_band": 3
     },
     {
-      "id": "phone",
-      "label": "Cordless Phone",
-      "aria_label": "Cordless phone — a quiet fixture of the room",
-      "zone": { "x": 245, "y": 1150, "width": 205, "height": 230 },
-      "wiring": { "type": "inert" },
-      "plate": null,
-      "depth_band": 3
-    },
-    {
       "id": "answering_machine",
       "label": "Answering Machine",
       "aria_label": "Answering machine — pending, opens a notice",
@@ -52,22 +43,13 @@
       "depth_band": 3
     },
     {
-      "id": "guitar",
-      "label": "Guitar",
-      "aria_label": "Electric guitar — a quiet fixture of the room",
-      "zone": { "x": 1320, "y": 650, "width": 150, "height": 520 },
-      "wiring": { "type": "inert" },
+      "id": "laptop",
+      "label": "League Home",
+      "aria_label": "Laptop — open the league home",
+      "zone": { "x": 1615, "y": 1150, "width": 365, "height": 260 },
+      "wiring": { "type": "route", "href": "/league/{id}", "gated": false },
       "plate": null,
-      "depth_band": 2
-    },
-    {
-      "id": "hearth",
-      "label": "Hearth",
-      "aria_label": "Hearth — the still heart of the room",
-      "zone": { "x": 1890, "y": 820, "width": 560, "height": 360 },
-      "wiring": { "type": "inert" },
-      "plate": { "src": "/clubhouse/w2_plate_10_hearth.webp", "x": 1870, "y": 760, "width": 600, "height": 440 },
-      "depth_band": 0
+      "depth_band": 3
     },
     {
       "id": "mantel",
@@ -86,15 +68,6 @@
       "wiring": { "type": "pending", "title": "The Corkboard", "body": "The corkboard hangs waiting. Notes arrive with the season." },
       "plate": { "src": "/clubhouse/w2_plate_03_corkboard.webp", "x": 2880, "y": 430, "width": 470, "height": 470 },
       "depth_band": 1
-    },
-    {
-      "id": "boombox",
-      "label": "Boombox",
-      "aria_label": "Boombox — a quiet fixture of the room",
-      "zone": { "x": 2680, "y": 950, "width": 300, "height": 210 },
-      "wiring": { "type": "inert" },
-      "plate": { "src": "/clubhouse/w2_plate_04_boombox.webp", "x": 2660, "y": 930, "width": 340, "height": 250 },
-      "depth_band": 2
     },
     {
       "id": "safe",
