@@ -37,3 +37,7 @@ Resolver reads award_id 3/6/7/9; the three staged awards render illustrated (Ora
 
 ## 9. Out of scope
 The Unbroken Chain (fact-blocked/DEFERRED — no generator, no fact; art staged but NOT wired; a future engine-generation unit, not this display work) · any engine change/generator/migration · seed-004 prod apply (founder act) · new awards · gamification · the Clairvoyant/Oracle art rulings (§7, founder) · personal media / logo / ambient (other briefs) · no engine changes.
+
+---
+## Cross-reference (appended 2026-07-05, append-only)
+The parent Trophy Room Illustrated Display brief's exclusion of "The Oracle" (crystal-ball / prediction grounds) is FORMALLY REVERSED per _observations/OBSERVATIONS_2026_07_05_ORACLE_EXCLUSION_REVERSAL.md. That memo confirms the correction this amendment already reflects: the crystal ball is Clairvoyant (award_id 7); Oracle (award_id 9) is a sundial; both facts are GENERATED and retrospective (no prediction). The §7 open rulings are unchanged and remain founder calls — (a) the Clairvoyant crystal-ball imagery aesthetic, (b) Oracle sundial art + the I03/I04/I34 Cavallini re-check. The constitutional/exclusion question is CLOSED; only the aesthetic/art questions stay open.
