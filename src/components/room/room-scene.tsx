@@ -87,15 +87,28 @@ function zoneStyle(hotspot: RoomHotspot, manifest: RoomManifest): React.CSSPrope
   };
 }
 
-function bannerStyle(banner: RoomBanner, manifest: RoomManifest): React.CSSProperties {
-  return {
-    left: pct(banner.zone.x, manifest.image_width),
-    top: pct(banner.zone.y, manifest.image_height),
-    width: pct(banner.zone.width, manifest.image_width),
-    height: pct(banner.zone.height, manifest.image_height),
-    justifyContent:
-      banner.align === "left" ? "flex-start" : banner.align === "right" ? "flex-end" : "center",
+// The curved banner text is anchored along its path per `align`: center pins the
+// midpoint of the string to the path midpoint; left/right pin the respective end.
+function bannerAnchor(align: RoomBanner["align"]): { anchor: "start" | "middle" | "end"; offset: string } {
+  if (align === "left") return { anchor: "start", offset: "0%" };
+  if (align === "right") return { anchor: "end", offset: "100%" };
+  return { anchor: "middle", offset: "50%" };
+}
+
+// Room-light gradient FILL for the glyphs: a warm highlight along the letter tops
+// fading to a bronze shadow at the bottoms, so the overhead light reads on whatever
+// text a league supplies. `light` (0-100) scales the highlight/shadow spread.
+const BANNER_GOLD = "#e8d8a8"; // base gold (midtone)
+function bannerGradient(light: number): { hi: string; lo: string } {
+  const base: [number, number, number] = [232, 216, 168];
+  const white: [number, number, number] = [255, 255, 255];
+  const bronze: [number, number, number] = [107, 83, 38];
+  const f = Math.max(0, Math.min(1, light / 100));
+  const mix = (a: [number, number, number], b: [number, number, number], t: number): string => {
+    const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+    return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
   };
+  return { hi: mix(base, white, 0.15 + f * 0.35), lo: mix(base, bronze, 0.15 + f * 0.5) };
 }
 
 export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }: Props) {
@@ -166,17 +179,110 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
                 />
               ))}
 
-            {/* Banner: runtime text surface (from data, never baked). */}
-            {bannerText && manifest.banner && (
-              <div className={styles.banner} style={bannerStyle(manifest.banner, manifest)}>
-                <span
-                  className={`${styles.bannerText} font-ceremonial`}
-                  style={{ textAlign: manifest.banner.align }}
-                >
-                  {bannerText}
-                </span>
-              </div>
-            )}
+            {/* Banner: runtime text on a curved baseline that follows the painted
+                cloth (from data, never baked). SVG textPath in the master's coord
+                space, so it scales with the stage; the smile path + right-side-up
+                rotation are tuned in the manifest against the art. */}
+            {bannerText &&
+              manifest.banner &&
+              (() => {
+                const b = manifest.banner;
+                const { anchor, offset } = bannerAnchor(b.align);
+                const grad = bannerGradient(b.light);
+                const rotate = `rotate(${b.rotate_deg} ${b.rotate_origin.x} ${b.rotate_origin.y})`;
+                const glyphFont = { fontFamily: "var(--font-ceremonial)", fontWeight: 500 } as const;
+                const showFabric = b.fabric_blend !== "none" && b.fabric > 0;
+                const pathId = "clubhouse-banner-path";
+                const shadowId = "clubhouse-banner-shadow";
+                const lightId = "clubhouse-banner-light";
+                const maskId = "clubhouse-banner-mask";
+                return (
+                  <svg
+                    className={styles.bannerSvg}
+                    viewBox={`0 0 ${manifest.image_width} ${manifest.image_height}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    role="img"
+                    aria-label={bannerText}
+                  >
+                    <defs>
+                      <path id={pathId} d={b.text_path} fill="none" />
+                      {/* overhead room light on the glyphs: top highlight -> bronze shadow */}
+                      <linearGradient id={lightId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={grad.hi} />
+                        <stop offset="42%" stopColor={BANNER_GOLD} />
+                        <stop offset="100%" stopColor={grad.lo} />
+                      </linearGradient>
+                      <filter id={shadowId} x="-10%" y="-40%" width="120%" height="180%">
+                        <feDropShadow
+                          dx="0"
+                          dy="1.5"
+                          stdDeviation="2"
+                          floodColor="#000"
+                          floodOpacity="0.4"
+                        />
+                      </filter>
+                      {/* the glyph shapes as a mask, so the cloth's own light/shadow
+                          only paints ONTO the letters (fabric integration). */}
+                      {showFabric && (
+                        <mask
+                          id={maskId}
+                          maskUnits="userSpaceOnUse"
+                          x="0"
+                          y="0"
+                          width={manifest.image_width}
+                          height={manifest.image_height}
+                        >
+                          <g transform={rotate}>
+                            <text
+                              textAnchor={anchor}
+                              fontSize={b.font_size}
+                              letterSpacing={b.letter_spacing}
+                              fill="#fff"
+                              style={glyphFont}
+                            >
+                              <textPath href={`#${pathId}`} startOffset={offset}>
+                                {bannerText}
+                              </textPath>
+                            </text>
+                          </g>
+                        </mask>
+                      )}
+                    </defs>
+                    {/* isolate so the fabric overlay blends only with the text below
+                        it, not the room behind the svg. */}
+                    <g style={{ isolation: "isolate" }}>
+                      <g transform={rotate}>
+                        <text
+                          textAnchor={anchor}
+                          fontSize={b.font_size}
+                          letterSpacing={b.letter_spacing}
+                          fill={`url(#${lightId})`}
+                          filter={`url(#${shadowId})`}
+                          style={glyphFont}
+                        >
+                          <textPath href={`#${pathId}`} startOffset={offset}>
+                            {bannerText}
+                          </textPath>
+                        </text>
+                      </g>
+                      {showFabric && (
+                        <image
+                          href={masterSrc}
+                          x="0"
+                          y="0"
+                          width={manifest.image_width}
+                          height={manifest.image_height}
+                          mask={`url(#${maskId})`}
+                          opacity={b.fabric / 100}
+                          // narrowed: showFabric guarantees blend !== "none" (which
+                          // is our disable sentinel, not a CSS mix-blend-mode value).
+                          style={{ mixBlendMode: b.fabric_blend as "soft-light" | "overlay" | "multiply" }}
+                        />
+                      )}
+                    </g>
+                  </svg>
+                );
+              })()}
 
             {/* Hotspots: routes, dignified pending modals, or inert fixtures. */}
             {manifest.hotspots.map((h) => {

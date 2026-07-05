@@ -48,10 +48,33 @@ export interface RoomHotspot {
 }
 
 // Optional runtime text surface (e.g. the clubhouse banner). The text itself is
-// NEVER baked into the art - it is supplied at render time from data.
+// NEVER baked into the art - it is supplied at render time from data and laid out
+// on a curved baseline (SVG textPath) that follows the painted banner cloth. All
+// geometry is in master-image pixel space (image_width/height), so it scales with
+// the rendered stage exactly like the hotspot zones.
 export interface RoomBanner {
-  zone: RoomZone;
+  // SVG path the text baseline follows (image coords). Its gentle "smile" is what
+  // makes the text sit on the draped cloth rather than across it.
+  text_path: string;
+  // rotation of the whole text block about `rotate_origin`. The cloth rises to the
+  // right, so this is NEGATIVE (right side lifted); tuned against the master.
+  rotate_deg: number;
+  rotate_origin: { x: number; y: number };
+  // font size + letter spacing in image user units (scale with the stage).
+  font_size: number;
+  letter_spacing: number;
+  // how the text is anchored along the path: center | left | right.
   align: "left" | "center" | "right";
+  // 0-100: how strongly the room's overhead light reads on the glyphs - a top
+  // highlight fading to a bronze shadow at the letter bottoms. Applied as a
+  // gradient FILL (not per-name art), so it holds for any league's text.
+  light: number;
+  // Fabric integration: the banner's OWN light/shadow (sampled from the master,
+  // masked to the glyph shapes, blended over the text) so the letters pick up the
+  // cloth's folds and sit IN the fabric instead of typed on top. Also per-name
+  // agnostic - it reads the art, not the string. `fabric` is 0-100 strength.
+  fabric: number;
+  fabric_blend: "soft-light" | "overlay" | "multiply" | "none";
 }
 
 export interface RoomManifest {

@@ -1,11 +1,18 @@
 {
   "manifest_id": "w2_clubhouse_hotspots_v1",
-  "note": "Hotspot geometry for the W.2 Clubhouse room. Coordinates are in master-image pixel space (image_width x image_height); components scale to the rendered size. HOTSPOT ORDER IS THE SINGLE SOURCE OF TAB/READING ORDER - a spatial walk of the room (left->right, foreground before background), asserted by the schema test. Wiring types: route (href, {id} = league canonical id; gated destinations enforce their own bounce), pending (dignified modal), inert (hover acknowledgment only). plate = optional transparent object layer placed over the master at its in-scene position; null where no clean plate has landed (hotspot drawn on the master, no parallax). The banner zone carries a runtime text layer (never baked into art).",
+  "note": "Hotspot geometry for the W.2 Clubhouse room. Coordinates are in master-image pixel space (image_width x image_height); components scale to the rendered size. HOTSPOT ORDER IS THE SINGLE SOURCE OF TAB/READING ORDER - a spatial walk of the room (left->right, foreground before background), asserted by the schema test. Wiring types: route (href, {id} = league canonical id; gated destinations enforce their own bounce), pending (dignified modal), inert (hover acknowledgment only). plate = optional transparent object layer placed over the master at its in-scene position; null where no clean plate has landed (hotspot drawn on the master, no parallax). The banner carries a curved runtime text layer (SVG textPath baseline + rotation, geometry in image px; text supplied at render time, never baked into art).",
   "image_width": 3344,
   "image_height": 1882,
   "banner": {
-    "zone": { "x": 1480, "y": 150, "width": 1290, "height": 240 },
-    "align": "center"
+    "text_path": "M1590,239 Q2110,309 2630,239",
+    "rotate_deg": -7,
+    "rotate_origin": { "x": 2110, "y": 262 },
+    "font_size": 104,
+    "letter_spacing": 3,
+    "align": "center",
+    "light": 55,
+    "fabric": 65,
+    "fabric_blend": "soft-light"
   },
   "hotspots": [
     {

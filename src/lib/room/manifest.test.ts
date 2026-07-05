@@ -48,11 +48,19 @@ describe("clubhouse manifest — shape", () => {
     expect(Array.isArray(manifest.hotspots)).toBe(true);
   });
 
-  it("carries a banner zone (runtime text surface)", () => {
+  it("carries a curved banner (runtime text surface)", () => {
     expect(manifest.banner).toBeDefined();
-    const z = manifest.banner!.zone;
-    expect(isNum(z.x) && isNum(z.y) && isNum(z.width) && isNum(z.height)).toBe(true);
-    expect(["left", "center", "right"]).toContain(manifest.banner!.align);
+    const b = manifest.banner!;
+    expect(typeof b.text_path).toBe("string");
+    expect(b.text_path.length).toBeGreaterThan(0);
+    expect(isNum(b.rotate_deg)).toBe(true);
+    expect(isNum(b.rotate_origin.x) && isNum(b.rotate_origin.y)).toBe(true);
+    expect(isNum(b.font_size) && b.font_size > 0).toBe(true);
+    expect(isNum(b.letter_spacing)).toBe(true);
+    expect(["left", "center", "right"]).toContain(b.align);
+    expect(isNum(b.light) && b.light >= 0 && b.light <= 100).toBe(true);
+    expect(isNum(b.fabric) && b.fabric >= 0 && b.fabric <= 100).toBe(true);
+    expect(["soft-light", "overlay", "multiply", "none"]).toContain(b.fabric_blend);
   });
 
   it("has exactly ten hotspots with unique ids", () => {
