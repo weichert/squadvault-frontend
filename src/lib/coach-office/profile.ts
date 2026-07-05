@@ -42,3 +42,12 @@ export async function resolveCoachOfficeProfile(
     hotspotMapId: COACH_OFFICE_HOTSPOTS_V1.hotspot_map_id,
   };
 }
+
+// The nameplate is the owner's PUBLIC franchise identity (D-4a): the display name shown
+// verbatim as a runtime data overlay (CO-R4 - never baked into the art). It is not a
+// media likeness, voice, or attributed words, so it carries NO media-consent gate;
+// gating a public team name would blank every office and narrow below the CO.3 reality
+// baseline. Pure passthrough: nothing is transformed or invented; empty stays empty.
+export function nameplateText(displayName: string): string {
+  return displayName;
+}

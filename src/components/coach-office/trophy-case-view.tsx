@@ -3,7 +3,7 @@
 // (2b) the traveling/annual/permanent records they CURRENTLY hold - all derived off
 // the Trophy Room read-models, era-correct, never invented. Empty case (no titles and
 // no held records) -> principled empty state. Presentational server component;
-// rendered inside the (client) HotspotModal via the RSC slot pattern.
+// rendered inside the (client) RoomModal via the RSC slot pattern.
 import type {
   CoachChampionship,
   CoachHeldRecord,

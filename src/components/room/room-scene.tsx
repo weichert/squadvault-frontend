@@ -12,7 +12,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RoomBanner, RoomHotspot, RoomManifest, PlatePlacement } from "@/lib/room/types";
 import { RoomModal } from "./room-modal";
 import styles from "./room-scene.module.css";
@@ -37,6 +37,9 @@ interface Props {
   params: Record<string, string>;
   // supplied at render time from data; never baked into the art.
   bannerText?: string;
+  // resolver-driven modal bodies keyed by a `detail` hotspot's contentKey. The room is
+  // agnostic to what these nodes are - it just renders the one whose key was clicked.
+  content?: Record<string, ReactNode>;
 }
 
 function pct(value: number, extent: number): string {
@@ -111,12 +114,15 @@ function bannerGradient(light: number): { hi: string; lo: string } {
   return { hi: mix(base, white, 0.15 + f * 0.35), lo: mix(base, bronze, 0.15 + f * 0.5) };
 }
 
-export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }: Props) {
+export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText, content }: Props) {
   const reduced = usePrefersReducedMotion();
   const stageRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
+  // A pending modal carries a `body` line; a detail modal carries a `content` node.
+  const [modal, setModal] = useState<
+    { title: string; body?: string; content?: ReactNode } | null
+  >(null);
 
   // Mobile: the stage overflows the viewport; open centered on the room's focal
   // point (the banner/fireplace, which sits right of the image middle) so the full
@@ -321,6 +327,21 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
                   />
                 );
               }
+              if (h.wiring.type === "detail") {
+                // resolver-driven content modal: the body is the node the room was
+                // handed for this hotspot's contentKey (never baked into the art).
+                const { title, contentKey } = h.wiring;
+                return (
+                  <button
+                    key={h.id}
+                    type="button"
+                    className={styles.hotspot}
+                    style={zoneStyle(h, manifest)}
+                    aria-label={h.aria_label}
+                    onClick={() => setModal({ title, content: content?.[contentKey] })}
+                  />
+                );
+              }
               // inert: hover acknowledgment only, not a tab stop, decorative.
               return (
                 <div
@@ -338,7 +359,9 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
       </div>
 
       {modal && (
-        <RoomModal title={modal.title} body={modal.body} onClose={() => setModal(null)} />
+        <RoomModal title={modal.title} body={modal.body} onClose={() => setModal(null)}>
+          {modal.content}
+        </RoomModal>
       )}
     </main>
   );

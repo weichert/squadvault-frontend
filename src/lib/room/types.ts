@@ -13,6 +13,11 @@ export type Wiring =
   | { type: "route"; href: string; gated: boolean }
   // a dignified pending state - opens a ceremonial modal, never a dead end/404.
   | { type: "pending"; title: string; body: string }
+  // opens a resolver-driven CONTENT modal: the body is supplied at render time from the
+  // RoomScene `content` map keyed by `contentKey`. Room-agnostic - the manifest names
+  // the slot, the room supplies the data node (the resolver output). The Coach Office
+  // uses this for trophy/ring/board; the Clubhouse uses none, so it is unaffected.
+  | { type: "detail"; contentKey: string; title: string }
   // an inert character object - hover acknowledgment only, no navigation, not a
   // tab stop (it names no destination).
   | { type: "inert" };

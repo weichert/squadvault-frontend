@@ -1,0 +1,35 @@
+{
+  "manifest_id": "coach_office_hotspots_v1",
+  "note": "Hotspot geometry for the Coach Office room (clean CO-hero co_master_web.webp, 1448x1086). Coordinates are in master-image pixel space; the room-agnostic RoomScene scales them to the rendered size. HOTSPOT ORDER IS THE SINGLE SOURCE OF TAB/READING ORDER - a spatial walk left->right across the art (office_board center, championship_ring_box desk-foreground, trophy_case right). Wiring is `detail`: each hotspot opens a resolver-driven content modal whose body RoomScene supplies from its `content` map keyed by contentKey (board/ring_box/trophy_case). Zones are drawn on the clean CO-hero and subject to the founder eyeball; a further render upgrades them with zero API change. framed_photos + cardboard_cutout_slot are v2 (D-2, omitted). No banner: the nameplate is a page-level runtime overlay (D-4a), not a curved banner. No baked text anywhere (CO-R4).",
+  "image_width": 1448,
+  "image_height": 1086,
+  "hotspots": [
+    {
+      "id": "office_board",
+      "label": "Office Board",
+      "aria_label": "Office board - open the board",
+      "zone": { "x": 505, "y": 175, "width": 390, "height": 285 },
+      "wiring": { "type": "detail", "contentKey": "board", "title": "The Board" },
+      "plate": null,
+      "depth_band": 1
+    },
+    {
+      "id": "championship_ring_box",
+      "label": "Championship Ring Box",
+      "aria_label": "Championship ring box - open the ring box",
+      "zone": { "x": 885, "y": 680, "width": 280, "height": 220 },
+      "wiring": { "type": "detail", "contentKey": "ring_box", "title": "Championship Ring Box" },
+      "plate": null,
+      "depth_band": 3
+    },
+    {
+      "id": "trophy_case",
+      "label": "Trophy Case",
+      "aria_label": "Trophy case - open the trophy display",
+      "zone": { "x": 945, "y": 35, "width": 380, "height": 735 },
+      "wiring": { "type": "detail", "contentKey": "trophy_case", "title": "Trophy Case" },
+      "plate": null,
+      "depth_band": 1
+    }
+  ]
+}
