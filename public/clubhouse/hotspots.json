@@ -8,6 +8,7 @@
     "rotate_deg": -7,
     "rotate_origin": { "x": 2110, "y": 262 },
     "font_size": 104,
+    "font_size_mobile": 101,
     "letter_spacing": 3,
     "align": "center",
     "light": 55,

@@ -58,6 +58,7 @@ describe("clubhouse manifest — shape", () => {
     expect(isNum(b.rotate_deg)).toBe(true);
     expect(isNum(b.rotate_origin.x) && isNum(b.rotate_origin.y)).toBe(true);
     expect(isNum(b.font_size) && b.font_size > 0).toBe(true);
+    expect(isNum(b.font_size_mobile) && b.font_size_mobile > 0).toBe(true);
     expect(isNum(b.letter_spacing)).toBe(true);
     expect(["left", "center", "right"]).toContain(b.align);
     expect(isNum(b.light) && b.light >= 0 && b.light <= 100).toBe(true);

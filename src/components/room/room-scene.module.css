@@ -59,6 +59,19 @@
   overflow: visible;
 }
 
+/* Banner glyph size: desktop from the manifest (--banner-fs); below the mobile
+   breakpoint a few px smaller (--banner-fs-mobile) so the full line reads within
+   the initial mobile crop with no pan. Both the visible text and the fabric mask
+   carry this class, so they stay pixel-aligned. */
+.bannerGlyph {
+  font-size: var(--banner-fs);
+}
+@media (max-width: 767px) {
+  .bannerGlyph {
+    font-size: var(--banner-fs-mobile, var(--banner-fs));
+  }
+}
+
 /* Hotspot: an interactive zone with a warm glow on hover/focus. focus-visible
    gives keyboard users the same affordance as hover. */
 .hotspot {

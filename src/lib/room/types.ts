@@ -62,6 +62,9 @@ export interface RoomBanner {
   rotate_origin: { x: number; y: number };
   // font size + letter spacing in image user units (scale with the stage).
   font_size: number;
+  // slightly smaller size used only below the mobile breakpoint, so the full
+  // line reads within the initial mobile crop (no pan). Desktop uses font_size.
+  font_size_mobile: number;
   letter_spacing: number;
   // how the text is anchored along the path: center | left | right.
   align: "left" | "center" | "right";

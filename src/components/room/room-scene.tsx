@@ -118,18 +118,25 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
 
-  // Mobile: the stage overflows the viewport; open centered on the fireplace.
+  // Mobile: the stage overflows the viewport; open centered on the room's focal
+  // point (the banner/fireplace, which sits right of the image middle) so the full
+  // banner reads in the initial crop with no pan. Desktop has no overflow -> no-op.
+  const focusX = manifest.banner
+    ? manifest.banner.rotate_origin.x / manifest.image_width
+    : 0.5;
   useEffect(() => {
     function center() {
       const vp = viewportRef.current;
       if (!vp) return;
       const overflow = vp.scrollWidth - vp.clientWidth;
-      if (overflow > 0) vp.scrollLeft = overflow / 2;
+      if (overflow <= 0) return;
+      const focusPx = focusX * vp.scrollWidth;
+      vp.scrollLeft = Math.max(0, Math.min(overflow, focusPx - vp.clientWidth / 2));
     }
     center();
     window.addEventListener("resize", center);
     return () => window.removeEventListener("resize", center);
-  }, []);
+  }, [focusX]);
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!SCENE_PLATES_ENABLED || reduced) return; // no plates -> nothing to parallax
@@ -201,6 +208,10 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
                     className={styles.bannerSvg}
                     viewBox={`0 0 ${manifest.image_width} ${manifest.image_height}`}
                     preserveAspectRatio="xMidYMid meet"
+                    style={{
+                      ["--banner-fs" as string]: `${b.font_size}px`,
+                      ["--banner-fs-mobile" as string]: `${b.font_size_mobile}px`,
+                    }}
                     role="img"
                     aria-label={bannerText}
                   >
@@ -234,8 +245,8 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
                         >
                           <g transform={rotate}>
                             <text
+                              className={styles.bannerGlyph}
                               textAnchor={anchor}
-                              fontSize={b.font_size}
                               letterSpacing={b.letter_spacing}
                               fill="#fff"
                               style={glyphFont}
@@ -253,8 +264,8 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText }
                     <g style={{ isolation: "isolate" }}>
                       <g transform={rotate}>
                         <text
+                          className={styles.bannerGlyph}
                           textAnchor={anchor}
-                          fontSize={b.font_size}
                           letterSpacing={b.letter_spacing}
                           fill={`url(#${lightId})`}
                           filter={`url(#${shadowId})`}
