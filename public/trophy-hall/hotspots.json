@@ -13,5 +13,26 @@
       "plate": null,
       "depth_band": 2
     }
+  ],
+  "cases_note": "v2 (Interaction v2): one taxonomy CASE per group (D-1). `zone` is the clickable case rect; `shelves` are the lit glass shelves (image px) objects rest ON (bottom-aligned), top-to-bottom. RoomScene ignores this key (shared RoomManifest type unchanged). Arrangement + exact rects are a G3 eyeball tune (zero-API-change): first-pass places Permanent Records front-left (the immortals, read first) and Live Records opposite front-right; the Championship (Belt only, Option 1) mid-right. Ring/League Trophy stay in the record view.",
+  "cases": [
+    { "id": "case_permanent", "category": "Permanent Records", "label": "Permanent Records",
+      "zone": { "x": 15, "y": 150, "width": 145, "height": 400 },
+      "shelves": [ { "x": 22, "y": 200, "width": 130, "height": 60 }, { "x": 22, "y": 285, "width": 130, "height": 60 }, { "x": 22, "y": 370, "width": 130, "height": 60 }, { "x": 22, "y": 455, "width": 130, "height": 60 } ] },
+    { "id": "case_positional", "category": "Positional Records", "label": "Positional Records",
+      "zone": { "x": 175, "y": 160, "width": 140, "height": 380 },
+      "shelves": [ { "x": 182, "y": 210, "width": 126, "height": 56 }, { "x": 182, "y": 290, "width": 126, "height": 56 }, { "x": 182, "y": 370, "width": 126, "height": 56 }, { "x": 182, "y": 450, "width": 126, "height": 56 } ] },
+    { "id": "case_annual", "category": "Annual Awards", "label": "Annual Awards",
+      "zone": { "x": 360, "y": 180, "width": 115, "height": 350 },
+      "shelves": [ { "x": 366, "y": 225, "width": 103, "height": 52 }, { "x": 366, "y": 300, "width": 103, "height": 52 }, { "x": 366, "y": 375, "width": 103, "height": 52 }, { "x": 366, "y": 450, "width": 103, "height": 52 } ] },
+    { "id": "case_auction", "category": "Auction & Acquisition", "label": "Auction & Acquisition",
+      "zone": { "x": 1197, "y": 180, "width": 115, "height": 350 },
+      "shelves": [ { "x": 1203, "y": 225, "width": 103, "height": 52 }, { "x": 1203, "y": 300, "width": 103, "height": 52 }, { "x": 1203, "y": 375, "width": 103, "height": 52 }, { "x": 1203, "y": 450, "width": 103, "height": 52 } ] },
+    { "id": "case_championship", "category": "The Championship", "label": "The Championship",
+      "zone": { "x": 1357, "y": 160, "width": 140, "height": 380 },
+      "shelves": [ { "x": 1364, "y": 250, "width": 126, "height": 70 }, { "x": 1364, "y": 370, "width": 126, "height": 60 } ] },
+    { "id": "case_live", "category": "Live Records", "label": "Live Records",
+      "zone": { "x": 1512, "y": 150, "width": 145, "height": 400 },
+      "shelves": [ { "x": 1519, "y": 200, "width": 130, "height": 60 }, { "x": 1519, "y": 285, "width": 130, "height": 60 }, { "x": 1519, "y": 370, "width": 130, "height": 60 }, { "x": 1519, "y": 455, "width": 130, "height": 60 } ] }
   ]
 }

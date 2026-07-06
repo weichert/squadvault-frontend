@@ -15,7 +15,8 @@ import { getLeague, getViewer } from "@/lib/league";
 import type { RoomManifest } from "@/lib/room/types";
 import { RoomScene } from "@/components/room/room-scene";
 import { ProvenanceToggle } from "@/components/room/provenance-toggle";
-import { TrophyHallGallery, type HallObject } from "@/components/trophy-room/trophy-hall-gallery";
+import { TrophyHallInteractive, type BeltDetail } from "@/components/trophy-room/trophy-hall-interactive";
+import { buildReceiptsByKey, type HallObject, type HallCase } from "@/lib/trophy-room/hall-cases";
 import {
   loadChampionshipPackage,
   loadLiveRecords,
@@ -23,6 +24,7 @@ import {
   loadPlayerAndAuctionAwards,
   loadGeneratedAwards,
   loadFoundersSeal,
+  TROPHY_BELT_ID,
   type LiveRecord,
 } from "@/lib/trophy-room";
 import {
@@ -92,9 +94,10 @@ export default async function TrophyHallPage({ params }: Props) {
     }
   }
 
-  // Resolver record -> displayed object, via the pure seam. no-fabrication: an award with no
-  // fact is dropped (honest absence); art resolves illustrated-or-text.
-  const toObject = (rec: LiveRecord, category: string): HallObject | null => {
+  // Resolver record -> displayed object PAIRED with its source record (the record feeds the
+  // object-aligned detail receipt). no-fabrication: an award with no fact is dropped; art
+  // resolves illustrated-or-text.
+  const toPair = (rec: LiveRecord, category: string): { object: HallObject; record: LiveRecord } | null => {
     const present = rec.holders.length > 0 || rec.valueText !== "";
     if (!isFactBacked({ docketId: rec.docketId, present })) return null;
     const slug = SLUG_BY_DOCKET[rec.docketNumber];
@@ -103,7 +106,7 @@ export default async function TrophyHallPage({ params }: Props) {
       .map((h) => holderCanonical(h, uuidToCanonical))
       .filter((x): x is string => x !== null);
     const top = rec.holders[0] ?? null;
-    return {
+    const object: HallObject = {
       key: rec.docketId,
       title: rec.trophyName,
       winnerName: top?.name ?? null,
@@ -113,24 +116,52 @@ export default async function TrophyHallPage({ params }: Props) {
       isHeld: isHeldByViewer({ docketId: rec.docketId, holderCanonicalIds }, viewerCanonical),
       category,
     };
+    return { object, record: rec };
   };
 
-  const objects: HallObject[] = [
-    ...generated.map((r) => toObject(r, "Annual Awards")),
-    ...live.records.map((r) => toObject(r, "Live Records")),
-    ...awards.annual.map((r) => toObject(r, "Annual Awards")),
-    ...awards.permanentCards.map((r) => toObject(r, "Permanent Records")),
-    ...playerAuction.positional.map((r) => toObject(r, "Positional Records")),
-    ...playerAuction.auction.map((r) => toObject(r, "Auction & Acquisition")),
-  ].filter((x): x is HallObject => x !== null);
+  const pairs = [
+    ...generated.map((r) => toPair(r, "Annual Awards")),
+    ...live.records.map((r) => toPair(r, "Live Records")),
+    ...awards.annual.map((r) => toPair(r, "Annual Awards")),
+    ...awards.permanentCards.map((r) => toPair(r, "Permanent Records")),
+    ...playerAuction.positional.map((r) => toPair(r, "Positional Records")),
+    ...playerAuction.auction.map((r) => toPair(r, "Auction & Acquisition")),
+  ].filter((x): x is { object: HallObject; record: LiveRecord } => x !== null);
+
+  // The Championship case (Option 1): the BELT as its single object (name-only -> isHeld=false,
+  // D-C), with its NATIVE custody receipt (the BeltTransfer chain + ATTESTED + TR-CP-1). The Ring
+  // and League Trophy are collective/list-shaped and stay in the record view (the provenance panel).
+  const beltObject: HallObject = {
+    key: TROPHY_BELT_ID,
+    title: "The Belt",
+    winnerName: pkg.belt.currentHolderName,
+    season: pkg.belt.currentSeason,
+    coHolders: 0,
+    art: { mode: "text", src: null },
+    isHeld: false,
+    category: "The Championship",
+  };
+  const belt: BeltDetail = {
+    docketId: TROPHY_BELT_ID,
+    currentHolderName: pkg.belt.currentHolderName,
+    currentSeason: pkg.belt.currentSeason,
+    transferCount: pkg.belt.transferCount,
+    chain: pkg.belt.chain,
+  };
+
+  const objects: HallObject[] = [...pairs.map((p) => p.object), beltObject];
+  // Detail receipts, object-aligned via the shipped seam (LiveRecord awards; the Belt is native).
+  const receiptsByKey = buildReceiptsByKey(pairs.map((p) => p.record));
 
   // "Your hardware": the viewer's own held trophy takes the plinth; else the gallery's first.
   const heroKey = objects.find((o) => o.isHeld)?.key ?? null;
 
-  // The manifest is data (geometry lives here, not in code) — the shipped room pattern.
+  // The manifest is data (geometry lives here, not in code). RoomScene reads image dims + hotspots;
+  // the v2 `cases` array (per-shelf geometry) is read here for the interactive overlay.
   const manifest = JSON.parse(
     await fs.readFile(path.join(process.cwd(), "public/trophy-hall/hotspots.json"), "utf8"),
-  ) as RoomManifest;
+  ) as RoomManifest & { cases?: HallCase[] };
+  const cases: HallCase[] = manifest.cases ?? [];
 
   // Generated-award receipts for the provenance view, via the alignment seam (docket id keyed).
   const generatedById: Record<string, LiveRecord> = Object.fromEntries(
@@ -143,7 +174,17 @@ export default async function TrophyHallPage({ params }: Props) {
       masterAlt="The Trophy Hall - a Tahoe hall of glass cases and a central plinth"
       manifest={manifest}
       params={{ id }}
-      objects={<TrophyHallGallery objects={objects} heroKey={heroKey} />}
+      objects={
+        <TrophyHallInteractive
+          cases={cases}
+          objects={objects}
+          receiptsByKey={receiptsByKey}
+          heroKey={heroKey}
+          imageWidth={manifest.image_width}
+          imageHeight={manifest.image_height}
+          belt={belt}
+        />
+      }
     />
   );
 

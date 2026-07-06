@@ -19,7 +19,7 @@ const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
 // is authored first (tests-first) and stays RED until they exist.
 const NEW_SOURCE = [
   "src/app/league/[id]/trophy-hall/page.tsx",
-  "src/components/trophy-room/trophy-hall-gallery.tsx",
+  "src/components/trophy-room/trophy-hall-interactive.tsx",
   "src/components/room/provenance-toggle.tsx",
   "src/lib/trophy-room/viewer-holdings.ts",
   "public/trophy-hall/hotspots.json",
@@ -62,7 +62,7 @@ describe("CO-R4 no-bake audit — overlay text is runtime data, never baked", ()
   // The illustrated objects and gallery must not carry a hard-coded award title, winner
   // name, or year — those overlay at runtime from the manifest/resolver.
   const OVERLAY_SURFACES = [
-    "src/components/trophy-room/trophy-hall-gallery.tsx",
+    "src/components/trophy-room/trophy-hall-interactive.tsx",
     "public/trophy-hall/hotspots.json",
   ];
   it("no baked four-digit season and no baked league identity in the illustrated surfaces", () => {
