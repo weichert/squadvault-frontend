@@ -33,10 +33,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SignedInIndicator } from "@/components/ui/signed-in-indicator";
+import type { IndicatorState } from "@/lib/indicator/indicator-state";
 
 interface Props {
   leagueId: string;
   leagueName: string;
+  // Additive (Signed-In Toolbar Indicator): a pre-resolved, serializable auth-state chip
+  // rendered in a fixed corner. Absent -> the nav renders exactly as before (no fork).
+  indicator?: IndicatorState;
 }
 
 type Tab = {
@@ -278,7 +283,7 @@ function MobileTabBar({
   );
 }
 
-export function TopNav({ leagueId, leagueName }: Props) {
+export function TopNav({ leagueId, leagueName, indicator }: Props) {
   const pathname = usePathname() ?? "";
 
   return (
@@ -289,6 +294,7 @@ export function TopNav({ leagueId, leagueName }: Props) {
         pathname={pathname}
       />
       <MobileTabBar leagueId={leagueId} pathname={pathname} />
+      {indicator && <SignedInIndicator state={indicator} />}
     </>
   );
 }
