@@ -9,6 +9,8 @@
 // (W.6 2e / Part 8); it renders as informational only.
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { clubhouseHref } from '@/lib/nav/routes';
 import type {
   MemberConsentCategory,
   MemberConsentEvent,
@@ -55,10 +57,12 @@ const CATEGORY_LABEL: Record<MemberConsentCategory, string> = {
 
 export function MemberConsentPanel({
   leagueId,
+  canonicalId,
   current,
   history,
 }: {
   leagueId: string;
+  canonicalId: string;
   current: ConsentCurrentState;
   history: MemberConsentEvent[];
 }) {
@@ -217,6 +221,32 @@ export function MemberConsentPanel({
             specific feature on its own &mdash; never as part of these settings.
           </p>
         </div>
+      </div>
+
+      {/* Coercion-free door (B1 / D-B2): always available, regardless of grants. Consent is
+          invited here, never required to proceed — a member may grant nothing and still enter.
+          Recording a grant stays in place (act() -> router.refresh()); this link is the only
+          way onward, so the member controls when they leave for the room. Canonical id only
+          (a UUID league.id path would 404). */}
+      <div style={{ marginTop: '1.75rem', display: 'flex', justifyContent: 'flex-end' }}>
+        <Link
+          href={clubhouseHref(canonicalId)}
+          className="font-ui transition-colors hover:text-vault-text"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '0.6rem 1.15rem',
+            borderRadius: 6,
+            border: '1px solid var(--vault-gold-dim, #8B7035)',
+            color: 'var(--vault-gold, #C9A84C)',
+            textDecoration: 'none',
+            fontSize: '0.9rem',
+            letterSpacing: '0.02em',
+          }}
+        >
+          Enter the Clubhouse &rarr;
+        </Link>
       </div>
 
       {error && (

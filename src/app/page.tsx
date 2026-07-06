@@ -13,12 +13,13 @@ export const dynamic = 'force-dynamic';
 const CANONICAL_LEAGUE_ID = '70985';
 
 export default async function HomePage() {
-  // Authed viewers never see the splash: redirect server-side to the league
-  // home before any markup renders (no interstitial, no flash). getViewer is
-  // the existing cached auth helper - no auth logic is duplicated here.
+  // Authed viewers never see the splash: redirect server-side into the illustrated
+  // Clubhouse (the front door) before any markup renders (no interstitial, no flash).
+  // The data home stays reachable from the nav (the Community tab). getViewer is the
+  // existing cached auth helper - no auth logic is duplicated here.
   const viewer = await getViewer(CANONICAL_LEAGUE_ID);
   if (viewer.userId) {
-    redirect(`/league/${CANONICAL_LEAGUE_ID}`);
+    redirect(`/league/${CANONICAL_LEAGUE_ID}/clubhouse`);
   }
 
   // Anonymous viewers get the minimal landing. The identity line is resolved
@@ -45,7 +46,7 @@ export default async function HomePage() {
         )}
         <p style={{ marginTop: '2rem' }}>
           <Link
-            href={`/auth/login?redirect=/league/${CANONICAL_LEAGUE_ID}`}
+            href={`/auth/login?redirect=/league/${CANONICAL_LEAGUE_ID}/clubhouse`}
             style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8rem', color: 'var(--vault-text2)', textDecoration: 'none', letterSpacing: '0.02em' }}
           >
             Member sign-in &rarr;
