@@ -41,3 +41,19 @@ describe("data home stays reachable — the Community tab still points at /leagu
     expect(src).toMatch(/href:\s*\(id\)\s*=>\s*`\/league\/\$\{id\}`/);
   });
 });
+
+describe("Change A-2 — the signed-in chip's Sign-in lands on the Clubhouse (G3 finding; RED until fix)", () => {
+  // The signed-in indicator's anonymous "Sign in" chip is a post-login ENTRY POINT that
+  // postdates the original trace; its signInHref must route to the Clubhouse via the canonical
+  // seam (clubhouseHref(id)), not the bare data home /league/${id} (which landed the founder on
+  // the ledger). `id` is the params CANONICAL id (no UUID 404). safeRedirectPath still validates.
+  const LAYOUT = "src/app/league/[id]/layout.tsx";
+  it("the chip's signInHref is built from clubhouseHref(id) (canonical seam)", () => {
+    const src = read(LAYOUT);
+    expect(src, "signInHref uses the canonical clubhouse seam").toMatch(/signInHref:\s*buildSignInHref\(\s*clubhouseHref\(\s*id\s*\)/);
+  });
+  it("the chip's signInHref does NOT target the bare data home /league/${id}", () => {
+    const src = read(LAYOUT);
+    expect(src, "no bare-league sign-in redirect").not.toMatch(/buildSignInHref\(\s*`\/league\/\$\{id\}`/);
+  });
+});

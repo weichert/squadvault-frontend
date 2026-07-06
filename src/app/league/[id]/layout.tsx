@@ -20,6 +20,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { TopNav } from "@/components/ui/top-nav";
 import { resolveViewerFranchiseName } from "@/lib/indicator/viewer-franchise";
 import { resolveIndicatorState, buildSignInHref } from "@/lib/indicator/indicator-state";
+import { clubhouseHref } from "@/lib/nav/routes";
 
 // Skip Next.js route segment caching so league status changes (e.g. founding
 // to active) surface without a hard reload. Matches the established pattern
@@ -56,7 +57,10 @@ export default async function LeagueLayout({ children, params }: Props) {
     userId: viewer.userId,
     isCommissioner: viewer.isCommissioner,
     franchiseName,
-    signInHref: buildSignInHref(`/league/${id}`, origin),
+    // Change A-2 (G3 finding): the chip's anonymous "Sign in" lands on the Clubhouse (the
+    // new-member landing), not the bare data home. Canonical seam (id is the params canonical
+    // id -> no UUID 404); safeRedirectPath still validates inside buildSignInHref.
+    signInHref: buildSignInHref(clubhouseHref(id), origin),
   });
 
   // Active league. Set --nav-height as a CSS custom property on the wrapping
