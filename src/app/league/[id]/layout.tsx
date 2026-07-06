@@ -15,8 +15,11 @@
 // FUTURE: layout-level league context candidate - the page below this layout
 // re-fetches league.name, so the same name is queried twice per render. Not
 // noisy enough at v1 to warrant a context; capture in next memo.
-import { getLeague } from "@/lib/league";
+import { getLeague, getViewer } from "@/lib/league";
+import { createAdminClient } from "@/lib/supabase/server";
 import { TopNav } from "@/components/ui/top-nav";
+import { resolveViewerFranchiseName } from "@/lib/indicator/viewer-franchise";
+import { resolveIndicatorState, buildSignInHref } from "@/lib/indicator/indicator-state";
 
 // Skip Next.js route segment caching so league status changes (e.g. founding
 // to active) surface without a hard reload. Matches the established pattern
@@ -40,6 +43,22 @@ export default async function LeagueLayout({ children, params }: Props) {
     return <>{children}</>;
   }
 
+  // Signed-In Toolbar Indicator: resolve the viewer's auth state SERVER-SIDE and pass a
+  // serializable chip state into the client nav. getViewer is consumed unchanged; the
+  // franchise NAME is the one additive display read. Resolving here (not client-side) is
+  // what keeps the indicator pure display with nothing to record.
+  const viewer = await getViewer(id);
+  const franchiseName = viewer.userId
+    ? await resolveViewerFranchiseName(createAdminClient(), league.id, viewer.userId)
+    : null;
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? "https://squadvault.vercel.app";
+  const indicator = resolveIndicatorState({
+    userId: viewer.userId,
+    isCommissioner: viewer.isCommissioner,
+    franchiseName,
+    signInHref: buildSignInHref(`/league/${id}`, origin),
+  });
+
   // Active league. Set --nav-height as a CSS custom property on the wrapping
   // div so the community page's main element can pull itself up by exactly
   // the nav height without hard-coding the value in two places.
@@ -50,7 +69,7 @@ export default async function LeagueLayout({ children, params }: Props) {
         { "--nav-height": "80px", "--bottom-nav-height": "56px" } as React.CSSProperties
       }
     >
-      <TopNav leagueId={id} leagueName={league.name} />
+      <TopNav leagueId={id} leagueName={league.name} indicator={indicator} />
       {children}
     </div>
   );
