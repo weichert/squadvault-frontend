@@ -1,0 +1,36 @@
+Session Brief — Trophy Hall: The Fourth Illustrated Room
+Date: 2026-07-05 (DECIDE-authored, founder-ratified). Foundation: W.5 Trophy Room data COMPLETE + live; RoomScene shipped (936a8ee); dual-layer principle landed (54062e7). Gates: ⛔ G1 architecture + composition · ⛔ G2 tests · ⛔ G3 diff + eyeball. Repo: frontend.
+
+## Kickoff
+
+> You are the EXECUTE session for the Trophy Hall — SquadVault's fourth illustrated room. Read this brief, then: the dual-layer principle memo (_observations/OBSERVATIONS_2026_07_05_DUAL_LAYER_PRESENTATION_MODEL.md — the governing pattern), the landed Trophy Illustrated Display brief (064716a) and generated-awards amendment (both fold into THIS room), the shipped trophy data + resolver (src/lib/trophy-room.ts — UNCHANGED; you consume it), the custody system (trophy_custody_events + derived-holder — the mark-movement histories), CO.3 viewer-context (resolveCoachOfficeViewerContext — for viewer-relative composition), the room-agnostic RoomScene/RoomModal family (reuse, never fork), and the two-tier provenance treatment already rendered on the trophy page (the toggle reveals exactly this). Two-lane discipline; three ⛔ gates. Hard rules: the illustrated hall is a PURE presentation of the shipped fact layer — it creates no fact, places no trophy the resolver didn't return, shows an honest empty case where data is empty; the fact/data page persists AS the provenance layer (both views live); CO-R4 (hall art text-free, all labels runtime-overlaid); viewer-relative highlight is REFLECTIVE not gamified (no counts, no progress, no "collect them all" — the negative test from the display brief applies); no engine changes; halt-don't-guess. Nothing pushed before G3.
+
+## 1. Objective
+A grand, walk-into Tahoe trophy hall at a room route (e.g. /league/[id]/trophy-hall), rendering the shipped trophy data as illustrated objects within an illustrated room, viewer-relative (the viewing member's own trophies surfaced prominently on a central display; the league's full record arrayed in the hall), with a visible provenance toggle revealing each object's receipt. Reuses RoomScene. The existing trophy-room card/data page persists unchanged as the fact/provenance layer the toggle reveals. The Clubhouse trophy-case hotspot reroutes here.
+
+## 2. What exists (verify at HEAD)
+Trophy data + resolver + custody + mark-movement histories + two-tier provenance — SHIPPED, consumed unchanged. The illustrated trophy objects (staged plates + the four generated awards per the amendment) — art staged. RoomScene family + CO.3 — shipped. The Trophy Hall master render — founder-provided (Tahoe hall, blank display surfaces, CO-R4); Step 0 lands it or notes pending.
+
+## 3. The room + viewer-relative composition
+The hall master is the room; trophy objects composite into its display surfaces (cases, plaque walls, central plinth) from the resolver, never hardcoded. Viewer-relative per CO.3: the viewing member's held awards (their franchise = derived holder) surface on a prominent near-display ("your hardware"); the full league record fills the hall beyond. Reflective only — shows what the member holds, never what they could earn. Empty/unheld → honest empty state, never fabricated. Awards without ready art → graceful text-card fallback (per the display brief), never broken.
+
+## 4. The provenance toggle
+A visible toggle (available to all viewers) flips the hall between the illustrated view and the provenance view: for each displayed object, its receipt — the two-tier badge (Source Facts Verified / ATTESTED · Not Canonical), fact ID, custody / mark-movement history, entered-into-the-record — drawn from the existing fact layer. This is the first room to build the toggle; it is specified here as the reusable pattern the Clubhouse and Office retrofit later. The toggle reveals the fact layer; it never becomes a second source of truth.
+
+## 5. Folded-in scope
+This brief SUPERSEDES the standalone execution of the landed Illustrated Display brief (064716a) and its generated-awards amendment by absorbing them: the illustrated trophy-object display and the four generated awards (Hammer/Benchwarmer/Clairvoyant/Oracle, gated on the founder's seed-004 prod apply) render inside THIS hall, not on a separate page. Those briefs' constraints (CO-R4 runtime overlay, seed-004 dependency, Oracle text-fallback pending sundial art, negative gamification test, the open Clairvoyant-imagery and Oracle/Cavallini rulings) all carry forward here.
+
+## 6. Constitutional constraints
+Pure presentation of the fact layer (no fact/award creation) · fact page persists as provenance layer · CO-R4 (text-free art, runtime overlay) · viewer-relative reflective highlight, no gamification (negative test) · graceful empty + text fallback (never broken) · seed-004 prod apply is a founder act · provenance toggle reveals not replaces the fact layer · reuse RoomScene, no fork · no engine changes.
+
+## 7. Procedure
+Step 0 — Ritual + assets: identity, HEAD, tsc; land the hall master (webp) + staged trophy plates (alpha verified); note pending art (Oracle sundial). Step 1 — Architecture (no build): RoomScene instantiation for the hall; the resolver→object composite; viewer-relative composition via CO.3; the provenance-toggle mechanism (illustrated↔receipt); the Clubhouse-hotspot reroute; empty/fallback rules. ⛔ G1. Step 2 — Tests first: each award renders illustrated-or-fallback (never missing); viewer-relative highlight fires for held not unheld; provenance toggle reveals the correct receipt per object; seed-004 fact-absent → honest empty (not fabricated); CO-R4 runtime overlay not baked; negative gamification test; the shipped trophy page + resolver untouched; clubhouse/office regressions intact. ⛔ G2. Step 3 — Build + prove: hall + objects + toggle + reroute; tsc/build/vitest green; zero engine changes. ⛔ G3: founder eyeball on prod preview — does the hall feel as elegant as the Clubhouse/Office; do a member's own trophies surface; does the provenance toggle reveal honest receipts; is the Clubhouse trophy-case hotspot now routing here.
+
+## 8. Successor gate notes
+G1: confirm the resolver/custody/CO.3 are consumed unchanged (reskin + compose, not reimplement). G2's most important tests: the provenance-toggle-reveals-correct-receipt test (the values demonstration must be truthful) and the negative gamification test. G3 eyeball: elegance parity with the other rooms, viewer-relative "your hardware" lands emotionally, toggle proves the beauty hides nothing.
+
+## 9. Acceptance
+Hall renders as an illustrated room of elegance parity with Clubhouse/Office; trophy objects composite from the shipped resolver (viewer-relative); provenance toggle reveals honest receipts for every object; seed-004 pre/post-apply both handled honestly; Oracle text-fallback until sundial art; negative gamification test passes; fact page + resolver + custody untouched; Clubhouse hotspot rerouted; zero engine changes; tsc/build/vitest/CI green.
+
+## 10. Out of scope
+Any trophy-data/resolver/custody/taxonomy change · new awards · The Unbroken Chain (fact-blocked/deferred) · gamification · the Clairvoyant/Oracle art rulings (founder) · retrofitting the toggle to Clubhouse/Office (follow-on increments) · nostalgic-accretion features (later) · engine changes — no engine changes.
