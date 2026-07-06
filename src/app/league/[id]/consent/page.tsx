@@ -85,6 +85,7 @@ export default async function ConsentSettingsPage({ params }: Props) {
 
         <MemberConsentPanel
           leagueId={league.id}
+          canonicalId={id}
           current={current}
           history={historyRows ?? []}
         />
