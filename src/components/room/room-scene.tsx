@@ -40,6 +40,10 @@ interface Props {
   // resolver-driven modal bodies keyed by a `detail` hotspot's contentKey. The room is
   // agnostic to what these nodes are - it just renders the one whose key was clicked.
   content?: Record<string, ReactNode>;
+  // Optional foreground overlay layer composited over the master, room-agnostically (the
+  // Trophy Hall passes its zone-anchored trophy-object gallery here; the Clubhouse and Coach
+  // Office pass nothing, so their render is byte-identical). Additive, no fork.
+  objects?: ReactNode;
 }
 
 function pct(value: number, extent: number): string {
@@ -114,7 +118,7 @@ function bannerGradient(light: number): { hi: string; lo: string } {
   return { hi: mix(base, white, 0.15 + f * 0.35), lo: mix(base, bronze, 0.15 + f * 0.5) };
 }
 
-export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText, content }: Props) {
+export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText, content, objects }: Props) {
   const reduced = usePrefersReducedMotion();
   const stageRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -352,6 +356,16 @@ export function RoomScene({ masterSrc, masterAlt, manifest, params, bannerText, 
                 />
               );
             })}
+
+            {/* Optional foreground object layer (Trophy Hall gallery). The wrapper is
+                pointer-transparent so the nav hotspots underneath stay clickable; the
+                gallery re-enables pointer events on its own interactive objects. Absent
+                for the Clubhouse / Coach Office (byte-identical render). */}
+            {objects && (
+              <div style={{ position: "absolute", inset: 0, zIndex: 15, pointerEvents: "none" }}>
+                {objects}
+              </div>
+            )}
           </div>
         </div>
         <div className={`${styles.edgeHint} ${styles.edgeHintLeft}`} aria-hidden="true" />
