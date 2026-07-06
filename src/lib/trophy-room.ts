@@ -778,6 +778,55 @@ export async function loadPlayerAndAuctionAwards(admin: AdminClient, leagueUuid:
   return { positional: build(POSITIONAL_CATALOG), auction: build(AUCTION_CATALOG) };
 }
 
+// ---- Trophy Hall display: the four GENERATED awards (award_id 3/6/7/9) ----
+// D-A (ratified 2026-07-05): the Trophy Hall READS four already-generated engine facts the
+// shipped resolver did not previously enumerate - Hammer / Benchwarmer / Clairvoyant / Oracle.
+// READ-ONLY: no fact, generator, derivation, or existing-award computation is created or changed
+// (the loaders above are untouched and byte-identical). Same allTimeCard idiom as #13-23, off
+// season_award_winners. Graceful: table or rows absent (seed-004 pre-apply on prod) -> [] (honest
+// absence, never a fabricated winner). Definitions are the authoritative PFL award artifact
+// definitions; the numeric value is rendered verbatim (no invented unit). The Oracle (award_id 9)
+// has generated facts but its SUNDIAL art is pending, so the Hall renders it as a text fallback.
+const GENERATED_CATALOG: AwardCatalogEntry[] = [
+  { award: '3', docket: 3, name: 'The Hammer', qualification: 'The started player whose score most often exceeded the winning margin.', fmt: (v) => `${v}`, dir: 'max' },
+  { award: '6', docket: 6, name: 'The Benchwarmer', qualification: 'Most points left on the bench where the optimal lineup said to start.', fmt: (v) => `${v}`, dir: 'max' },
+  { award: '7', docket: 7, name: 'The Clairvoyant', qualification: 'The highest rate of correct lineup decisions versus the optimal indicator.', fmt: (v) => `${v}`, dir: 'max' },
+  { award: '9', docket: 9, name: 'The Oracle', qualification: 'Whose incorrect lineup decisions most often cost a game they would have won.', fmt: (v) => `${v}`, dir: 'max' },
+];
+
+export async function loadGeneratedAwards(admin: AdminClient, leagueUuid: string): Promise<LiveRecord[]> {
+  const ids = GENERATED_CATALOG.map((c) => c.award);
+  const { data: saw, error } = (await admin
+    .from('season_award_winners')
+    .select('award_id, season, franchise_id, value, detail')
+    .eq('league_id', leagueUuid)
+    .in('award_id', ids)) as { data: AwardCardRow[] | null; error: { code?: string } | null };
+  if (error || !saw || saw.length === 0) return []; // seed-004 pre-apply / table absent -> honest absence
+
+  const currentNameByCanon = new Map<string, string>();
+  {
+    const { data: frRows } = (await admin
+      .from('franchises')
+      .select('canonical_franchise_id, owner_display_name')
+      .eq('league_id', leagueUuid)) as { data: { canonical_franchise_id: string; owner_display_name: string }[] | null };
+    for (const f of frRows ?? []) currentNameByCanon.set(f.canonical_franchise_id, f.owner_display_name);
+  }
+  const eraNameByKey = new Map<string, string>();
+  {
+    const { data: snRows } = (await admin
+      .from('franchise_season_names')
+      .select('canonical_franchise_id, season, team_name')
+      .eq('league_id', leagueUuid)) as { data: { canonical_franchise_id: string; season: number; team_name: string }[] | null };
+    for (const r of snRows ?? []) eraNameByKey.set(`${r.canonical_franchise_id}:${r.season}`, r.team_name);
+  }
+  const eraNameCanon = (canon: string, season: number): string | null =>
+    eraNameByKey.get(`${canon}:${season}`) ?? currentNameByCanon.get(canon) ?? null;
+
+  return GENERATED_CATALOG
+    .map((c) => allTimeCard(saw, c.award, c.docket, c.name, c.qualification, c.fmt, eraNameCanon, c.dir))
+    .filter((r): r is LiveRecord => r !== null);
+}
+
 // ---- Trophy #31 The Founder's Seal (ATTESTED league-origin statement) ----
 // A single league-level trophy_room_entries row (entry_type FOUNDERS_SEAL, season/franchise NULL),
 // ATTESTED by human testimony - NEVER canonical (the founding predates the digital era). Render reads

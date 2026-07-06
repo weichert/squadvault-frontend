@@ -31,7 +31,7 @@ const EXPECTED_ORDER = [
 // Route hotspot id -> the app route segment it must resolve to. "" = the league
 // home (/league/[id], no segment).
 const ROUTE_SEGMENTS: Record<string, string> = {
-  trophy_case: "trophy-room",
+  trophy_case: "trophy-hall", // rerouted to the illustrated Trophy Hall (Trophy Hall room v1, G1.5)
   desk_lamp: "office",
   laptop: "",
   mantel: "av-room",

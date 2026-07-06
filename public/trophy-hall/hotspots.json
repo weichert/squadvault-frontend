@@ -1,0 +1,17 @@
+{
+  "manifest_id": "trophy_hall_hotspots_v1",
+  "note": "Hotspot geometry for the Trophy Hall room (th_master_web.webp, 1672x941 — the founder-confirmed wide/shallow/frontal Tahoe hall: glass display cases flanking, central marble plinth, window focal point, reading chair). Coordinates are in master-image pixel space; the room-agnostic RoomScene scales them. ZONE-ANCHORED (D-B, ratified): trophy objects composite into display-surface ZONES via the gallery overlay (RoomScene `objects` prop), NEVER pixel-registered cutout plates — so every hotspot here carries plate:null (the W.2 master-only lesson). No banner: trophy titles overlay per-object in the gallery at runtime (CO-R4), not on a room banner. Zones are drawn against the master and subject to the G3 founder eyeball; a retune is zero-API-change. The reading chair routes to the full fact/data page (/trophy-room) — both layers stay live; the provenance toggle reveals the same fact layer inline.",
+  "image_width": 1672,
+  "image_height": 941,
+  "hotspots": [
+    {
+      "id": "reading_chair",
+      "label": "The Full Record",
+      "aria_label": "Reading chair — open the full trophy record",
+      "zone": { "x": 1085, "y": 505, "width": 215, "height": 300 },
+      "wiring": { "type": "route", "href": "/league/{id}/trophy-room", "gated": false },
+      "plate": null,
+      "depth_band": 2
+    }
+  ]
+}

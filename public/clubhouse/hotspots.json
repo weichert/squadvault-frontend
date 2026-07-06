@@ -18,10 +18,10 @@
   "hotspots": [
     {
       "id": "trophy_case",
-      "label": "Trophy Room",
-      "aria_label": "Trophy case — enter the Trophy Room",
+      "label": "Trophy Hall",
+      "aria_label": "Trophy case — enter the Trophy Hall",
       "zone": { "x": 95, "y": 285, "width": 545, "height": 770 },
-      "wiring": { "type": "route", "href": "/league/{id}/trophy-room", "gated": false },
+      "wiring": { "type": "route", "href": "/league/{id}/trophy-hall", "gated": false },
       "plate": null,
       "depth_band": 1
     },
