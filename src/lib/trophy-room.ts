@@ -778,8 +778,8 @@ export async function loadPlayerAndAuctionAwards(admin: AdminClient, leagueUuid:
   return { positional: build(POSITIONAL_CATALOG), auction: build(AUCTION_CATALOG) };
 }
 
-// ---- Trophy Hall display: the four GENERATED awards (award_id 3/6/7/9) ----
-// D-A (ratified 2026-07-05): the Trophy Hall READS four already-generated engine facts the
+// ---- Trophy Room display: the four GENERATED awards (award_id 3/6/7/9) ----
+// D-A (ratified 2026-07-05): the Trophy Room READS four already-generated engine facts the
 // shipped resolver did not previously enumerate - Hammer / Benchwarmer / Clairvoyant / Oracle.
 // READ-ONLY: no fact, generator, derivation, or existing-award computation is created or changed
 // (the loaders above are untouched and byte-identical). Same allTimeCard idiom as #13-23, off

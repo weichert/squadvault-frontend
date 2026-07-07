@@ -1,13 +1,16 @@
 // src/app/league/[id]/trophy-hall/page.tsx
-// TROPHY HALL — SquadVault's fourth illustrated room (W.5 fact layer, shipped + live).
-// A pure PRESENTATION of the trophy fact layer: the illustrated hall renders the shipped
-// resolver output as trophy objects (viewer-relative, reflective), and the provenance toggle
-// reveals the SAME fact layer — the shipped card/data renderings — so the beauty hides nothing.
-// The room creates no fact and places no trophy the resolver did not return; where a fact is
-// absent it shows honest emptiness. Reuses the room-agnostic RoomScene (objects overlay, no
-// fork). The existing /trophy-room fact page persists unchanged. (Brief; principle memo 54062e7.)
+// TROPHY ROOM — SquadVault's illustrated trophy room, pivoted to the baked Living Room
+// (the G1/G2 rulings). A pure PRESENTATION of the trophy fact layer: the baked master is the
+// navigational scene (its painted trophies are ambience, not facts); every FACT renders at
+// runtime — case labels over painted plaques, the League Trophy + reigning champion on the
+// plinth (D-PLINTH), and the category's real trophies large on the Case View's five measured
+// bands (D-BANDS). The provenance toggle reveals the SAME fact layer, and the full record
+// (/trophy-room) stays one tap deeper (D-NAV; the re-homed reading-chair guarantee). The room
+// creates no fact and places no trophy the resolver did not return; honest emptiness where a
+// fact is absent. The existing /trophy-room fact page persists unchanged.
 import { promises as fs } from "fs";
 import path from "path";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -16,7 +19,14 @@ import type { RoomManifest } from "@/lib/room/types";
 import { RoomScene } from "@/components/room/room-scene";
 import { ProvenanceToggle } from "@/components/room/provenance-toggle";
 import { TrophyHallInteractive, type BeltDetail } from "@/components/trophy-room/trophy-hall-interactive";
-import { buildReceiptsByKey, type HallObject, type HallCase } from "@/lib/trophy-room/hall-cases";
+import { buildReceiptsByKey, type HallObject } from "@/lib/trophy-room/hall-cases";
+import {
+  buildPlinth,
+  championshipCaseObjects,
+  type CaseViewGeometry,
+  type Rect,
+  type RoomCaseZone,
+} from "@/lib/trophy-room/case-view-bands";
 import {
   loadChampionshipPackage,
   loadLiveRecords,
@@ -49,7 +59,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  return { title: `Trophy Hall - ${id}` };
+  return { title: `Trophy Room - ${id}` };
 }
 
 // Only these three award slugs have landed illustrated art this cycle; everything else is a
@@ -128,19 +138,9 @@ export default async function TrophyHallPage({ params }: Props) {
     ...playerAuction.auction.map((r) => toPair(r, "Auction & Acquisition")),
   ].filter((x): x is { object: HallObject; record: LiveRecord } => x !== null);
 
-  // The Championship case (Option 1): the BELT as its single object (name-only -> isHeld=false,
-  // D-C), with its NATIVE custody receipt (the BeltTransfer chain + ATTESTED + TR-CP-1). The Ring
-  // and League Trophy are collective/list-shaped and stay in the record view (the provenance panel).
-  const beltObject: HallObject = {
-    key: TROPHY_BELT_ID,
-    title: "The Belt",
-    winnerName: pkg.belt.currentHolderName,
-    season: pkg.belt.currentSeason,
-    coHolders: 0,
-    art: { mode: "text", src: null },
-    isHeld: false,
-    category: "The Championship",
-  };
+  // The Championship case holds the Belt + the Ring (name-only, D-C); the League Trophy is
+  // the plinth's communal perpetual and NEVER enters a case (D-PLINTH). The Belt keeps its
+  // NATIVE custody receipt (Option 1: the BeltTransfer chain + ATTESTED + TR-CP-1).
   const belt: BeltDetail = {
     docketId: TROPHY_BELT_ID,
     currentHolderName: pkg.belt.currentHolderName,
@@ -148,20 +148,19 @@ export default async function TrophyHallPage({ params }: Props) {
     transferCount: pkg.belt.transferCount,
     chain: pkg.belt.chain,
   };
+  const plinth = buildPlinth(pkg.champions);
 
-  const objects: HallObject[] = [...pairs.map((p) => p.object), beltObject];
+  const objects: HallObject[] = [...pairs.map((p) => p.object), ...championshipCaseObjects(pkg)];
   // Detail receipts, object-aligned via the shipped seam (LiveRecord awards; the Belt is native).
   const receiptsByKey = buildReceiptsByKey(pairs.map((p) => p.record));
 
-  // "Your hardware": the viewer's own held trophy takes the plinth; else the gallery's first.
-  const heroKey = objects.find((o) => o.isHeld)?.key ?? null;
-
-  // The manifest is data (geometry lives here, not in code). RoomScene reads image dims + hotspots;
-  // the v2 `cases` array (per-shelf geometry) is read here for the interactive overlay.
+  // The manifest is data (geometry lives here, not in code): case click zones + the plinth
+  // zone on the master, and the Case View's five measured bands (the case_view block).
   const manifest = JSON.parse(
     await fs.readFile(path.join(process.cwd(), "public/trophy-hall/hotspots.json"), "utf8"),
-  ) as RoomManifest & { cases?: HallCase[] };
-  const cases: HallCase[] = manifest.cases ?? [];
+  ) as RoomManifest & { cases?: RoomCaseZone[]; plinth?: { zone: Rect }; case_view?: CaseViewGeometry };
+  const cases: RoomCaseZone[] = manifest.cases ?? [];
+  const caseView = manifest.case_view;
 
   // Generated-award receipts for the provenance view, via the alignment seam (docket id keyed).
   const generatedById: Record<string, LiveRecord> = Object.fromEntries(
@@ -169,30 +168,48 @@ export default async function TrophyHallPage({ params }: Props) {
   );
 
   const illustrated = (
-    <RoomScene
-      masterSrc="/trophy-hall/th_master_web.webp"
-      masterAlt="The Trophy Hall - a Tahoe hall of glass cases and a central plinth"
-      manifest={manifest}
-      params={{ id }}
-      objects={
-        <TrophyHallInteractive
-          cases={cases}
-          objects={objects}
-          receiptsByKey={receiptsByKey}
-          heroKey={heroKey}
-          imageWidth={manifest.image_width}
-          imageHeight={manifest.image_height}
-          belt={belt}
-        />
-      }
-    />
+    <div>
+      <RoomScene
+        masterSrc="/trophy-hall/tr_master_web.webp"
+        masterAlt="The Trophy Room - a Tahoe room of six trophy cases, a whiskey corner, and the central plinth"
+        manifest={manifest}
+        params={{ id }}
+        objects={
+          caseView ? (
+            <TrophyHallInteractive
+              cases={cases}
+              objects={objects}
+              receiptsByKey={receiptsByKey}
+              imageWidth={manifest.image_width}
+              imageHeight={manifest.image_height}
+              belt={belt}
+              plinth={plinth}
+              plinthZone={manifest.plinth?.zone ?? null}
+              caseView={caseView}
+            />
+          ) : undefined
+        }
+      />
+      {/* The full record, one tap deeper (D-NAV). This affordance re-homes the retired
+          reading-chair hotspot's guarantee (G2 ruling 3): the room always reaches the
+          complete record — the pin lives in trophy-hall-manifest.test.ts. */}
+      <div style={{ textAlign: "center", padding: "12px 0 4px" }}>
+        <Link
+          href={`/league/${id}/trophy-room`}
+          className="font-mono"
+          style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--vault-gold-dim, #8B7035)", textDecoration: "none", border: "1px solid rgba(139,112,53,0.4)", borderRadius: 3, padding: "6px 14px", display: "inline-block" }}
+        >
+          The full record →
+        </Link>
+      </div>
+    </div>
   );
 
   const provenance = (
     <main style={{ background: "var(--vault-bg)", minHeight: "100vh" }}>
       <div className="max-w-4xl mx-auto px-6 py-12">
         <p className="font-ui text-sm text-vault-text2 mb-8 max-w-2xl leading-relaxed">
-          The record behind the hall. Every trophy above traces to a verified fact - entered into the
+          The record behind the room. Every trophy above traces to a verified fact - entered into the
           record or commissioner attested - with its custody and history intact.
         </p>
         <FoundersSeal seal={foundersSeal} />

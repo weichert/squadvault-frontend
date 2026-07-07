@@ -1,209 +1,76 @@
 {
-  "manifest_id": "trophy_hall_hotspots_v1",
-  "note": "Hotspot geometry for the Trophy Hall room (th_master_web.webp, 1672x941 \u2014 the founder-confirmed wide/shallow/frontal Tahoe hall: glass display cases flanking, central marble plinth, window focal point, reading chair). Coordinates are in master-image pixel space; the room-agnostic RoomScene scales them. ZONE-ANCHORED (D-B, ratified): trophy objects composite into display-surface ZONES via the gallery overlay (RoomScene `objects` prop), NEVER pixel-registered cutout plates \u2014 so every hotspot here carries plate:null (the W.2 master-only lesson). No banner: trophy titles overlay per-object in the gallery at runtime (CO-R4), not on a room banner. Zones are drawn against the master and subject to the G3 founder eyeball; a retune is zero-API-change. The reading chair routes to the full fact/data page (/trophy-room) \u2014 both layers stay live; the provenance toggle reveals the same fact layer inline.",
+  "manifest_id": "trophy_room_hotspots_v3",
+  "note": "Geometry for the TROPHY ROOM pivot (the G1/G2 Living Room rulings; dates in the observation memo). The room master (tr_master_web.webp, 1672x941) is the baked NAVIGATIONAL scene: six angled cases full of ambient painted trophies, a whiskey corner (ambient, no hotspot), the window focal point, and the empty central pedestal - the League Trophy plinth. Live per-shelf placement moved to the frontal CASE VIEW (tr_case_frontal_web.webp, the case_view block below): a RoomModal overlay, never a route. `cases` are the clickable case zones (one per taxonomy group; runtime labels render over the painted header plaques - CO-R4, nothing baked); the superseded v2 per-shelf `shelves` key is gone with the old empty-case master. The reading-chair hotspot is retired with the old master; the full-record path is page-level (see the re-homed pin in trophy-hall-manifest.test.ts). Coordinates are master-image pixels; RoomScene scales. All rects are a G3 founder-eyeball tune - retunes are zero-API-change.",
   "image_width": 1672,
   "image_height": 941,
-  "hotspots": [
-    {
-      "id": "reading_chair",
-      "label": "The Full Record",
-      "aria_label": "Reading chair \u2014 open the full trophy record",
-      "zone": {
-        "x": 1085,
-        "y": 505,
-        "width": 215,
-        "height": 300
-      },
-      "wiring": {
-        "type": "route",
-        "href": "/league/{id}/trophy-room",
-        "gated": false
-      },
-      "plate": null,
-      "depth_band": 2
-    }
-  ],
-  "cases_note": "v2 (Interaction v2): one taxonomy CASE per group (D-1). `zone` is the clickable case rect; `shelves` are the lit glass shelves (image px) objects rest ON (bottom-aligned), top-to-bottom. RoomScene ignores this key (shared RoomManifest type unchanged). Arrangement + exact rects are a G3 eyeball tune (zero-API-change): first-pass places Permanent Records front-left (the immortals, read first) and Live Records opposite front-right; the Championship (Belt only, Option 1) mid-right. Ring/League Trophy stay in the record view.",
+  "hotspots": [],
   "cases": [
+    {
+      "id": "case_permanent",
+      "category": "Permanent Records",
+      "label": "Permanent Records",
+      "zone": { "x": 8, "y": 60, "width": 175, "height": 640 }
+    },
     {
       "id": "case_annual",
       "category": "Annual Awards",
       "label": "Annual Awards",
-      "zone": {
-        "x": 15,
-        "y": 150,
-        "width": 145,
-        "height": 400
-      },
-      "shelves": [
-        {
-          "x": 22,
-          "y": 185,
-          "width": 131,
-          "height": 115
-        },
-        {
-          "x": 22,
-          "y": 310,
-          "width": 131,
-          "height": 115
-        },
-        {
-          "x": 22,
-          "y": 435,
-          "width": 131,
-          "height": 105
-        }
-      ]
-    },
-    {
-      "id": "case_live",
-      "category": "Live Records",
-      "label": "Live Records",
-      "zone": {
-        "x": 175,
-        "y": 160,
-        "width": 140,
-        "height": 380
-      },
-      "shelves": [
-        {
-          "x": 182,
-          "y": 195,
-          "width": 126,
-          "height": 110
-        },
-        {
-          "x": 182,
-          "y": 315,
-          "width": 126,
-          "height": 110
-        },
-        {
-          "x": 182,
-          "y": 435,
-          "width": 126,
-          "height": 100
-        }
-      ]
+      "zone": { "x": 195, "y": 95, "width": 190, "height": 590 }
     },
     {
       "id": "case_positional",
       "category": "Positional Records",
       "label": "Positional Records",
-      "zone": {
-        "x": 360,
-        "y": 180,
-        "width": 115,
-        "height": 350
-      },
-      "shelves": [
-        {
-          "x": 366,
-          "y": 210,
-          "width": 103,
-          "height": 100
-        },
-        {
-          "x": 366,
-          "y": 320,
-          "width": 103,
-          "height": 100
-        },
-        {
-          "x": 366,
-          "y": 430,
-          "width": 103,
-          "height": 95
-        }
-      ]
+      "zone": { "x": 400, "y": 120, "width": 165, "height": 545 }
     },
     {
       "id": "case_auction",
       "category": "Auction & Acquisition",
       "label": "Auction & Acquisition",
-      "zone": {
-        "x": 1197,
-        "y": 180,
-        "width": 115,
-        "height": 350
-      },
-      "shelves": [
-        {
-          "x": 1203,
-          "y": 210,
-          "width": 103,
-          "height": 100
-        },
-        {
-          "x": 1203,
-          "y": 320,
-          "width": 103,
-          "height": 100
-        },
-        {
-          "x": 1203,
-          "y": 430,
-          "width": 103,
-          "height": 95
-        }
-      ]
+      "zone": { "x": 1105, "y": 120, "width": 165, "height": 545 }
     },
     {
       "id": "case_championship",
       "category": "The Championship",
       "label": "The Championship",
-      "zone": {
-        "x": 1357,
-        "y": 160,
-        "width": 140,
-        "height": 380
-      },
-      "shelves": [
-        {
-          "x": 1364,
-          "y": 220,
-          "width": 126,
-          "height": 150
-        },
-        {
-          "x": 1364,
-          "y": 395,
-          "width": 126,
-          "height": 110
-        }
-      ]
+      "zone": { "x": 1285, "y": 95, "width": 190, "height": 590 }
     },
     {
-      "id": "case_permanent",
-      "category": "Permanent Records",
-      "label": "Permanent Records",
-      "zone": {
-        "x": 1512,
-        "y": 150,
-        "width": 145,
-        "height": 400
-      },
-      "shelves": [
-        {
-          "x": 1519,
-          "y": 185,
-          "width": 131,
-          "height": 115
-        },
-        {
-          "x": 1519,
-          "y": 310,
-          "width": 131,
-          "height": 115
-        },
-        {
-          "x": 1519,
-          "y": 435,
-          "width": 131,
-          "height": 105
-        }
-      ]
+      "id": "case_live",
+      "category": "Live Records",
+      "label": "Live Records",
+      "zone": { "x": 1490, "y": 60, "width": 175, "height": 640 }
     }
-  ]
+  ],
+  "plinth": {
+    "zone": { "x": 690, "y": 580, "width": 260, "height": 330 }
+  },
+  "case_view": {
+    "image_width": 1122,
+    "image_height": 1402,
+    "header_plaque": { "x": 358, "y": 88, "width": 404, "height": 82 },
+    "lower_panel": { "x": 330, "y": 1190, "width": 460, "height": 115 },
+    "bands": [
+      {
+        "shelf": { "x": 280, "y": 235, "width": 560, "height": 165 },
+        "placard": { "x": 505, "y": 385, "width": 115, "height": 42 }
+      },
+      {
+        "shelf": { "x": 280, "y": 428, "width": 560, "height": 145 },
+        "placard": { "x": 505, "y": 568, "width": 115, "height": 42 }
+      },
+      {
+        "shelf": { "x": 280, "y": 615, "width": 560, "height": 140 },
+        "placard": { "x": 505, "y": 752, "width": 115, "height": 42 }
+      },
+      {
+        "shelf": { "x": 280, "y": 800, "width": 560, "height": 135 },
+        "placard": { "x": 505, "y": 930, "width": 115, "height": 42 }
+      },
+      {
+        "shelf": { "x": 280, "y": 960, "width": 560, "height": 135 },
+        "placard": { "x": 400, "y": 1108, "width": 320, "height": 48 }
+      }
+    ]
+  }
 }

@@ -44,3 +44,26 @@ the Hall renders it as a graceful text card until its plate lands (zero-API-chan
   cards this cycle; illustrated plates drop in per-slug with zero API change as art lands.
 - Clairvoyant crystal-ball imagery ruling + Oracle/Cavallini sundial re-check remain open
   founder rulings (carried from the generated-awards amendment section 7).
+
+## Trophy Room "Living Room" pivot assets (landed 2026-07-07)
+
+Two founder-LOCKED renders (source PNGs in ~/Downloads / asset folder, gitignored; only the
+webp derivatives ship). Conversion: sharp 0.33.5 `.flatten({background:'#000'}).webp({quality:88,
+effort:6})` -> opaque RGB (both are opaque interiors, no alpha), the established master pattern.
+
+| shipped webp | source PNG | source md5 | dims | webp md5 | size |
+|---|---|---|---|---|---|
+| tr_master_web.webp | TR_master_LOCKED_candidate.png | 1bc92ab7d0cec63e0e86849052b1ddf6 | 1672x941 | 150fd37756e4dbd20d5e9352bea51e81 | 0.39 MB |
+| tr_case_frontal_web.webp | TR_case_frontal_LOCKED_candidate.png | b7ce52f66be7f5ec62ea4f1f5bcf22a5 | 1122x1402 | 9ae6dd3fee53aee8e4212b8448553501 | 0.14 MB |
+
+- **tr_master_web** — the ambient TROPHY ROOM (navigational scene). Six angled cases baked FULL of
+  ambient league-register trophies; whiskey corner (ambient, no hotspot); empty central pedestal
+  (the plinth); blank header plaque atop each case (the case-label home); blank lower panels; window
+  focal point. CO-R4: verified clean (founder zoom-check + session visual re-check — plaques/panels
+  blank, trophies carry no legible text/marks).
+- **tr_case_frontal_web** — the frontal CASE VIEW. Straight-on; blank header plaque (category name);
+  four lit glass shelves, each with a blank brass placard on its front edge; a base counter (the
+  fifth display band); blank lower panel; wood-grain interior matching the master (green felt
+  superseded — master consistency rules). CO-R4: verified clean (every plaque/placard blank).
+- The prior empty-case master (th_master_web.webp) + the per-shelf `cases` geometry it drove are
+  SUPERSEDED by this pivot (room = ambient scene, real trophies live in the Case View).

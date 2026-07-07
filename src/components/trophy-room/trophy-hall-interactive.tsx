@@ -1,18 +1,30 @@
 // src/components/trophy-room/trophy-hall-interactive.tsx
-// TROPHY HALL v2 — the interactive objects overlay (RoomScene `objects` layer). Three layers:
-// room (trophies resting on the lit glass shelves, per case) -> category (a case click opens its
-// group) -> trophy detail (enlarged plate + runtime overlay + the mark-movement history + a per-
-// trophy provenance toggle revealing the shipped, object-aligned receipt). Reuses the shipped
-// RoomModal (accessible dialog) + ProvenanceToggle, no fork. Placement + receipts come pre-computed
-// from the pure hall-cases seam + the page (the fact layer is consumed, never rebuilt). The
-// Championship Belt carries its NATIVE custody receipt (Option 1); Ring/League Trophy stay in the
-// record view. Reflective viewer emphasis only — no counts, no progression.
+// TROPHY ROOM — the interactive objects overlay (RoomScene `objects` layer), pivoted to the
+// baked Living Room (the G1/G2 rulings). The room master carries its trophies IN THE ART; this
+// layer is pure navigation over it: one click zone per painted case (runtime label over the
+// painted header plaque — CO-R4, nothing baked) and the League Trophy on the central plinth
+// (D-PLINTH: communal perpetual, reigning champion up front, the full champion roll in its
+// detail; the Ring is a Championship-case object, never the plinth). A case click opens the
+// frontal CASE VIEW overlay (D-CASE-NAV: RoomModal, never a route); a trophy click stacks the
+// detail above it (Escape closes top-first, the shipped v2 contract). Details reuse the
+// shipped RoomModal + ProvenanceToggle + object-aligned receipts — the fact layer is consumed,
+// never rebuilt. Reflective viewer emphasis only — no counts, no progression.
 "use client";
 
 import { useState } from "react";
 import { RoomModal } from "@/components/room/room-modal";
 import { ProvenanceToggle } from "@/components/room/provenance-toggle";
-import { placeObjects, type HallObject, type HallCase } from "@/lib/trophy-room/hall-cases";
+import { categoryObjects, type HallObject } from "@/lib/trophy-room/hall-cases";
+import {
+  CATEGORY_NOTES,
+  LEAGUE_TROPHY_KEY,
+  TROPHY_RING_KEY,
+  type CaseViewGeometry,
+  type PlinthModel,
+  type Rect,
+  type RoomCaseZone,
+} from "@/lib/trophy-room/case-view-bands";
+import { CaseView, EnlargedTrophy, GOLD, LABEL } from "@/components/trophy-room/case-view";
 import type { Receipt } from "@/lib/trophy-room/provenance-receipt";
 import type { BeltTransfer } from "@/lib/trophy-room";
 
@@ -25,53 +37,18 @@ export type BeltDetail = {
 };
 
 interface Props {
-  cases: HallCase[];
+  cases: RoomCaseZone[]; // the painted cases' click zones (manifest data)
   objects: HallObject[];
   receiptsByKey: Record<string, Receipt>;
-  heroKey: string | null;
   imageWidth: number;
   imageHeight: number;
   belt?: BeltDetail | null;
+  plinth: PlinthModel | null; // the League Trophy model; null = honest emptiness
+  plinthZone: Rect | null; // the pedestal's manifest zone
+  caseView: CaseViewGeometry; // the frontal render's five measured bands
 }
 
-const GOLD = "var(--vault-gold, #C9A84C)";
-const HELD_RING = "0 0 0 1px rgba(201, 168, 76, 0.85), 0 0 18px 2px rgba(201, 168, 76, 0.3)";
 const pct = (v: number, extent: number) => `${(v / extent) * 100}%`;
-
-// ── visual trophy (rests on a shelf / in the modal; visual only — the case captures the click) ──
-// h = "fill" makes the object fill its shelf band (large, scales with the room — the furnished-room
-// tune); a number is a fixed pixel height (modal grid + plinth hero).
-function ShelfTrophy({ o, h }: { o: HallObject; h: number | "fill" }) {
-  const fill = h === "fill";
-  const glow = o.isHeld ? "drop-shadow(0 0 8px rgba(201,168,76,0.6))" : "none";
-  return (
-    <div
-      data-held={o.isHeld ? "true" : "false"}
-      style={{ height: fill ? "100%" : undefined, flex: fill ? "1 1 0" : undefined, minWidth: fill ? 0 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}
-    >
-      {o.art.mode === "illustrated" ? (
-        <img src={o.art.src} alt={o.title} draggable={false} style={{ height: fill ? "116%" : (h as number), width: "auto", maxWidth: "100%", objectFit: "contain", objectPosition: "bottom", filter: glow }} />
-      ) : (
-        <div style={{ height: fill ? "82%" : (h as number), width: fill ? "94%" : undefined, minWidth: fill ? undefined : (h as number) * 0.7, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 8px", border: `1px solid ${o.isHeld ? "rgba(201,168,76,0.85)" : "rgba(139,112,53,0.55)"}`, borderRadius: 3, background: "linear-gradient(180deg, rgba(30,24,16,0.55), rgba(16,12,8,0.7))", boxShadow: o.isHeld ? HELD_RING : "inset 0 1px 0 rgba(201,168,76,0.15)" }}>
-          <span className="font-ceremonial italic" style={{ fontSize: fill ? "clamp(0.6rem, 1.15vw, 1rem)" : "0.62rem", color: "var(--vault-text, #E8E2D4)", textAlign: "center", lineHeight: 1.15 }}>{o.title}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── the enlarged plate/text for the detail view ──
-function EnlargedTrophy({ o }: { o: HallObject }) {
-  return o.art.mode === "illustrated" ? (
-    <img src={o.art.src} alt={o.title} draggable={false} style={{ height: 260, width: "auto", maxWidth: "100%", objectFit: "contain", margin: "0 auto", display: "block" }} />
-  ) : (
-    <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", border: "1px dashed rgba(139,112,53,0.5)", borderRadius: 4, margin: "0 auto", maxWidth: 320 }}>
-      <span className="font-ceremonial italic" style={{ fontSize: "1.3rem", color: "var(--vault-text2, #B8B2A8)" }}>{o.title}</span>
-    </div>
-  );
-}
-
-const LABEL = { fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--vault-text3, #514D47)" };
 
 // ── the detail body for a LiveRecord-backed trophy: enlarged + overlay + history, toggle -> receipt ──
 function LiveRecordDetail({ o, receipt }: { o: HallObject; receipt: Receipt | undefined }) {
@@ -149,89 +126,126 @@ function BeltDetailView({ belt }: { belt: BeltDetail }) {
   return <ProvenanceToggle illustrated={illustrated} provenance={provenance} />;
 }
 
-export function TrophyHallInteractive({ cases, objects, receiptsByKey, heroKey, imageWidth, imageHeight, belt }: Props) {
+// ── the champion-roll detail, shared by the League Trophy (plinth) and the Ring (case).
+// Both derive off the same shipped champion record; the framing differs (communal perpetual
+// vs mint-and-keep). Honest gaps render the shipped "an unnamed franchise" idiom.
+function RollDetail({ title, framing, plinth }: { title: string; framing: string; plinth: PlinthModel | null }) {
+  const illustrated = plinth ? (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", border: "1px dashed rgba(139,112,53,0.5)", borderRadius: 4, margin: "0 auto", maxWidth: 320 }}>
+        <span className="font-ceremonial italic" style={{ fontSize: "1.3rem", color: "var(--vault-text2)" }}>{title}</span>
+      </div>
+      <p className="font-mono" style={{ ...LABEL, marginTop: 12 }}>Reigning champion</p>
+      <p className="font-ceremonial" style={{ fontSize: "1.05rem", color: "var(--vault-text)", marginTop: 4 }}>
+        {plinth.reigningName ?? "an unnamed franchise"}{plinth.reigningSeason != null ? ` · ${plinth.reigningSeason}` : ""}
+      </p>
+      <div style={{ marginTop: 16, textAlign: "left", maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+        <p className="font-mono" style={{ ...LABEL, marginBottom: 6 }}>The roll of champions</p>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {plinth.roll.map((c, i) => (
+            <li key={i} className="font-ui" style={{ fontSize: "0.8rem", color: "var(--vault-text2, #B8B2A8)", padding: "3px 0", borderTop: i === 0 ? "none" : "1px solid var(--vault-border)" }}>
+              <span className="font-mono" style={{ color: "var(--vault-text3)" }}>{c.season}</span>  {c.eraName ?? "an unnamed franchise"}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  ) : (
+    <p className="font-ceremonial italic" style={{ color: "var(--vault-text2)" }}>The record doesn&rsquo;t hold that.</p>
+  );
+  const provenance = (
+    <div style={{ maxWidth: 440, margin: "0 auto" }}>
+      <p className="font-ceremonial" style={{ fontSize: "1.1rem", color: "var(--vault-text)" }}>{title}</p>
+      <p className="font-ui" style={{ fontSize: "0.85rem", color: "var(--vault-text2)", marginTop: 4 }}>{framing}</p>
+      <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 12 }}>
+        <span className="font-mono" style={{ fontSize: "9px", letterSpacing: "0.12em", color: "#8B7035", border: "1px solid rgba(139,112,53,0.5)", padding: "3px 8px", borderRadius: 3 }}>CANONICAL</span>
+      </div>
+      <p className="font-mono" style={{ ...LABEL, marginTop: 10 }}>Derived from the championship record</p>
+    </div>
+  );
+  return <ProvenanceToggle illustrated={illustrated} provenance={provenance} />;
+}
+
+export function TrophyHallInteractive({ cases, objects, receiptsByKey, imageWidth, imageHeight, belt, plinth, plinthZone, caseView }: Props) {
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [openTrophy, setOpenTrophy] = useState<HallObject | null>(null);
-  const [returnTo, setReturnTo] = useState<"room" | "category">("room");
+  const [returnTo, setReturnTo] = useState<"room" | "case">("room");
 
-  const { placements } = placeObjects(objects, cases);
-  const hero = objects.find((o) => o.key === heroKey) ?? null;
-  const caseById = new Map(cases.map((c) => [c.id, c]));
-
-  const openDetail = (o: HallObject, from: "room" | "category") => { setReturnTo(from); setOpenTrophy(o); };
+  const openDetail = (o: HallObject, from: "room" | "case") => { setReturnTo(from); setOpenTrophy(o); };
   const closeDetail = () => { setOpenTrophy(null); if (returnTo === "room") setOpenCategory(null); };
 
   const isBelt = (o: HallObject) => belt != null && o.key === belt.docketId;
 
+  // The plinth's object — synthesized for the detail flow; never enters a case group.
+  const leagueTrophy: HallObject = {
+    key: LEAGUE_TROPHY_KEY,
+    title: "League Trophy",
+    winnerName: plinth?.reigningName ?? null,
+    season: plinth?.reigningSeason ?? null,
+    coHolders: 0,
+    art: { mode: "text", src: null },
+    isHeld: false,
+    category: "The Championship",
+  };
+
+  const openCase = cases.find((c) => c.category === openCategory) ?? null;
+
   return (
     <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {/* Case click zones + the trophies resting on each case's shelves. */}
-      {placements.map((p) => {
-        const c = caseById.get(p.caseId);
-        if (!c) return null;
-        return (
-          <div key={p.caseId}>
-            <button
-              type="button"
-              aria-label={`${c.label} — open the group`}
-              onClick={() => setOpenCategory(c.category)}
-              style={{ position: "absolute", left: pct(c.zone.x, imageWidth), top: pct(c.zone.y, imageHeight), width: pct(c.zone.width, imageWidth), height: pct(c.zone.height, imageHeight), background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto" }}
-            />
-            {p.shelves.map((shelfObjs, i) => {
-              const s = c.shelves[i];
-              if (!s || shelfObjs.length === 0) return null;
-              return (
-                <div key={i} style={{ position: "absolute", left: pct(s.x, imageWidth), top: pct(s.y, imageHeight), width: pct(s.width, imageWidth), height: pct(s.height, imageHeight), display: "flex", alignItems: "flex-end", justifyContent: "space-evenly", gap: "5%", pointerEvents: "none" }}>
-                  {shelfObjs.map((o) => <ShelfTrophy key={o.key} o={o} h="fill" />)}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
+      {/* Case click zones over the painted cases; the runtime label sits on the painted
+          header plaque (CO-R4 — the plaques are blank in the art). */}
+      {cases.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          aria-label={`${c.label} — open the case`}
+          onClick={() => setOpenCategory(c.category)}
+          style={{ position: "absolute", left: pct(c.zone.x, imageWidth), top: pct(c.zone.y, imageHeight), width: pct(c.zone.width, imageWidth), height: pct(c.zone.height, imageHeight), background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto", padding: 0 }}
+        >
+          <span className="font-mono" style={{ position: "absolute", top: "1.5%", left: "50%", transform: "translateX(-50%)", fontSize: "clamp(0.4rem, 0.75vw, 0.65rem)", letterSpacing: "0.12em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 2px rgba(0,0,0,0.8)", whiteSpace: "nowrap" }}>{c.label}</span>
+        </button>
+      ))}
 
-      {/* The plinth hero — the viewer's own ("YOURS"); click opens its detail directly (D-3). */}
-      {hero && (
+      {/* The plinth — the League Trophy, the community's centerpiece (D-PLINTH). Honest
+          emptiness when no champion is recorded: the pedestal stays bare. */}
+      {plinth && plinthZone && (
         <button
           type="button"
-          aria-label={`${hero.title} — your hardware; open detail`}
-          onClick={() => openDetail(hero, "room")}
-          style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto" }}
+          aria-label="League Trophy — the champions' perpetual; open the roll"
+          onClick={() => openDetail(leagueTrophy, "room")}
+          style={{ position: "absolute", left: pct(plinthZone.x, imageWidth), top: pct(plinthZone.y, imageHeight), width: pct(plinthZone.width, imageWidth), height: pct(plinthZone.height, imageHeight), background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "1% 0 0" }}
         >
-          <ShelfTrophy o={hero} h={150} />
-          <span className="font-mono" style={{ ...LABEL, color: GOLD, display: "block", marginTop: 6 }}>{hero.isHeld ? "yours" : hero.title}</span>
+          <span className="font-mono" style={{ fontSize: "clamp(0.4rem, 0.75vw, 0.65rem)", letterSpacing: "0.14em", textTransform: "uppercase", color: GOLD, textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>League Trophy</span>
+          <span className="font-ceremonial" style={{ fontSize: "clamp(0.55rem, 1vw, 0.85rem)", color: "var(--vault-text, #E8E2D4)", textShadow: "0 1px 2px rgba(0,0,0,0.8)", marginTop: 2 }}>
+            {plinth.reigningName ?? "an unnamed franchise"}{plinth.reigningSeason != null ? ` · ${plinth.reigningSeason}` : ""}
+          </span>
         </button>
       )}
 
-      {/* Category modal — the case's full group (viewer's held first). */}
-      {openTrophy === null && openCategory !== null && (() => {
-        const c = cases.find((x) => x.category === openCategory);
-        const group = objects.filter((o) => o.category === openCategory);
-        const ordered = [...group.filter((o) => o.isHeld), ...group.filter((o) => !o.isHeld)];
-        return (
-          <div style={{ pointerEvents: "auto" }}>
-            <RoomModal title={c?.label ?? openCategory} onClose={() => setOpenCategory(null)}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 }}>
-                {ordered.map((o) => (
-                  <button key={o.key} type="button" onClick={() => openDetail(o, "category")}
-                    style={{ background: "rgba(20,16,12,0.4)", border: `1px solid ${o.isHeld ? "rgba(201,168,76,0.85)" : "rgba(139,112,53,0.4)"}`, borderRadius: 4, padding: "10px 8px", cursor: "pointer", textAlign: "center", boxShadow: o.isHeld ? HELD_RING : "none" }}>
-                    <ShelfTrophy o={o} h={70} />
-                    <p className="font-mono" style={{ ...LABEL, color: GOLD, marginTop: 8 }}>{o.title}</p>
-                    <p className="font-ceremonial" style={{ fontSize: "0.75rem", color: "var(--vault-text2)", marginTop: 2 }}>{o.winnerName ?? "unclaimed"}{o.winnerName && o.season != null ? ` · ${o.season}` : ""}</p>
-                  </button>
-                ))}
-              </div>
-            </RoomModal>
-          </div>
-        );
-      })()}
+      {/* The Case View — the frontal overlay (D-CASE-NAV: in the room, never a route). */}
+      {openTrophy === null && openCategory !== null && (
+        <div style={{ pointerEvents: "auto" }}>
+          <CaseView
+            geometry={caseView}
+            label={openCase?.label ?? openCategory}
+            objects={categoryObjects(objects, openCategory)}
+            note={CATEGORY_NOTES[openCategory]}
+            onOpenTrophy={(o) => openDetail(o, "case")}
+            onClose={() => setOpenCategory(null)}
+          />
+        </div>
+      )}
 
-      {/* Trophy detail — enlarged + history + provenance toggle (object-aligned receipt). */}
+      {/* Trophy detail — stacks above the Case View (Escape closes top-first). */}
       {openTrophy !== null && (
         <div style={{ pointerEvents: "auto" }}>
           <RoomModal title={openTrophy.title} onClose={closeDetail}>
             {isBelt(openTrophy) && belt ? (
               <BeltDetailView belt={belt} />
+            ) : openTrophy.key === LEAGUE_TROPHY_KEY ? (
+              <RollDetail title="League Trophy" framing="The communal perpetual — it stays with the league; every champion's name accumulates on it." plinth={plinth} />
+            ) : openTrophy.key === TROPHY_RING_KEY ? (
+              <RollDetail title="The Ring" framing="Mint-and-keep — each champion keeps their own; the case shows the set the record has minted." plinth={plinth} />
             ) : (
               <LiveRecordDetail o={openTrophy} receipt={receiptsByKey[openTrophy.key]} />
             )}

@@ -34,7 +34,7 @@ export function ProvenanceToggle({ illustrated, provenance }: Props) {
     <div>
       <div
         role="group"
-        aria-label="Trophy Hall view"
+        aria-label="Trophy Room view"
         style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", padding: "14px 0" }}
       >
         <button type="button" aria-pressed={!showProvenance} style={btn(!showProvenance)} onClick={() => setShowProvenance(false)}>
