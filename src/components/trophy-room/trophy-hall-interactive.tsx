@@ -38,15 +38,22 @@ const GOLD = "var(--vault-gold, #C9A84C)";
 const HELD_RING = "0 0 0 1px rgba(201, 168, 76, 0.85), 0 0 18px 2px rgba(201, 168, 76, 0.3)";
 const pct = (v: number, extent: number) => `${(v / extent) * 100}%`;
 
-// ── small visual trophy (rests on a shelf; visual only — the case captures the click) ──
-function ShelfTrophy({ o, h }: { o: HallObject; h: number }) {
+// ── visual trophy (rests on a shelf / in the modal; visual only — the case captures the click) ──
+// h = "fill" makes the object fill its shelf band (large, scales with the room — the furnished-room
+// tune); a number is a fixed pixel height (modal grid + plinth hero).
+function ShelfTrophy({ o, h }: { o: HallObject; h: number | "fill" }) {
+  const fill = h === "fill";
+  const glow = o.isHeld ? "drop-shadow(0 0 8px rgba(201,168,76,0.6))" : "none";
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }} data-held={o.isHeld ? "true" : "false"}>
+    <div
+      data-held={o.isHeld ? "true" : "false"}
+      style={{ height: fill ? "100%" : undefined, flex: fill ? "1 1 0" : undefined, minWidth: fill ? 0 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}
+    >
       {o.art.mode === "illustrated" ? (
-        <img src={o.art.src} alt={o.title} draggable={false} style={{ height: h, width: "auto", objectFit: "contain", filter: o.isHeld ? "drop-shadow(0 0 6px rgba(201,168,76,0.6))" : "none" }} />
+        <img src={o.art.src} alt={o.title} draggable={false} style={{ height: fill ? "116%" : (h as number), width: "auto", maxWidth: "100%", objectFit: "contain", objectPosition: "bottom", filter: glow }} />
       ) : (
-        <div style={{ height: h, minWidth: h * 0.7, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", border: `1px solid ${o.isHeld ? "rgba(201,168,76,0.85)" : "rgba(139,112,53,0.5)"}`, borderRadius: 3, background: "rgba(20,16,12,0.5)", boxShadow: o.isHeld ? HELD_RING : "none" }}>
-          <span className="font-ceremonial italic" style={{ fontSize: "0.62rem", color: "var(--vault-text2, #B8B2A8)", textAlign: "center", lineHeight: 1.1 }}>{o.title}</span>
+        <div style={{ height: fill ? "82%" : (h as number), width: fill ? "94%" : undefined, minWidth: fill ? undefined : (h as number) * 0.7, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 8px", border: `1px solid ${o.isHeld ? "rgba(201,168,76,0.85)" : "rgba(139,112,53,0.55)"}`, borderRadius: 3, background: "linear-gradient(180deg, rgba(30,24,16,0.55), rgba(16,12,8,0.7))", boxShadow: o.isHeld ? HELD_RING : "inset 0 1px 0 rgba(201,168,76,0.15)" }}>
+          <span className="font-ceremonial italic" style={{ fontSize: fill ? "clamp(0.6rem, 1.15vw, 1rem)" : "0.62rem", color: "var(--vault-text, #E8E2D4)", textAlign: "center", lineHeight: 1.15 }}>{o.title}</span>
         </div>
       )}
     </div>
@@ -174,8 +181,8 @@ export function TrophyHallInteractive({ cases, objects, receiptsByKey, heroKey, 
               const s = c.shelves[i];
               if (!s || shelfObjs.length === 0) return null;
               return (
-                <div key={i} style={{ position: "absolute", left: pct(s.x, imageWidth), top: pct(s.y, imageHeight), width: pct(s.width, imageWidth), height: pct(s.height, imageHeight), display: "flex", alignItems: "flex-end", justifyContent: "space-evenly", pointerEvents: "none" }}>
-                  {shelfObjs.map((o) => <ShelfTrophy key={o.key} o={o} h={Math.round((s.height / imageHeight) * 640)} />)}
+                <div key={i} style={{ position: "absolute", left: pct(s.x, imageWidth), top: pct(s.y, imageHeight), width: pct(s.width, imageWidth), height: pct(s.height, imageHeight), display: "flex", alignItems: "flex-end", justifyContent: "space-evenly", gap: "5%", pointerEvents: "none" }}>
+                  {shelfObjs.map((o) => <ShelfTrophy key={o.key} o={o} h="fill" />)}
                 </div>
               );
             })}

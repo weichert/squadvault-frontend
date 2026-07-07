@@ -39,11 +39,19 @@ export type CasePlacement = {
   totalCount: number;
 };
 
-export const SLOTS_PER_SHELF = 3;
+export const SLOTS_PER_SHELF = 1; // one LARGE representative per shelf (G3 furnished-room tune; the
+// narrow cases + the plates' own framing read best one-per-shelf; the case-click shows the full group)
 
 // Reflective order: the viewer's HELD objects first (stable within held/unheld), never ranked.
 function heldFirst(objects: HallObject[]): HallObject[] {
   return [...objects.filter((o) => o.isHeld), ...objects.filter((o) => !o.isHeld)];
+}
+
+// Shelf-PREVIEW order (G3): held first, then the illustrated plates (prime, large placements), then
+// the rest — stable within each tier (Array.sort is stable). The modal still shows the full group.
+function previewOrder(objects: HallObject[]): HallObject[] {
+  const rank = (o: HallObject) => (o.isHeld ? 0 : 2) + (o.art.mode === "illustrated" ? 0 : 1);
+  return [...objects].sort((a, b) => rank(a) - rank(b));
 }
 
 // The full group for a category modal (held first).
@@ -62,9 +70,10 @@ export function placeObjects(
   const unplaced = objects.filter((o) => !byCategory.has(o.category));
 
   const placements = cases.map((c) => {
-    const group = categoryObjects(objects, c.category); // held first, this category only
+    const group = objects.filter((o) => o.category === c.category);
+    const ordered = previewOrder(group); // held first, then illustrated (prime), then the rest
     const capacity = c.shelves.length * SLOTS_PER_SHELF;
-    const preview = group.slice(0, capacity);
+    const preview = ordered.slice(0, capacity);
     // one slot-array per physical shelf (fill shelf-by-shelf; even distribution is a G3 tune).
     const shelves: HallObject[][] = c.shelves.map((_, i) => preview.slice(i * SLOTS_PER_SHELF, i * SLOTS_PER_SHELF + SLOTS_PER_SHELF));
     return { caseId: c.id, category: c.category, shelves, previewCount: preview.length, totalCount: group.length };
