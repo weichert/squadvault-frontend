@@ -248,6 +248,21 @@ Done + still open:
     `src`. Proof `scripts/proof_invite_consent_canonical_id.ts` 9/9 (read-only live data: UUID
     `00000000-..-001` -> canonical `70985`); type-check + build green. Close-out
     `_observations/OBSERVATIONS_2026_06_25_INVITE_CONSENT_CANONICAL_ID.md`.
+  - **Follow-up — invite route hardening (logging, error classes, redirect contract, orphan
+    guard) — DONE (PR `fix/invite-route-hardening`).** After Test B passed on prod, hardened
+    the pipeline that passed. F1: every non-2xx branch now logs a stable tag + upstream
+    code/status + franchise/league ids (emails redacted, never tokens) — ends the masking
+    where three unrelated causes collapsed into one opaque 502. F2: `classifyInviteError`
+    splits GoTrue errors into rate-limit (429, distinct message), already-registered
+    (resolve-and-link), and other (502). F3 (Gate B, callback-entry KEPT on code evidence —
+    the consent page never runs `verifyOtp`; only `/auth/callback` does): `buildInviteRedirect`
+    derives origin from the request (drops the build-inlined `NEXT_PUBLIC_APP_URL`), and
+    `docs/auth_email_template_contract.md` pins the template-vs-code contract. F4: idempotent
+    re-invite pre-check + admin-client orphan cleanup on pointer-failure (016 gives the links
+    table no DELETE policy, so service-role does the compensation). Tests-first:
+    `src/lib/members/invite.test.ts` + `src/app/api/members/invite/route.test.ts`; full vitest
+    170/170, tsc clean. `test:governance` is live-DB / CI-authoritative (diff touches no RLS).
+    Close-out `_observations/OBSERVATIONS_2026_07_07_INVITE_ROUTE_HARDENING.md`.
 
 ### Deferred polish (decisions, mostly, not code)
 - Full Member Office (stub today).
