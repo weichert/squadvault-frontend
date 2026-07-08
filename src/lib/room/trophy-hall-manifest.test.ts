@@ -35,11 +35,17 @@ describe("trophy-hall manifest — valid RoomManifest, zone-anchored (D-B)", () 
     }
   });
 
-  it("declares at least one navigation route back to the fact/data page (both layers live)", () => {
-    if (!existsSync(path.join(ROOT, HALL_MANIFEST))) return;
-    const m = readJson<RoomManifest>(HALL_MANIFEST);
-    const routes = m.hotspots.filter((h) => h.wiring.type === "route");
-    expect(routes.some((h) => h.wiring.type === "route" && h.wiring.href.includes("/trophy-room"))).toBe(true);
+  it("the room still reaches the full record (re-homed from the retired reading-chair hotspot)", () => {
+    // G2 ruling 3 (Living Room pivot): the baked master retired the reading-chair hotspot,
+    // but the guarantee it pinned — the room provides a path to the complete record — is
+    // constitutional and stays pinned. The path is now PAGE-LEVEL: the room page renders a
+    // /trophy-room affordance (the full record, one tap deeper per D-NAV). This assertion
+    // supersedes the old manifest route-hotspot check; it moved with the path's definition.
+    const page = readFileSync(
+      path.join(ROOT, "src/app/league/[id]/trophy-hall/page.tsx"),
+      "utf8",
+    );
+    expect(page, "the room page links the full record").toMatch(/trophy-room[`'"]/);
   });
 });
 

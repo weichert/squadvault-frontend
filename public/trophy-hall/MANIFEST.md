@@ -37,10 +37,49 @@ Plates: the three award plates are text-free knockouts (staged/MANIFEST.md: name
 runtime title overlay). The Oracle (award_id 9) has generated facts but PENDING sundial art;
 the Hall renders it as a graceful text card until its plate lands (zero-API-change drop-in).
 
-## Pending / follow-on art (not shipped here)
+## Full award plate set (landed 2026-07-07) -- all 35 awards illustrated
 
-- Oracle sundial plate (award_the_oracle.webp) - text fallback until it lands.
-- The broader 31-award illustrated set (parent display brief) - most awards render as text
-  cards this cycle; illustrated plates drop in per-slug with zero API change as art lands.
-- Clairvoyant crystal-ball imagery ruling + Oracle/Cavallini sundial re-check remain open
-  founder rulings (carried from the generated-awards amendment section 7).
+The founder's complete render set shipped. Every award now carries a webp plate
+(`award_<id>.webp`, 35 total), knocked out to true alpha from the founder's `Trophy Images/`
+renders (source PNGs local/gitignored; only the webp derivatives ship, per the master pattern).
+Knockout: edge-flood-fill white/near-white removal at threshold 200 (preserves interior light --
+crystal-ball glow, glass dome, life-ring hole), then resize-to-900 (alpha anti-aliased), then
+`.webp({quality:90, effort:6, alphaQuality:100})`.
+
+Catalog: `award-catalog.json` (id, title, definition) is the manifest's shipped projection --
+the page keys each award's plate AND its detail-view description off the trophy title (normalized,
+the-prefix-insensitive). An unmatched title falls back to the honest text state (never a wrong
+plate). The Founder's Seal plate exists but the seal is a provenance-view object, not a shelf
+trophy yet; the Unbroken Chain plate exists but the resolver does not currently produce that award.
+
+Render-batch follow-ups (CO-R4 class, cosmetic, not blocking): per-plate knockout fringe review
+for any thin light halos; the earlier Clairvoyant under-stand alpha note folds in here.
+
+## Trophy Room "Living Room" pivot assets (landed 2026-07-07)
+
+Two founder-LOCKED renders (source PNGs in ~/Downloads / asset folder, gitignored; only the
+webp derivatives ship). Conversion: sharp 0.33.5 `.flatten({background:'#000'}).webp({quality:92,
+effort:6})` -> opaque RGB (both are opaque interiors, no alpha), the established master pattern.
+
+Rebuilt 2026-07-07 from the SAME founder-LOCKED source PNGs at quality 92 (was 88): a crisper
+hero, and the fresh bytes force a clean CDN deploy (the prior q88 derivative was pixel-faithful to
+the locked source -- meanAbsDiff 2.6/255 -- so this is a fidelity + cache-bust refresh, not a new
+render). Prior webp md5s: tr_master 150fd37756e4dbd20d5e9352bea51e81 ; tr_case_frontal
+9ae6dd3fee53aee8e4212b8448553501.
+
+| shipped webp | source PNG | source md5 | dims | webp md5 | size |
+|---|---|---|---|---|---|
+| tr_master_web.webp | TR_master_LOCKED_candidate.png | 1bc92ab7d0cec63e0e86849052b1ddf6 | 1672x941 | 0bb7e7565f9b57f2dc00e1f39e13cb68 | 0.51 MB |
+| tr_case_frontal_web.webp | TR_case_frontal_LOCKED_candidate.png | b7ce52f66be7f5ec62ea4f1f5bcf22a5 | 1122x1402 | fa088de10436c74970519ef0df7081e5 | 0.20 MB |
+
+- **tr_master_web** — the ambient TROPHY ROOM (navigational scene). Six angled cases baked FULL of
+  ambient league-register trophies; whiskey corner (ambient, no hotspot); empty central pedestal
+  (the plinth); blank header plaque atop each case (the case-label home); blank lower panels; window
+  focal point. CO-R4: verified clean (founder zoom-check + session visual re-check — plaques/panels
+  blank, trophies carry no legible text/marks).
+- **tr_case_frontal_web** — the frontal CASE VIEW. Straight-on; blank header plaque (category name);
+  four lit glass shelves, each with a blank brass placard on its front edge; a base counter (the
+  fifth display band); blank lower panel; wood-grain interior matching the master (green felt
+  superseded — master consistency rules). CO-R4: verified clean (every plaque/placard blank).
+- The prior empty-case master (th_master_web.webp) + the per-shelf `cases` geometry it drove are
+  SUPERSEDED by this pivot (room = ambient scene, real trophies live in the Case View).

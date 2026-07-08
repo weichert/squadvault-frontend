@@ -13,11 +13,15 @@ export function RoomModal({
   body,
   children,
   onClose,
+  maxWidth = 420,
 }: {
   title: string;
   body?: string;
   children?: ReactNode;
   onClose: () => void;
+  // Additive optional width (the RoomScene objects? idiom): existing callers pass nothing
+  // and render byte-identical; the Trophy Room Case View needs a wider stage.
+  maxWidth?: number;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -68,7 +72,7 @@ export function RoomModal({
         aria-modal="true"
         aria-label={title}
         className="vault-card w-full"
-        style={{ maxWidth: 420, background: "var(--vault-s1)" }}
+        style={{ maxWidth, background: "var(--vault-s1)", maxHeight: "92vh", overflowY: "auto" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">

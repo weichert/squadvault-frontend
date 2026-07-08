@@ -70,9 +70,12 @@ const PUBLIC_TABS: ReadonlyArray<Tab> = [
     isActive: (pathname, id) => pathname.startsWith(`/league/${id}/archive`),
   },
   {
+    // D-NAV (Living Room pivot): the tab fronts the illustrated room; the full record
+    // (/trophy-room) is one tap deeper. Routes unchanged - only the tab's target moved.
     label: "Trophy Room",
-    href: (id) => `/league/${id}/trophy-room`,
-    isActive: (pathname, id) => pathname.startsWith(`/league/${id}/trophy-room`),
+    href: (id) => `/league/${id}/trophy-hall`,
+    isActive: (pathname, id) =>
+      pathname.startsWith(`/league/${id}/trophy-hall`) || pathname.startsWith(`/league/${id}/trophy-room`),
   },
   {
     label: "Members",
