@@ -147,12 +147,14 @@ export function CaseView({ geometry, label, objects, note, onOpenTrophy, onClose
                       <ShelfTrophy o={o} h="fill" />
                     </div>
                   </button>
-                  {/* The single label unit — award name + holder + year, on the brass placard;
-                      honest truncation (the full text lives in the detail). One label per slot,
-                      cleared from the render above and the band below (N2). */}
-                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y, H), transform: "translateX(-50%)", minWidth: "30%", maxWidth: "58%", padding: "2px 8px", borderRadius: 2, background: "linear-gradient(180deg, rgba(64,48,22,0.94), rgba(38,28,14,0.94))", border: "1px solid rgba(201,168,76,0.45)", textAlign: "center", pointerEvents: "none", overflow: "hidden" }}>
-                    <p className="font-mono" style={{ fontSize: "clamp(0.42rem, 1.3vw, 0.6rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(o.title, 24)}</p>
-                    <p className="font-ceremonial" style={{ fontSize: "clamp(0.5rem, 1.5vw, 0.72rem)", color: "var(--vault-text, #E8E2D4)", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(placardLine(o), 28)}</p>
+                  {/* The single label unit — a SOLID engraved brass nameplate centered ON the
+                      shelf's painted plate (the runtime title/holder sits on the placard, N-fix).
+                      Opaque so it reads as a plate not floating text; content-hugging and clipped
+                      so the text can never escape the plate's boundary. One label per slot,
+                      cleared from the render above and the band below. */}
+                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y + b.placard.height / 2, H), transform: "translate(-50%, -50%)", maxWidth: "48%", padding: "3px 12px", borderRadius: 3, background: "linear-gradient(180deg, #4a3820, #2b2010)", border: "1px solid rgba(201,168,76,0.6)", boxShadow: "0 2px 5px rgba(0,0,0,0.55), inset 0 1px 0 rgba(201,168,76,0.25)", textAlign: "center", pointerEvents: "none", overflow: "hidden" }}>
+                    <p className="font-mono" style={{ fontSize: "clamp(0.42rem, 1.3vw, 0.6rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(o.title, 22)}</p>
+                    <p className="font-ceremonial" style={{ fontSize: "clamp(0.5rem, 1.5vw, 0.72rem)", color: "#E8E2D4", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(placardLine(o), 26)}</p>
                   </div>
                 </div>
               );
