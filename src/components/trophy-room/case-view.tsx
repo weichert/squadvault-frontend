@@ -120,9 +120,12 @@ export function CaseView({ geometry, label, objects, note, onOpenTrophy, onClose
               draggable={false}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", borderRadius: 4 }}
             />
-            {/* Header plaque — the category name, runtime over the painted brass (CO-R4). */}
-            <div style={{ position: "absolute", left: pct(geometry.header_plaque.x, W), top: pct(geometry.header_plaque.y, H), width: pct(geometry.header_plaque.width, W), height: pct(geometry.header_plaque.height, H), display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span className="font-ceremonial" style={{ fontSize: "clamp(0.7rem, 2.2vw, 1.05rem)", letterSpacing: "0.12em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 2px rgba(0,0,0,0.7)", whiteSpace: "nowrap" }}>{label}</span>
+            {/* Header plaque — the category name, runtime over the painted brass (CO-R4). The
+                font scales to the PLAQUE width (container query), not the viewport, so even the
+                longest title ("AUCTION & ACQUISITION") stays bounded by the plaque; overflow is
+                clipped as a final guard. */}
+            <div style={{ position: "absolute", left: pct(geometry.header_plaque.x, W), top: pct(geometry.header_plaque.y, H), width: pct(geometry.header_plaque.width, W), height: pct(geometry.header_plaque.height, H), display: "flex", alignItems: "center", justifyContent: "center", containerType: "inline-size", overflow: "hidden" }}>
+              <span className="font-ceremonial" style={{ fontSize: "clamp(0.45rem, 6.5cqw, 1rem)", letterSpacing: "0.06em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 2px rgba(0,0,0,0.7)", whiteSpace: "nowrap" }}>{label}</span>
             </div>
             {/* The occupied bands (adaptive count, spread with vertical rhythm — N1). One
                 trophy each, resting on its shelf; its render is bounded to the space ABOVE
