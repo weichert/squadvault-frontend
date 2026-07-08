@@ -48,13 +48,19 @@ the Hall renders it as a graceful text card until its plate lands (zero-API-chan
 ## Trophy Room "Living Room" pivot assets (landed 2026-07-07)
 
 Two founder-LOCKED renders (source PNGs in ~/Downloads / asset folder, gitignored; only the
-webp derivatives ship). Conversion: sharp 0.33.5 `.flatten({background:'#000'}).webp({quality:88,
+webp derivatives ship). Conversion: sharp 0.33.5 `.flatten({background:'#000'}).webp({quality:92,
 effort:6})` -> opaque RGB (both are opaque interiors, no alpha), the established master pattern.
+
+Rebuilt 2026-07-07 from the SAME founder-LOCKED source PNGs at quality 92 (was 88): a crisper
+hero, and the fresh bytes force a clean CDN deploy (the prior q88 derivative was pixel-faithful to
+the locked source -- meanAbsDiff 2.6/255 -- so this is a fidelity + cache-bust refresh, not a new
+render). Prior webp md5s: tr_master 150fd37756e4dbd20d5e9352bea51e81 ; tr_case_frontal
+9ae6dd3fee53aee8e4212b8448553501.
 
 | shipped webp | source PNG | source md5 | dims | webp md5 | size |
 |---|---|---|---|---|---|
-| tr_master_web.webp | TR_master_LOCKED_candidate.png | 1bc92ab7d0cec63e0e86849052b1ddf6 | 1672x941 | 150fd37756e4dbd20d5e9352bea51e81 | 0.39 MB |
-| tr_case_frontal_web.webp | TR_case_frontal_LOCKED_candidate.png | b7ce52f66be7f5ec62ea4f1f5bcf22a5 | 1122x1402 | 9ae6dd3fee53aee8e4212b8448553501 | 0.14 MB |
+| tr_master_web.webp | TR_master_LOCKED_candidate.png | 1bc92ab7d0cec63e0e86849052b1ddf6 | 1672x941 | 0bb7e7565f9b57f2dc00e1f39e13cb68 | 0.51 MB |
+| tr_case_frontal_web.webp | TR_case_frontal_LOCKED_candidate.png | b7ce52f66be7f5ec62ea4f1f5bcf22a5 | 1122x1402 | fa088de10436c74970519ef0df7081e5 | 0.20 MB |
 
 - **tr_master_web** — the ambient TROPHY ROOM (navigational scene). Six angled cases baked FULL of
   ambient league-register trophies; whiskey corner (ambient, no hotspot); empty central pedestal
