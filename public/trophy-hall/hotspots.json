@@ -9,37 +9,43 @@
       "id": "case_permanent",
       "category": "Permanent Records",
       "label": "Permanent Records",
-      "zone": { "x": 8, "y": 60, "width": 175, "height": 640 }
+      "zone": { "x": 8, "y": 60, "width": 175, "height": 640 },
+      "header": { "x": 35, "y": 104, "width": 150, "height": 42 }
     },
     {
       "id": "case_annual",
       "category": "Annual Awards",
       "label": "Annual Awards",
-      "zone": { "x": 195, "y": 95, "width": 190, "height": 590 }
+      "zone": { "x": 195, "y": 95, "width": 190, "height": 590 },
+      "header": { "x": 208, "y": 122, "width": 168, "height": 42 }
     },
     {
       "id": "case_positional",
       "category": "Positional Records",
       "label": "Positional Records",
-      "zone": { "x": 400, "y": 120, "width": 165, "height": 545 }
+      "zone": { "x": 400, "y": 120, "width": 165, "height": 545 },
+      "header": { "x": 416, "y": 150, "width": 136, "height": 40 }
     },
     {
       "id": "case_auction",
       "category": "Auction & Acquisition",
       "label": "Auction & Acquisition",
-      "zone": { "x": 1105, "y": 120, "width": 165, "height": 545 }
+      "zone": { "x": 1105, "y": 120, "width": 165, "height": 545 },
+      "header": { "x": 1120, "y": 150, "width": 136, "height": 40 }
     },
     {
       "id": "case_championship",
       "category": "The Championship",
       "label": "The Championship",
-      "zone": { "x": 1285, "y": 95, "width": 190, "height": 590 }
+      "zone": { "x": 1285, "y": 95, "width": 190, "height": 590 },
+      "header": { "x": 1298, "y": 122, "width": 168, "height": 42 }
     },
     {
       "id": "case_live",
       "category": "Live Records",
       "label": "Live Records",
-      "zone": { "x": 1490, "y": 60, "width": 175, "height": 640 }
+      "zone": { "x": 1490, "y": 60, "width": 175, "height": 640 },
+      "header": { "x": 1487, "y": 104, "width": 150, "height": 42 }
     }
   ],
   "plinth": {

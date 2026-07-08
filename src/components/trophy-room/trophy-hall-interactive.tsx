@@ -193,9 +193,7 @@ export function TrophyHallInteractive({ cases, objects, receiptsByKey, imageWidt
 
   return (
     <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {/* Case click zones over the painted cases. The runtime label anchors to the BASE of
-          its case (a nameplate at the cabinet, N3) — the master has no header plaque up top,
-          so a top-anchored label floated into the ceiling beams. CO-R4: nothing baked. */}
+      {/* Case click zones over the painted cases — the full-case hit target. */}
       {cases.map((c) => (
         <button
           key={c.id}
@@ -203,10 +201,23 @@ export function TrophyHallInteractive({ cases, objects, receiptsByKey, imageWidt
           aria-label={`${c.label} — open the case`}
           onClick={() => setOpenCategory(c.category)}
           style={{ position: "absolute", left: pct(c.zone.x, imageWidth), top: pct(c.zone.y, imageHeight), width: pct(c.zone.width, imageWidth), height: pct(c.zone.height, imageHeight), background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto", padding: 0 }}
-        >
-          <span className="font-mono" style={{ position: "absolute", bottom: "3%", left: "50%", transform: "translateX(-50%)", fontSize: "clamp(0.4rem, 0.75vw, 0.65rem)", letterSpacing: "0.12em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 2px rgba(0,0,0,0.8)", whiteSpace: "nowrap" }}>{c.label}</span>
-        </button>
+        />
       ))}
+      {/* The runtime category title sits ON its case's painted header plaque (N3 — written on
+          the case, never floating above it). Centered on the plaque; the click is handled by
+          the full-case button beneath. CO-R4: the plaques are blank in the art. */}
+      {cases.map((c) => {
+        const h = c.header ?? c.zone;
+        return (
+          <span
+            key={`${c.id}-label`}
+            className="font-mono"
+            style={{ position: "absolute", left: pct(h.x + h.width / 2, imageWidth), top: pct(h.y + h.height / 2, imageHeight), transform: "translate(-50%, -50%)", fontSize: "clamp(0.38rem, 0.72vw, 0.6rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 3px rgba(0,0,0,0.9)", whiteSpace: "nowrap", pointerEvents: "none" }}
+          >
+            {c.label}
+          </span>
+        );
+      })}
 
       {/* The plinth — the League Trophy, the community's centerpiece (D-PLINTH). Honest
           emptiness when no champion is recorded: the pedestal stays bare. */}

@@ -32,7 +32,9 @@ export type CaseViewGeometry = {
   lower_panel: Rect; // the D-LOWER note's home
   bands: CaseBand[]; // five, top-to-bottom (four lit shelves + the base counter)
 };
-export type RoomCaseZone = { id: string; category: string; label: string; zone: Rect };
+// `zone` is the full clickable case rect; `header` (optional) is the case's painted top plaque
+// rect where the runtime category title sits ON the case (N3 — never floating above it).
+export type RoomCaseZone = { id: string; category: string; label: string; zone: Rect; header?: Rect };
 
 // The marquee: the viewer's held first (stable), then the input (docket) order — the same
 // held-first ordering the shipped category grid uses, so the marquee is its strict prefix.

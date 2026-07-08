@@ -150,9 +150,9 @@ export function CaseView({ geometry, label, objects, note, onOpenTrophy, onClose
                   {/* The single label unit — award name + holder + year, on the brass placard;
                       honest truncation (the full text lives in the detail). One label per slot,
                       cleared from the render above and the band below (N2). */}
-                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y, H), transform: "translateX(-50%)", minWidth: "34%", maxWidth: "84%", padding: "2px 6px", borderRadius: 2, background: "linear-gradient(180deg, rgba(64,48,22,0.92), rgba(38,28,14,0.92))", border: "1px solid rgba(201,168,76,0.45)", textAlign: "center", pointerEvents: "none" }}>
-                    <p className="font-mono" style={{ fontSize: "clamp(0.42rem, 1.3vw, 0.6rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", margin: 0, whiteSpace: "nowrap" }}>{truncatePlacard(o.title, 26)}</p>
-                    <p className="font-ceremonial" style={{ fontSize: "clamp(0.5rem, 1.5vw, 0.72rem)", color: "var(--vault-text, #E8E2D4)", margin: 0, whiteSpace: "nowrap" }}>{truncatePlacard(placardLine(o), 30)}</p>
+                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y, H), transform: "translateX(-50%)", minWidth: "30%", maxWidth: "58%", padding: "2px 8px", borderRadius: 2, background: "linear-gradient(180deg, rgba(64,48,22,0.94), rgba(38,28,14,0.94))", border: "1px solid rgba(201,168,76,0.45)", textAlign: "center", pointerEvents: "none", overflow: "hidden" }}>
+                    <p className="font-mono" style={{ fontSize: "clamp(0.42rem, 1.3vw, 0.6rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(o.title, 24)}</p>
+                    <p className="font-ceremonial" style={{ fontSize: "clamp(0.5rem, 1.5vw, 0.72rem)", color: "var(--vault-text, #E8E2D4)", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(placardLine(o), 28)}</p>
                   </div>
                 </div>
               );
