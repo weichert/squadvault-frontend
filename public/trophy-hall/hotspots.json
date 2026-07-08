@@ -9,73 +9,198 @@
       "id": "case_permanent",
       "category": "Permanent Records",
       "label": "Permanent Records",
-      "zone": { "x": 8, "y": 60, "width": 175, "height": 640 },
-      "header": { "x": 35, "y": 104, "width": 150, "height": 42 }
+      "zone": {
+        "x": 8,
+        "y": 60,
+        "width": 175,
+        "height": 640
+      },
+      "header": {
+        "x": 37,
+        "y": 56,
+        "width": 150,
+        "height": 40
+      }
     },
     {
       "id": "case_annual",
       "category": "Annual Awards",
       "label": "Annual Awards",
-      "zone": { "x": 195, "y": 95, "width": 190, "height": 590 },
-      "header": { "x": 208, "y": 122, "width": 168, "height": 42 }
+      "zone": {
+        "x": 195,
+        "y": 95,
+        "width": 190,
+        "height": 590
+      },
+      "header": {
+        "x": 243,
+        "y": 118,
+        "width": 150,
+        "height": 40
+      }
     },
     {
       "id": "case_positional",
       "category": "Positional Records",
       "label": "Positional Records",
-      "zone": { "x": 400, "y": 120, "width": 165, "height": 545 },
-      "header": { "x": 416, "y": 150, "width": 136, "height": 40 }
+      "zone": {
+        "x": 400,
+        "y": 120,
+        "width": 165,
+        "height": 545
+      },
+      "header": {
+        "x": 417,
+        "y": 152,
+        "width": 150,
+        "height": 40
+      }
     },
     {
       "id": "case_auction",
       "category": "Auction & Acquisition",
       "label": "Auction & Acquisition",
-      "zone": { "x": 1105, "y": 120, "width": 165, "height": 545 },
-      "header": { "x": 1120, "y": 150, "width": 136, "height": 40 }
+      "zone": {
+        "x": 1105,
+        "y": 120,
+        "width": 165,
+        "height": 545
+      },
+      "header": {
+        "x": 1108,
+        "y": 152,
+        "width": 150,
+        "height": 40
+      }
     },
     {
       "id": "case_championship",
       "category": "The Championship",
       "label": "The Championship",
-      "zone": { "x": 1285, "y": 95, "width": 190, "height": 590 },
-      "header": { "x": 1298, "y": 122, "width": 168, "height": 42 }
+      "zone": {
+        "x": 1285,
+        "y": 95,
+        "width": 190,
+        "height": 590
+      },
+      "header": {
+        "x": 1277,
+        "y": 130,
+        "width": 150,
+        "height": 40
+      }
     },
     {
       "id": "case_live",
       "category": "Live Records",
       "label": "Live Records",
-      "zone": { "x": 1490, "y": 60, "width": 175, "height": 640 },
-      "header": { "x": 1487, "y": 104, "width": 150, "height": 42 }
+      "zone": {
+        "x": 1490,
+        "y": 60,
+        "width": 175,
+        "height": 640
+      },
+      "header": {
+        "x": 1497,
+        "y": 62,
+        "width": 150,
+        "height": 40
+      }
     }
   ],
   "plinth": {
-    "zone": { "x": 690, "y": 580, "width": 260, "height": 330 }
+    "zone": {
+      "x": 690,
+      "y": 580,
+      "width": 260,
+      "height": 330
+    }
   },
   "case_view": {
     "image_width": 1122,
     "image_height": 1402,
-    "header_plaque": { "x": 358, "y": 88, "width": 404, "height": 82 },
-    "lower_panel": { "x": 330, "y": 1190, "width": 460, "height": 115 },
+    "header_plaque": {
+      "x": 358,
+      "y": 88,
+      "width": 404,
+      "height": 82
+    },
+    "lower_panel": {
+      "x": 330,
+      "y": 1190,
+      "width": 460,
+      "height": 115
+    },
     "bands": [
       {
-        "shelf": { "x": 280, "y": 235, "width": 560, "height": 165 },
-        "placard": { "x": 505, "y": 385, "width": 115, "height": 42 }
+        "shelf": {
+          "x": 280,
+          "y": 235,
+          "width": 560,
+          "height": 165
+        },
+        "placard": {
+          "x": 505,
+          "y": 385,
+          "width": 115,
+          "height": 42
+        }
       },
       {
-        "shelf": { "x": 280, "y": 428, "width": 560, "height": 145 },
-        "placard": { "x": 505, "y": 568, "width": 115, "height": 42 }
+        "shelf": {
+          "x": 280,
+          "y": 428,
+          "width": 560,
+          "height": 145
+        },
+        "placard": {
+          "x": 505,
+          "y": 568,
+          "width": 115,
+          "height": 42
+        }
       },
       {
-        "shelf": { "x": 280, "y": 615, "width": 560, "height": 140 },
-        "placard": { "x": 505, "y": 752, "width": 115, "height": 42 }
+        "shelf": {
+          "x": 280,
+          "y": 615,
+          "width": 560,
+          "height": 140
+        },
+        "placard": {
+          "x": 505,
+          "y": 752,
+          "width": 115,
+          "height": 42
+        }
       },
       {
-        "shelf": { "x": 280, "y": 800, "width": 560, "height": 135 },
-        "placard": { "x": 505, "y": 930, "width": 115, "height": 42 }
+        "shelf": {
+          "x": 280,
+          "y": 800,
+          "width": 560,
+          "height": 135
+        },
+        "placard": {
+          "x": 505,
+          "y": 930,
+          "width": 115,
+          "height": 42
+        }
       },
       {
-        "shelf": { "x": 280, "y": 980, "width": 560, "height": 115 },
-        "placard": { "x": 400, "y": 1108, "width": 320, "height": 48 }
+        "shelf": {
+          "x": 280,
+          "y": 980,
+          "width": 560,
+          "height": 115
+        },
+        "placard": {
+          "x": 400,
+          "y": 1108,
+          "width": 320,
+          "height": 48
+        }
       }
     ]
   }
