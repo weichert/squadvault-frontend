@@ -2,176 +2,541 @@
   {
     "id": "award_the_belt",
     "title": "The Belt",
-    "definition": "Champion. Awarded to the season's league winner. The digital counterpart to the physical PFL trophy."
+    "definition": "Champion. Awarded to the season's league winner. The digital counterpart to the physical PFL trophy.",
+    "lines": [
+      "THE BELT"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_bridesmaid_bouquet",
     "title": "The Bridesmaid Bouquet",
-    "definition": "Runner-up. Beautiful but nobody wants three of them."
+    "definition": "Runner-up. Beautiful but nobody wants three of them.",
+    "lines": [
+      "THE BRIDESMAID",
+      "BOUQUET"
+    ],
+    "plaque": {
+      "x": 0.295,
+      "y": 0.725,
+      "w": 0.415,
+      "h": 0.04
+    },
+    "lightText": false
   },
   {
     "id": "award_the_hammer",
     "title": "The Hammer",
-    "definition": "The Decisive Player Award. Awarded to the started player whose score most often exceeded the winning margin across the season."
+    "definition": "The Decisive Player Award. Awarded to the started player whose score most often exceeded the winning margin across the season.",
+    "lines": [
+      "THE HAMMER"
+    ],
+    "plaque": {
+      "x": 0.12,
+      "y": 0.605,
+      "w": 0.715,
+      "h": 0
+    },
+    "lightText": false
   },
   {
     "id": "award_the_cannon",
     "title": "The Cannon",
-    "definition": "Highest single-week franchise score of the season."
+    "definition": "Highest single-week franchise score of the season.",
+    "lines": [
+      "THE CANNON"
+    ],
+    "plaque": {
+      "x": 0.215,
+      "y": 0.61,
+      "w": 0.565,
+      "h": 0.12
+    },
+    "lightText": false
   },
   {
     "id": "award_the_sieve",
     "title": "The Sieve",
-    "definition": "Most points allowed during the regular season. The defense that stopped nothing."
+    "definition": "Most points allowed during the regular season. The defense that stopped nothing.",
+    "lines": [
+      "THE SIEVE"
+    ],
+    "plaque": {
+      "x": 0.255,
+      "y": 0.71,
+      "w": 0.48,
+      "h": 0.05
+    },
+    "lightText": false
   },
   {
     "id": "award_the_benchwarmer",
     "title": "The Benchwarmer",
-    "definition": "Most points left on bench where the MFL optimal lineup indicator said to start. Entirely self-inflicted."
+    "definition": "Most points left on bench where the MFL optimal lineup indicator said to start. Entirely self-inflicted.",
+    "lines": [
+      "THE BENCHWARMER"
+    ],
+    "plaque": {
+      "x": 0.125,
+      "y": 0.615,
+      "w": 0.74,
+      "h": 0.155
+    },
+    "lightText": false
   },
   {
     "id": "award_the_clairvoyant",
     "title": "The Clairvoyant",
-    "definition": "Highest rate of correct lineup decisions versus the MFL optimal indicator. Hardest award to earn."
+    "definition": "Highest rate of correct lineup decisions versus the MFL optimal indicator. Hardest award to earn.",
+    "lines": [
+      "THE CLAIRVOYANT"
+    ],
+    "plaque": {
+      "x": 0.565,
+      "y": 0.71,
+      "w": 0.19,
+      "h": 0.025
+    },
+    "lightText": false
   },
   {
     "id": "award_the_climb",
     "title": "The Climb",
-    "definition": "Largest improvement in win percentage from the prior season."
+    "definition": "Largest improvement in win percentage from the prior season.",
+    "lines": [
+      "THE CLIMB"
+    ],
+    "plaque": {
+      "x": 0.21,
+      "y": 0.685,
+      "w": 0.6,
+      "h": 0.12
+    },
+    "lightText": false
   },
   {
     "id": "award_the_oracle",
     "title": "The Oracle",
-    "definition": "Franchise whose incorrect lineup decisions most often resulted in a loss they would have won with the optimal lineup. Measures consequence, not volume — the wrong call that changed the outcome."
+    "definition": "Franchise whose incorrect lineup decisions most often resulted in a loss they would have won with the optimal lineup. Measures consequence, not volume — the wrong call that changed the outcome.",
+    "lines": [
+      "THE ORACLE"
+    ],
+    "plaque": {
+      "x": 0.24,
+      "y": 0.7,
+      "w": 0.525,
+      "h": 0.04
+    },
+    "lightText": false
   },
   {
     "id": "award_the_banner",
     "title": "The Banner",
-    "definition": "Best regular-season record. Awarded to the franchise with the highest regular-season win percentage before playoffs. Honors regular-season dominance — emotionally distinct from the Belt."
+    "definition": "Best regular-season record. Awarded to the franchise with the highest regular-season win percentage before playoffs. Honors regular-season dominance — emotionally distinct from the Belt.",
+    "lines": [
+      "THE BANNER"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.785,
+      "w": 0.485,
+      "h": 0.045
+    },
+    "lightText": false
   },
   {
     "id": "award_the_engine",
     "title": "The Engine",
-    "definition": "Highest total points scored during the regular season. Honors sustained scoring power across a full season — paired with The Cannon (single-week explosion) as its season-long counterpart."
+    "definition": "Highest total points scored during the regular season. Honors sustained scoring power across a full season — paired with The Cannon (single-week explosion) as its season-long counterpart.",
+    "lines": [
+      "THE ENGINE"
+    ],
+    "plaque": {
+      "x": 0.215,
+      "y": 0.69,
+      "w": 0.585,
+      "h": 0.075
+    },
+    "lightText": false
   },
   {
     "id": "award_the_black_rose",
     "title": "The Black Rose",
-    "definition": "Highest losing score of the regular season. The franchise that scored enough to beat almost anyone and still lost. Deterministic, emotionally precise, and immediately legible to any fantasy player."
+    "definition": "Highest losing score of the regular season. The franchise that scored enough to beat almost anyone and still lost. Deterministic, emotionally precise, and immediately legible to any fantasy player.",
+    "lines": [
+      "THE BLACK",
+      "ROSE"
+    ],
+    "plaque": {
+      "x": 0.555,
+      "y": 0.76,
+      "w": 0.215,
+      "h": 0.025
+    },
+    "lightText": false
   },
   {
     "id": "award_signal_caller",
     "title": "The Signal Caller",
-    "definition": "Highest started quarterback points, season total."
+    "definition": "Highest started quarterback points, season total.",
+    "lines": [
+      "THE SIGNAL",
+      "CALLER"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_workhorse",
     "title": "The Workhorse",
-    "definition": "Highest started running back points, season total."
+    "definition": "Highest started running back points, season total.",
+    "lines": [
+      "THE WORKHORSE"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_deep_threat",
     "title": "The Deep Threat",
-    "definition": "Highest started wide receiver points, season total."
+    "definition": "Highest started wide receiver points, season total.",
+    "lines": [
+      "THE DEEP",
+      "THREAT"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_tight_window",
     "title": "The Tight Window",
-    "definition": "Highest started tight end points, season total."
+    "definition": "Highest started tight end points, season total.",
+    "lines": [
+      "THE TIGHT",
+      "WINDOW"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_the_boot",
     "title": "The Boot",
-    "definition": "Highest started kicker points, season total."
+    "definition": "Highest started kicker points, season total.",
+    "lines": [
+      "THE BOOT"
+    ],
+    "plaque": {
+      "x": 0.37,
+      "y": 0.74,
+      "w": 0.345,
+      "h": 0.085
+    },
+    "lightText": false
   },
   {
     "id": "award_the_wall",
     "title": "The Wall",
-    "definition": "Highest started defense points, season total."
+    "definition": "Highest started defense points, season total.",
+    "lines": [
+      "THE WALL"
+    ],
+    "plaque": {
+      "x": 0.46,
+      "y": 0.765,
+      "w": 0.215,
+      "h": 0.05
+    },
+    "lightText": false
   },
   {
     "id": "award_the_steal",
     "title": "The Steal",
-    "definition": "Best points-per-dollar among started players. The bargain that won games."
+    "definition": "Best points-per-dollar among started players. The bargain that won games.",
+    "lines": [
+      "THE STEAL"
+    ],
+    "plaque": {
+      "x": 0.21,
+      "y": 0.685,
+      "w": 0.57,
+      "h": 0.09
+    },
+    "lightText": false
   },
   {
     "id": "award_burning_money",
     "title": "The Burning Money",
-    "definition": "Worst points-per-dollar among significant bids. The overpay that haunted the season."
+    "definition": "Worst points-per-dollar among significant bids. The overpay that haunted the season.",
+    "lines": [
+      "THE BURNING",
+      "MONEY"
+    ],
+    "plaque": {
+      "x": 0.165,
+      "y": 0.725,
+      "w": 0.27,
+      "h": 0.13
+    },
+    "lightText": false
   },
   {
     "id": "award_patience_premium",
     "title": "The Patience Premium",
-    "definition": "Lowest average bid per started point across the whole draft. Most disciplined auction manager."
+    "definition": "Lowest average bid per started point across the whole draft. Most disciplined auction manager.",
+    "lines": [
+      "THE PATIENCE",
+      "PREMIUM"
+    ],
+    "plaque": {
+      "x": 0.2,
+      "y": 0.725,
+      "w": 0.235,
+      "h": 0.1
+    },
+    "lightText": false
   },
   {
     "id": "award_the_whale",
     "title": "The Whale",
-    "definition": "Highest single bid of the season."
+    "definition": "Highest single bid of the season.",
+    "lines": [
+      "THE WHALE"
+    ],
+    "plaque": {
+      "x": 0.2,
+      "y": 0.725,
+      "w": 0.595,
+      "h": 0.07
+    },
+    "lightText": true
   },
   {
     "id": "award_the_lifeline",
     "title": "The Lifeline",
-    "definition": "Best in-season acquisition of the season, measured by highest post-acquisition started points among players acquired via waivers, FAAB, or free agency. Retrospective only — awarded based on what the player actually delivered after being acquired."
+    "definition": "Best in-season acquisition of the season, measured by highest post-acquisition started points among players acquired via waivers, FAAB, or free agency. Retrospective only — awarded based on what the player actually delivered after being acquired.",
+    "lines": [
+      "THE LIFELINE"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_cavallini_standard",
     "title": "The Cavallini Standard",
-    "definition": "All-time win percentage leader. Held until someone surpasses it."
+    "definition": "All-time win percentage leader. Held until someone surpasses it.",
+    "lines": [
+      "THE CAVALLINI",
+      "STANDARD"
+    ],
+    "plaque": {
+      "x": 0.23,
+      "y": 0.68,
+      "w": 0.535,
+      "h": 0.03
+    },
+    "lightText": false
   },
   {
     "id": "award_the_dynasty",
     "title": "The Dynasty",
-    "definition": "Most championship titles. Currently held by Paradis' Playmakers (4 titles)."
+    "definition": "Most championship titles. Currently held by Paradis' Playmakers (4 titles).",
+    "lines": [
+      "THE DYNASTY"
+    ],
+    "plaque": {
+      "x": 0.23,
+      "y": 0.68,
+      "w": 0.535,
+      "h": 0.03
+    },
+    "lightText": false
   },
   {
     "id": "award_eternal_runner_up",
     "title": "The Eternal Runner-Up",
-    "definition": "Most runner-up finishes without a championship. Currently held by Ben's Gods (3 runner-ups)."
+    "definition": "Most runner-up finishes without a championship. Currently held by Ben's Gods (3 runner-ups).",
+    "lines": [
+      "THE ETERNAL",
+      "RUNNER-UP"
+    ],
+    "plaque": {
+      "x": 0.365,
+      "y": 0.62,
+      "w": 0.325,
+      "h": 0
+    },
+    "lightText": false
   },
   {
     "id": "award_the_executioner",
     "title": "The Executioner",
-    "definition": "Most blowout victories above the threshold margin."
+    "definition": "Most blowout victories above the threshold margin.",
+    "lines": [
+      "THE EXECUTIONER"
+    ],
+    "plaque": {
+      "x": 0.44,
+      "y": 0.68,
+      "w": 0.3,
+      "h": 0
+    },
+    "lightText": false
   },
   {
     "id": "award_iron_curtain",
     "title": "The Iron Curtain",
-    "definition": "Best all-time points-allowed average across all regular seasons. Held until someone's career average drops below the current holder's."
+    "definition": "Best all-time points-allowed average across all regular seasons. Held until someone's career average drops below the current holder's.",
+    "lines": [
+      "THE IRON",
+      "CURTAIN"
+    ],
+    "plaque": {
+      "x": 0.235,
+      "y": 0.69,
+      "w": 0.525,
+      "h": 0.055
+    },
+    "lightText": false
   },
   {
     "id": "award_unbroken_chain",
     "title": "The Unbroken Chain",
-    "definition": "Longest consecutive playoff-appearance streak in digital history. Held until surpassed. Honors sustained postseason relevance across seasons."
+    "definition": "Longest consecutive playoff-appearance streak in digital history. Held until surpassed. Honors sustained postseason relevance across seasons.",
+    "lines": [
+      "THE UNBROKEN",
+      "CHAIN"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_the_floor",
     "title": "The Floor",
-    "definition": "Worst single-season record in digital history. Currently held by Brandon Knows Ball (0-14, 2025)."
+    "definition": "Worst single-season record in digital history. Currently held by Brandon Knows Ball (0-14, 2025).",
+    "lines": [
+      "THE FLOOR"
+    ],
+    "plaque": {
+      "x": 0.215,
+      "y": 0.585,
+      "w": 0.52,
+      "h": 0.005
+    },
+    "lightText": false
   },
   {
     "id": "award_founders_seal",
     "title": "The Founder's Seal",
-    "definition": "All 10 members present since the digital era began. A statement of membership, not a competition."
+    "definition": "All 10 members present since the digital era began. A statement of membership, not a competition.",
+    "lines": [
+      "THE FOUNDER'S",
+      "SEAL"
+    ],
+    "plaque": {
+      "x": 0.26,
+      "y": 0.8,
+      "w": 0.48,
+      "h": 0.075
+    },
+    "lightText": true
   },
   {
     "id": "award_inaugural_champion",
     "title": "The Inaugural Champion",
-    "definition": "Robb's Raiders, 2010. First champion of the digital era."
+    "definition": "Robb's Raiders, 2010. First champion of the digital era.",
+    "lines": [
+      "THE INAUGURAL",
+      "CHAMPION"
+    ],
+    "plaque": {
+      "x": 0.225,
+      "y": 0.645,
+      "w": 0.27,
+      "h": 0.05
+    },
+    "lightText": false
   },
   {
     "id": "award_one_point_club",
     "title": "The One-Point Club",
-    "definition": "Championships decided by under 2 points. Cavallini 2013 (1.00 pt). KP 2019 (1.45 pts). Two members. Permanent."
+    "definition": "Championships decided by under 2 points. Cavallini 2013 (1.00 pt). KP 2019 (1.45 pts). Two members. Permanent.",
+    "lines": [
+      "THE ONE-POINT",
+      "CLUB"
+    ],
+    "plaque": {
+      "x": 0.2,
+      "y": 0.66,
+      "w": 0.315,
+      "h": 0.085
+    },
+    "lightText": false
   },
   {
     "id": "award_back_to_back",
     "title": "The Back-to-Back",
-    "definition": "Only franchise to win consecutive championships in the digital era. KP 2019-2020."
+    "definition": "Only franchise to win consecutive championships in the digital era. KP 2019-2020.",
+    "lines": [
+      "THE BACK-TO-BACK"
+    ],
+    "plaque": {
+      "x": 0.195,
+      "y": 0.705,
+      "w": 0.23,
+      "h": 0.055
+    },
+    "lightText": false
   },
   {
     "id": "award_perfect_storm",
     "title": "The Perfect Storm",
-    "definition": "Brandon Knows Ball, 2025. The only 0-14 regular season in digital history. Permanent."
+    "definition": "Brandon Knows Ball, 2025. The only 0-14 regular season in digital history. Permanent.",
+    "lines": [
+      "THE PERFECT",
+      "STORM"
+    ],
+    "plaque": {
+      "x": 0.185,
+      "y": 0.71,
+      "w": 0.3,
+      "h": 0.12
+    },
+    "lightText": false
   }
 ]

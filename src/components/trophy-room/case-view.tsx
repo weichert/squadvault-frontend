@@ -84,6 +84,23 @@ function CategoryGrid({ objects, onOpenTrophy }: { objects: HallObject[]; onOpen
   );
 }
 
+// The award title ENGRAVED on the trophy's own base plaque (the founder's design — the renders
+// carry a blank plaque for exactly this). Positioned at the plaque's fractional rect within the
+// plate image; the font scales to the plaque (container query); light tone on a dark plaque.
+function PlaqueTitle({ o }: { o: HallObject }) {
+  if (!o.plaque) return null;
+  const lines = o.titleLines && o.titleLines.length ? o.titleLines : [o.title.toUpperCase()];
+  const maxChars = Math.max(...lines.map((l) => l.length), 1);
+  const fs = `min(${(88 / (maxChars * 0.56)).toFixed(1)}cqw, ${(76 / lines.length).toFixed(0)}cqh)`;
+  return (
+    <div style={{ position: "absolute", left: `${o.plaque.x * 100}%`, top: `${o.plaque.y * 100}%`, width: `${o.plaque.w * 100}%`, height: `${o.plaque.h * 100}%`, containerType: "size", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", pointerEvents: "none" }}>
+      {lines.map((line, i) => (
+        <span key={i} className="font-mono" style={{ fontSize: fs, letterSpacing: "0.02em", lineHeight: 1.06, fontWeight: 600, whiteSpace: "nowrap", color: o.plaqueLight ? "#F0E4C2" : "#3A2C12", textShadow: o.plaqueLight ? "0 1px 1px rgba(0,0,0,0.5)" : "0 1px 0 rgba(255,240,200,0.25)" }}>{line}</span>
+      ))}
+    </div>
+  );
+}
+
 interface Props {
   geometry: CaseViewGeometry;
   label: string; // the case's category label (renders on the header plaque)
@@ -136,6 +153,7 @@ export function CaseView({ geometry, label, objects, note, onOpenTrophy, onClose
               const b = geometry.bands[i];
               if (!b) return null;
               const renderHeight = Math.max(0, b.placard.y - BAND_GAP - b.shelf.y);
+              const engraved = o.art.mode === "illustrated" && !!o.plaque;
               return (
                 <div key={o.key}>
                   <button
@@ -144,20 +162,28 @@ export function CaseView({ geometry, label, objects, note, onOpenTrophy, onClose
                     onClick={() => onOpenTrophy(o)}
                     style={{ position: "absolute", left: pct(b.shelf.x, W), top: pct(b.shelf.y, H), width: pct(b.shelf.width, W), height: pct(renderHeight, H), display: "flex", alignItems: "flex-end", justifyContent: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
                   >
-                    {/* Constrain the footprint so a text-state plate reads as an object on the
-                        shelf, not a banner across the whole band. */}
-                    <div style={{ height: "100%", width: "52%", display: "flex" }}>
-                      <ShelfTrophy o={o} h="fill" />
-                    </div>
+                    {o.art.mode === "illustrated" && o.plaque ? (
+                      // The trophy carries its OWN title, engraved on its base plaque — no
+                      // separate placard (fixes the double-plaque + layering, founder's design).
+                      <div style={{ position: "relative", height: "100%", display: "inline-flex", alignItems: "flex-end" }}>
+                        <img src={o.art.src} alt={o.title} draggable={false} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", objectPosition: "bottom", filter: o.isHeld ? "drop-shadow(0 0 8px rgba(201,168,76,0.6))" : "none" }} />
+                        <PlaqueTitle o={o} />
+                      </div>
+                    ) : (
+                      // Fallback: a trophy with no landed plate stays a dignified text plate.
+                      <div style={{ height: "100%", width: "52%", display: "flex" }}>
+                        <ShelfTrophy o={o} h="fill" />
+                      </div>
+                    )}
                   </button>
-                  {/* The single label unit — a SOLID engraved brass nameplate centered ON the
-                      shelf's painted plate (the runtime title/holder sits on the placard, N-fix).
-                      Opaque so it reads as a plate not floating text; content-hugging and clipped
-                      so the text can never escape the plate's boundary. One label per slot,
-                      cleared from the render above and the band below. */}
-                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y + b.placard.height / 2, H), transform: "translate(-50%, -50%)", maxWidth: "48%", padding: "3px 12px", borderRadius: 3, background: "linear-gradient(180deg, #4a3820, #2b2010)", border: "1px solid rgba(201,168,76,0.6)", boxShadow: "0 2px 5px rgba(0,0,0,0.55), inset 0 1px 0 rgba(201,168,76,0.25)", textAlign: "center", pointerEvents: "none", overflow: "hidden" }}>
-                    <p className="font-mono" style={{ fontSize: "clamp(0.42rem, 1.3vw, 0.6rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(o.title, 22)}</p>
-                    <p className="font-ceremonial" style={{ fontSize: "clamp(0.5rem, 1.5vw, 0.72rem)", color: "#E8E2D4", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(placardLine(o), 26)}</p>
+                  {/* Holder + year — a small caption where the shelf plate sits (the AWARD NAME
+                      lives on the trophy's own plaque above; only the holder renders here). A
+                      no-art fallback trophy still carries its name here. */}
+                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y + b.placard.height / 2, H), transform: "translate(-50%, -50%)", maxWidth: "62%", textAlign: "center", pointerEvents: "none" }}>
+                    {!engraved && (
+                      <p className="font-mono" style={{ fontSize: "clamp(0.42rem, 1.3vw, 0.58rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{truncatePlacard(o.title, 22)}</p>
+                    )}
+                    <p className="font-ceremonial" style={{ fontSize: "clamp(0.5rem, 1.5vw, 0.72rem)", color: "#E8E2D4", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>{truncatePlacard(placardLine(o), 30)}</p>
                   </div>
                 </div>
               );

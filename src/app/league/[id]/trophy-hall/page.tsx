@@ -68,7 +68,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // are normalized (case/punctuation-insensitive) so a resolver title matches the catalog; an
 // unmatched title falls through to the graceful text state — never a wrong or fabricated plate.
 const normalizeTitle = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/^the/, "");
-type AwardCatalogEntry = { id: string; title: string; definition: string };
+type AwardCatalogEntry = {
+  id: string;
+  title: string;
+  definition: string;
+  lines?: string[];
+  plaque?: { x: number; y: number; w: number; h: number };
+  lightText?: boolean;
+};
 
 export default async function TrophyHallPage({ params }: Props) {
   const { id } = await params;
@@ -108,14 +115,18 @@ export default async function TrophyHallPage({ params }: Props) {
     await fs.readFile(path.join(process.cwd(), "public/trophy-hall/award-catalog.json"), "utf8"),
   ) as AwardCatalogEntry[];
   const slugByTitle = new Map(catalog.map((a) => [normalizeTitle(a.title), a.id]));
-  const defBySlug = new Map(catalog.map((a) => [a.id, a.definition]));
+  const bySlug = new Map(catalog.map((a) => [a.id, a]));
   const availableArt = new Set(catalog.map((a) => a.id));
-  // Resolve a trophy's plate + description by its title; unmatched -> honest text state.
-  const artFor = (title: string): { art: HallObject["art"]; description: string | undefined } => {
+  // Resolve a trophy's plate + engraving data + description by its title; unmatched -> text state.
+  const artFor = (title: string): Pick<HallObject, "art" | "description" | "plaque" | "titleLines" | "plaqueLight"> => {
     const slug = slugByTitle.get(normalizeTitle(title));
+    const a = slug ? bySlug.get(slug) : undefined;
     return {
       art: slug ? resolveObjectArt(slug, availableArt) : ({ mode: "text", src: null } as const),
-      description: slug ? defBySlug.get(slug) : undefined,
+      description: a?.definition,
+      plaque: a?.plaque,
+      titleLines: a?.lines,
+      plaqueLight: a?.lightText,
     };
   };
 
@@ -125,7 +136,6 @@ export default async function TrophyHallPage({ params }: Props) {
   const toPair = (rec: LiveRecord, category: string): { object: HallObject; record: LiveRecord } | null => {
     const present = rec.holders.length > 0 || rec.valueText !== "";
     if (!isFactBacked({ docketId: rec.docketId, present })) return null;
-    const { art, description } = artFor(rec.trophyName);
     const holderCanonicalIds = rec.holders
       .map((h) => holderCanonical(h, uuidToCanonical))
       .filter((x): x is string => x !== null);
@@ -136,10 +146,9 @@ export default async function TrophyHallPage({ params }: Props) {
       winnerName: top?.name ?? null,
       season: top?.season ?? null,
       coHolders: Math.max(0, rec.holders.length - 1),
-      art,
       isHeld: isHeldByViewer({ docketId: rec.docketId, holderCanonicalIds }, viewerCanonical),
       category,
-      description,
+      ...artFor(rec.trophyName),
     };
     return { object, record: rec };
   };

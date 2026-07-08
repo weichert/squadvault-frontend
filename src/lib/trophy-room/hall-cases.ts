@@ -19,6 +19,12 @@ export type HallObject = {
   isHeld: boolean; // reflective accent (precomputed via the viewer-holdings seam)
   category: string; // shipped taxonomy group (== a case's category)
   description?: string; // the award's canonical definition (manifest copy; the detail view)
+  // The trophy render's OWN blank base plaque — the title engraves here (the founder's design),
+  // so no separate placard is needed. rect is fractional (0-1) of the plate image; lines are the
+  // pre-split title; light = the plaque is dark, so the engraving reads in a light tone.
+  plaque?: { x: number; y: number; w: number; h: number };
+  titleLines?: string[];
+  plaqueLight?: boolean;
 };
 
 export type HallShelf = { x: number; y: number; width: number; height: number }; // image px — a glass shelf
