@@ -62,15 +62,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Trophy Room - ${id}` };
 }
 
-// Only these three award slugs have landed illustrated art this cycle; everything else is a
-// graceful text card (art still rolling out). The Oracle (docket 9) has facts but pending
-// sundial art, so it maps to no slug -> text fallback.
-const SLUG_BY_DOCKET: Record<number, string> = {
-  3: "award_the_hammer",
-  6: "award_the_benchwarmer",
-  7: "award_the_clairvoyant",
-};
-const AVAILABLE_ART = new Set<string>(["award_the_hammer", "award_the_benchwarmer", "award_the_clairvoyant"]);
+// Award art + copy are keyed by the trophy's TITLE — the shipped award catalog
+// (public/trophy-hall/award-catalog.json, the manifest's projection: id, title, definition)
+// is the single source of truth. Every award now has a landed plate (award_<id>.webp). Titles
+// are normalized (case/punctuation-insensitive) so a resolver title matches the catalog; an
+// unmatched title falls through to the graceful text state — never a wrong or fabricated plate.
+const normalizeTitle = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/^the/, "");
+type AwardCatalogEntry = { id: string; title: string; definition: string };
 
 export default async function TrophyHallPage({ params }: Props) {
   const { id } = await params;
@@ -104,14 +102,30 @@ export default async function TrophyHallPage({ params }: Props) {
     }
   }
 
+  // The award catalog — the manifest's shipped projection (id, title, definition). Art is a webp
+  // per award id; the definition is the detail view's description. Consumed, never rebuilt.
+  const catalog = JSON.parse(
+    await fs.readFile(path.join(process.cwd(), "public/trophy-hall/award-catalog.json"), "utf8"),
+  ) as AwardCatalogEntry[];
+  const slugByTitle = new Map(catalog.map((a) => [normalizeTitle(a.title), a.id]));
+  const defBySlug = new Map(catalog.map((a) => [a.id, a.definition]));
+  const availableArt = new Set(catalog.map((a) => a.id));
+  // Resolve a trophy's plate + description by its title; unmatched -> honest text state.
+  const artFor = (title: string): { art: HallObject["art"]; description: string | undefined } => {
+    const slug = slugByTitle.get(normalizeTitle(title));
+    return {
+      art: slug ? resolveObjectArt(slug, availableArt) : ({ mode: "text", src: null } as const),
+      description: slug ? defBySlug.get(slug) : undefined,
+    };
+  };
+
   // Resolver record -> displayed object PAIRED with its source record (the record feeds the
-  // object-aligned detail receipt). no-fabrication: an award with no fact is dropped; art
-  // resolves illustrated-or-text.
+  // object-aligned detail receipt). no-fabrication: an award with no fact is dropped; art +
+  // description resolve by title from the catalog (illustrated-or-text).
   const toPair = (rec: LiveRecord, category: string): { object: HallObject; record: LiveRecord } | null => {
     const present = rec.holders.length > 0 || rec.valueText !== "";
     if (!isFactBacked({ docketId: rec.docketId, present })) return null;
-    const slug = SLUG_BY_DOCKET[rec.docketNumber];
-    const art = slug ? resolveObjectArt(slug, AVAILABLE_ART) : ({ mode: "text", src: null } as const);
+    const { art, description } = artFor(rec.trophyName);
     const holderCanonicalIds = rec.holders
       .map((h) => holderCanonical(h, uuidToCanonical))
       .filter((x): x is string => x !== null);
@@ -125,6 +139,7 @@ export default async function TrophyHallPage({ params }: Props) {
       art,
       isHeld: isHeldByViewer({ docketId: rec.docketId, holderCanonicalIds }, viewerCanonical),
       category,
+      description,
     };
     return { object, record: rec };
   };
@@ -150,7 +165,12 @@ export default async function TrophyHallPage({ params }: Props) {
   };
   const plinth = buildPlinth(pkg.champions);
 
-  const objects: HallObject[] = [...pairs.map((p) => p.object), ...championshipCaseObjects(pkg)];
+  // The Belt is a catalog award (its football plate + definition); the Ring has no single plate
+  // (a minted set) -> honest text state via artFor's no-match path.
+  const objects: HallObject[] = [
+    ...pairs.map((p) => p.object),
+    ...championshipCaseObjects(pkg).map((o) => ({ ...o, ...artFor(o.title) })),
+  ];
   // Detail receipts, object-aligned via the shipped seam (LiveRecord awards; the Belt is native).
   const receiptsByKey = buildReceiptsByKey(pairs.map((p) => p.record));
 

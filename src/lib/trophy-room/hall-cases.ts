@@ -18,6 +18,7 @@ export type HallObject = {
   art: { mode: "illustrated"; src: string } | { mode: "text"; src: null };
   isHeld: boolean; // reflective accent (precomputed via the viewer-holdings seam)
   category: string; // shipped taxonomy group (== a case's category)
+  description?: string; // the award's canonical definition (manifest copy; the detail view)
 };
 
 export type HallShelf = { x: number; y: number; width: number; height: number }; // image px — a glass shelf

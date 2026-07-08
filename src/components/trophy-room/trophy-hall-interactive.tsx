@@ -60,6 +60,9 @@ function LiveRecordDetail({ o, receipt }: { o: HallObject; receipt: Receipt | un
       <p className="font-mono" style={{ ...LABEL, color: GOLD, marginTop: 12 }}>{o.title}</p>
       <p className="font-ceremonial" style={{ fontSize: "1.05rem", color: "var(--vault-text, #E8E2D4)", marginTop: 4 }}>{winnerLine}</p>
       {o.isHeld && <p className="font-mono" style={{ ...LABEL, color: GOLD, marginTop: 6 }}>yours</p>}
+      {o.description && (
+        <p className="font-ui" style={{ fontSize: "0.9rem", color: "var(--vault-text2, #B8B2A8)", lineHeight: 1.55, marginTop: 14, maxWidth: 440, marginLeft: "auto", marginRight: "auto" }}>{o.description}</p>
+      )}
       {receipt && receipt.history.length > 0 && (
         <div style={{ marginTop: 16, textAlign: "left", maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
           <p className="font-mono" style={{ ...LABEL, marginBottom: 6 }}>How the mark moved</p>
