@@ -27,9 +27,15 @@ describe("Change A — post-login lands on the Clubhouse (RED until Step 3)", ()
 });
 
 describe("consent-first preserved — invite still routes first-login to /consent (founder #3; GUARD)", () => {
-  it("the invite redirect targets /consent, NOT /clubhouse", () => {
+  it("the invite redirect builder targets /consent, NOT /clubhouse", () => {
+    // The consent-path literal moved into buildInviteRedirect (src/lib/members/invite.ts)
+    // during the 2026-07-07 invite hardening (F3, callback-entry contract). The invariant is
+    // unchanged — first login still lands on /consent — so guard the helper where the literal
+    // now lives, and confirm the route delegates to it and never routes to the clubhouse.
+    const helper = read("src/lib/members/invite.ts");
+    expect(helper, "buildInviteRedirect -> /consent").toMatch(/`\/league\/\$\{canonicalId\}\/consent`/);
     const src = read(INVITE);
-    expect(src, "invite -> /consent").toMatch(/`\/league\/\$\{leagueRow\.canonical_id\}\/consent`/);
+    expect(src, "invite route delegates to buildInviteRedirect").toMatch(/buildInviteRedirect\(/);
     expect(src, "invite must NOT route to the clubhouse").not.toMatch(/\/clubhouse/);
   });
 });
