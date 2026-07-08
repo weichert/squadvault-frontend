@@ -7,7 +7,9 @@
 // The seam this pins (Step 3 target: src/lib/trophy-room/case-view-bands.ts):
 //   MARQUEE_BANDS = 5
 //   selectMarquee(objects)            -> { marquee, total }  (held-first prefix, <= 5)
-//   placeOnBands(marquee)             -> HallObject[][] (5 bands, top-to-bottom, <=1 each)
+//   selectBandSlots(count)            -> number[] (which physical bands to occupy, spread; N1)
+//   placeOnBands(marquee)             -> HallObject[][] (5 bands, adaptive spread, <=1 each; N1)
+//   formatMarkValue(valueText)        -> percentage for a bare ratio, else verbatim (N4)
 //   buildPlinth(champions)            -> { reigningName, reigningSeason, roll } | null
 //   championshipCaseObjects(pkg)      -> [Belt, Ring] (never the League Trophy)
 //   placardLine(object)               -> honest one-line placard text
@@ -94,8 +96,31 @@ describe("D-BANDS marquee — five large, the viewer's held first, nothing hidde
   });
 });
 
-describe("D-BANDS placement purity — the five measured bands, one trophy each", () => {
-  it("marquee[i] rests on band i, top-to-bottom; short groups leave lower bands honestly empty", async () => {
+describe("D-BANDS adaptive placement (N1) — bands follow content, spread with rhythm", () => {
+  // Occupied-band indices (non-empty), preserving marquee order.
+  const occupied = (bands: HallObject[][]) =>
+    bands.map((b, i) => [i, b] as const).filter(([, b]) => b.length > 0);
+
+  it("selectBandSlots spreads K bands evenly over the five physical shelves, centered", async () => {
+    if (!hasSeam()) return;
+    const { selectBandSlots } = await loadSeam();
+    // Two trophies read as two WELL-SPACED bands (never two atop three empties) — the
+    // Championship case; five is the identity.
+    expect(selectBandSlots(2)).toEqual([1, 3]);
+    expect(selectBandSlots(3)).toEqual([0, 2, 4]);
+    expect(selectBandSlots(4)).toEqual([0, 1, 3, 4]);
+    expect(selectBandSlots(5)).toEqual([0, 1, 2, 3, 4]);
+    // Deterministic and in-frame: strictly ascending, each a valid band index.
+    for (let k = 2; k <= 5; k++) {
+      const s = selectBandSlots(k);
+      expect(s).toHaveLength(k);
+      for (let i = 1; i < s.length; i++) expect(s[i]).toBeGreaterThan(s[i - 1]);
+      expect(Math.min(...s)).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...s)).toBeLessThan(5);
+    }
+  });
+
+  it("five trophies fill all five bands, top-to-bottom, one each", async () => {
     if (!hasSeam()) return;
     const { selectMarquee, placeOnBands } = await loadSeam();
     const five = Array.from({ length: 5 }, (_, i) => mk(`d${i}`));
@@ -105,11 +130,22 @@ describe("D-BANDS placement purity — the five measured bands, one trophy each"
       expect(band, `band ${i} holds exactly one`).toHaveLength(1);
       expect(band[0].key).toBe(`d${i}`);
     });
-    const bands3 = placeOnBands(selectMarquee(five.slice(0, 3)).marquee);
-    expect(bands3).toHaveLength(5);
-    expect(bands3.slice(0, 3).map((b: HallObject[]) => b.length)).toEqual([1, 1, 1]);
-    // Honest emptiness — never padded, never fabricated.
-    expect(bands3.slice(3).map((b: HallObject[]) => b.length)).toEqual([0, 0]);
+  });
+
+  it("a short group renders max(N, 2) bands, spread — never clustered against empty shelves", async () => {
+    if (!hasSeam()) return;
+    const { selectMarquee, placeOnBands } = await loadSeam();
+    // Two trophies (the Championship) -> two well-spaced bands, marquee order preserved.
+    const two = [mk("a"), mk("b")];
+    const bands2 = placeOnBands(selectMarquee(two).marquee);
+    expect(bands2).toHaveLength(5);
+    expect(occupied(bands2).map(([i]) => i)).toEqual([1, 3]);
+    expect(occupied(bands2).map(([, b]) => b[0].key)).toEqual(["a", "b"]);
+    // Three -> [0, 2, 4]; still one trophy each, no fact hidden or padded.
+    const bands3 = placeOnBands(selectMarquee([mk("a"), mk("b"), mk("c")]).marquee);
+    expect(occupied(bands3).map(([i]) => i)).toEqual([0, 2, 4]);
+    expect(occupied(bands3).map(([, b]) => b[0].key)).toEqual(["a", "b", "c"]);
+    expect(bands3.filter((b: HallObject[]) => b.length > 0)).toHaveLength(3);
   });
 
   it("never silently drops an object: more than five is a misuse, not a truncation", async () => {
@@ -117,6 +153,27 @@ describe("D-BANDS placement purity — the five measured bands, one trophy each"
     const { placeOnBands } = await loadSeam();
     const six = Array.from({ length: 6 }, (_, i) => mk(`d${i}`));
     expect(() => placeOnBands(six)).toThrow();
+  });
+});
+
+describe("D-RATIO (N4) — ratio-class marks read as percentages; everything else verbatim", () => {
+  it("a bare fraction becomes value*100 to two places with a percent sign", async () => {
+    if (!hasSeam()) return;
+    const { formatMarkValue } = await loadSeam();
+    expect(formatMarkValue("0.8214")).toBe("82.14%"); // the Clairvoyant's accuracy
+    expect(formatMarkValue(".734")).toBe("73.40%"); // a winning percentage
+    expect(formatMarkValue("1.000")).toBe("100.00%");
+    expect(formatMarkValue("0")).toBe("0"); // no decimal point -> not a ratio, untouched
+  });
+
+  it("a unit-bearing or out-of-range value is returned verbatim (no misread number)", async () => {
+    if (!hasSeam()) return;
+    const { formatMarkValue } = await loadSeam();
+    expect(formatMarkValue("410 points")).toBe("410 points");
+    expect(formatMarkValue("$500")).toBe("$500");
+    expect(formatMarkValue("+.034 win pct")).toBe("+.034 win pct");
+    expect(formatMarkValue("3.14")).toBe("3.14"); // above the unit interval -> not a ratio
+    expect(formatMarkValue("")).toBe("");
   });
 });
 

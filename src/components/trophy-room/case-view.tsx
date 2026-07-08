@@ -26,24 +26,32 @@ export const GOLD = "var(--vault-gold, #C9A84C)";
 export const HELD_RING = "0 0 0 1px rgba(201, 168, 76, 0.85), 0 0 18px 2px rgba(201, 168, 76, 0.3)";
 export const LABEL = { fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--vault-text3, #514D47)" };
 const pct = (v: number, extent: number) => `${(v / extent) * 100}%`;
+// Clearance (image px) held between a band's trophy render and its label below (N2).
+const BAND_GAP = 8;
 
 // ── visual trophy (rests on a band / in the grid; visual only — the wrapper captures the
-// click). h = "fill" fills its band (large, scales with the case); a number is fixed px.
+// click). h = "fill" fills its bounded band envelope (contained, never overflowing it — the
+// caller's box enforces clearance from the label below and the band above, N2); a number is
+// fixed px. The award name is NEVER drawn here: it lives once, on the single label unit below
+// (N2 kills the old italic-name-box duplicate that overlapped the placard).
 export function ShelfTrophy({ o, h }: { o: HallObject; h: number | "fill" }) {
   const fill = h === "fill";
   const glow = o.isHeld ? "drop-shadow(0 0 8px rgba(201,168,76,0.6))" : "none";
+  if (o.art.mode === "illustrated") {
+    return (
+      <div data-held={o.isHeld ? "true" : "false"} style={{ height: fill ? "100%" : undefined, width: "100%", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+        <img src={o.art.src} alt={o.title} draggable={false} style={{ height: fill ? "100%" : (h as number), maxHeight: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", objectPosition: "bottom", filter: glow }} />
+      </div>
+    );
+  }
+  // Text-state (art still rolling out): a dignified empty plate — no name baked in, honoring
+  // the "graceful text state" as an object-on-glass rather than a repeated title. The single
+  // label below carries award + holder + year (CO-R4: nothing baked here).
   return (
-    <div
-      data-held={o.isHeld ? "true" : "false"}
-      style={{ height: fill ? "100%" : undefined, flex: fill ? "1 1 0" : undefined, minWidth: fill ? 0 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}
-    >
-      {o.art.mode === "illustrated" ? (
-        <img src={o.art.src} alt={o.title} draggable={false} style={{ height: fill ? "116%" : (h as number), width: "auto", maxWidth: "100%", objectFit: "contain", objectPosition: "bottom", filter: glow }} />
-      ) : (
-        <div style={{ height: fill ? "82%" : (h as number), width: fill ? "94%" : undefined, minWidth: fill ? undefined : (h as number) * 0.7, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 8px", border: `1px solid ${o.isHeld ? "rgba(201,168,76,0.85)" : "rgba(139,112,53,0.55)"}`, borderRadius: 3, background: "linear-gradient(180deg, rgba(30,24,16,0.55), rgba(16,12,8,0.7))", boxShadow: o.isHeld ? HELD_RING : "inset 0 1px 0 rgba(201,168,76,0.15)" }}>
-          <span className="font-ceremonial italic" style={{ fontSize: fill ? "clamp(0.6rem, 1.15vw, 1rem)" : "0.62rem", color: "var(--vault-text, #E8E2D4)", textAlign: "center", lineHeight: 1.15 }}>{o.title}</span>
-        </div>
-      )}
+    <div data-held={o.isHeld ? "true" : "false"} style={{ height: fill ? "100%" : (h as number), width: "100%", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div style={{ height: fill ? "82%" : (h as number), aspectRatio: "5 / 6", maxWidth: "86%", display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${o.isHeld ? "rgba(201,168,76,0.85)" : "rgba(139,112,53,0.5)"}`, borderRadius: 3, background: "linear-gradient(180deg, rgba(30,24,16,0.5), rgba(16,12,8,0.66))", boxShadow: o.isHeld ? HELD_RING : "inset 0 1px 0 rgba(201,168,76,0.12)" }}>
+        <span aria-hidden className="font-ceremonial" style={{ fontSize: fill ? "clamp(1rem, 3vw, 1.6rem)" : "1rem", lineHeight: 1, color: o.isHeld ? "rgba(201,168,76,0.7)" : "rgba(160,140,90,0.42)" }}>&#10087;</span>
+      </div>
     </div>
   );
 }
@@ -116,28 +124,33 @@ export function CaseView({ geometry, label, objects, note, onOpenTrophy, onClose
             <div style={{ position: "absolute", left: pct(geometry.header_plaque.x, W), top: pct(geometry.header_plaque.y, H), width: pct(geometry.header_plaque.width, W), height: pct(geometry.header_plaque.height, H), display: "flex", alignItems: "center", justifyContent: "center" }}>
               <span className="font-ceremonial" style={{ fontSize: "clamp(0.7rem, 2.2vw, 1.05rem)", letterSpacing: "0.12em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 2px rgba(0,0,0,0.7)", whiteSpace: "nowrap" }}>{label}</span>
             </div>
-            {/* The five bands — one trophy each, large, resting on its shelf. */}
+            {/* The occupied bands (adaptive count, spread with vertical rhythm — N1). One
+                trophy each, resting on its shelf; its render is bounded to the space ABOVE
+                its label so nothing overlaps its own label or the band above (N2). */}
             {bands.map((band, i) => {
               const o = band[0];
               if (!o) return null;
               const b = geometry.bands[i];
               if (!b) return null;
+              const renderHeight = Math.max(0, b.placard.y - BAND_GAP - b.shelf.y);
               return (
                 <div key={o.key}>
                   <button
                     type="button"
                     aria-label={`${o.title} — open detail`}
                     onClick={() => onOpenTrophy(o)}
-                    style={{ position: "absolute", left: pct(b.shelf.x, W), top: pct(b.shelf.y, H), width: pct(b.shelf.width, W), height: pct(b.shelf.height, H), display: "flex", alignItems: "flex-end", justifyContent: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
+                    style={{ position: "absolute", left: pct(b.shelf.x, W), top: pct(b.shelf.y, H), width: pct(b.shelf.width, W), height: pct(renderHeight, H), display: "flex", alignItems: "flex-end", justifyContent: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
                   >
-                    {/* Constrain the object's footprint so a text-card trophy reads as an
-                        object on the shelf, not a banner across the whole band. */}
-                    <div style={{ height: "100%", width: "46%", display: "flex" }}>
+                    {/* Constrain the footprint so a text-state plate reads as an object on the
+                        shelf, not a banner across the whole band. */}
+                    <div style={{ height: "100%", width: "52%", display: "flex" }}>
                       <ShelfTrophy o={o} h="fill" />
                     </div>
                   </button>
-                  {/* The brass placard — award + holder, honest truncation (full text in the detail). */}
-                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y, H), transform: "translateX(-50%)", minWidth: "34%", padding: "2px 6px", borderRadius: 2, background: "linear-gradient(180deg, rgba(64,48,22,0.92), rgba(38,28,14,0.92))", border: "1px solid rgba(201,168,76,0.45)", textAlign: "center", pointerEvents: "none" }}>
+                  {/* The single label unit — award name + holder + year, on the brass placard;
+                      honest truncation (the full text lives in the detail). One label per slot,
+                      cleared from the render above and the band below (N2). */}
+                  <div style={{ position: "absolute", left: pct(b.placard.x + b.placard.width / 2, W), top: pct(b.placard.y, H), transform: "translateX(-50%)", minWidth: "34%", maxWidth: "84%", padding: "2px 6px", borderRadius: 2, background: "linear-gradient(180deg, rgba(64,48,22,0.92), rgba(38,28,14,0.92))", border: "1px solid rgba(201,168,76,0.45)", textAlign: "center", pointerEvents: "none" }}>
                     <p className="font-mono" style={{ fontSize: "clamp(0.42rem, 1.3vw, 0.6rem)", letterSpacing: "0.1em", textTransform: "uppercase", color: "#E8D9A8", margin: 0, whiteSpace: "nowrap" }}>{truncatePlacard(o.title, 26)}</p>
                     <p className="font-ceremonial" style={{ fontSize: "clamp(0.5rem, 1.5vw, 0.72rem)", color: "var(--vault-text, #E8E2D4)", margin: 0, whiteSpace: "nowrap" }}>{truncatePlacard(placardLine(o), 30)}</p>
                   </div>

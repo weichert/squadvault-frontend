@@ -68,7 +68,7 @@
         "placard": { "x": 505, "y": 930, "width": 115, "height": 42 }
       },
       {
-        "shelf": { "x": 280, "y": 960, "width": 560, "height": 135 },
+        "shelf": { "x": 280, "y": 980, "width": 560, "height": 115 },
         "placard": { "x": 400, "y": 1108, "width": 320, "height": 48 }
       }
     ]

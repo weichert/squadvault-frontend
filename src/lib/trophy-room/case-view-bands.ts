@@ -41,16 +41,46 @@ export function selectMarquee(objects: HallObject[]): { marquee: HallObject[]; t
   return { marquee: ordered.slice(0, MARQUEE_BANDS), total: objects.length };
 }
 
-// One trophy per band, top-to-bottom; short groups leave lower bands honestly empty. More
-// than five is a CONTRACT VIOLATION and fails loudly (G2 ruling 2) — a silent truncation
-// here would hide a fact, the exact thing D-BANDS forbids. Selection happens upstream.
+// Adaptive band selection (N1): a case with N marquee trophies occupies max(N, 2) of the five
+// physical bands, spread evenly so the trophies read as well-rhythmed rows rather than a cluster
+// against empty shelves — the Championship's two must sit as two well-spaced bands, never two
+// atop three empties. Centered spread: for K bands over the five slots, slot(i) =
+// floor((i + 0.5) * total / K) — symmetric, deterministic, and the identity when K equals five.
+export function selectBandSlots(count: number, total = MARQUEE_BANDS): number[] {
+  const k = Math.min(Math.max(count, 0), total);
+  return Array.from({ length: k }, (_, i) => Math.floor(((i + 0.5) * total) / k));
+}
+
+// One trophy per band, spread across the case (adaptive, N1). Short groups still lay out at least
+// two bands of vertical structure; more than five is a CONTRACT VIOLATION and fails loudly (G2
+// ruling 2) — a silent truncation here would hide a fact, the exact thing D-BANDS forbids.
+// Selection (held-first, capped) happens upstream in selectMarquee.
 export function placeOnBands(marquee: HallObject[]): HallObject[][] {
   if (marquee.length > MARQUEE_BANDS) {
     throw new Error(
       `placeOnBands received ${marquee.length} objects for ${MARQUEE_BANDS} bands — select the marquee upstream; never truncate here`,
     );
   }
-  return Array.from({ length: MARQUEE_BANDS }, (_, i) => (i < marquee.length ? [marquee[i]] : []));
+  const bandCount = Math.min(Math.max(marquee.length, 2), MARQUEE_BANDS);
+  const slots = selectBandSlots(bandCount);
+  const bands: HallObject[][] = Array.from({ length: MARQUEE_BANDS }, () => []);
+  marquee.forEach((o, i) => {
+    bands[slots[i]] = [o];
+  });
+  return bands;
+}
+
+// D-RATIO (N4): a ratio-class mark — winning percentage, the Clairvoyant's accuracy — is stored
+// as a bare fraction and reads clearest as a percentage (0.8214 -> "82.14%"). DISPLAY formatting
+// only: a bare decimal in the unit interval becomes value*100 to two places with a percent sign;
+// anything carrying a unit ("410 points", "$500", "+.034 win pct") or outside the ratio range is
+// returned verbatim. The stored valueText and the Provenance view are untouched (founder ruling).
+export function formatMarkValue(valueText: string): string {
+  const t = valueText.trim();
+  if (!/^\d*\.\d+$/.test(t)) return valueText;
+  const v = parseFloat(t);
+  if (!Number.isFinite(v) || v < 0 || v > 1) return valueText;
+  return `${(v * 100).toFixed(2)}%`;
 }
 
 // ── D-PLINTH: the League Trophy plinth model ──

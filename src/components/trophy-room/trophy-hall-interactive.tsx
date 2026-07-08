@@ -17,6 +17,7 @@ import { ProvenanceToggle } from "@/components/room/provenance-toggle";
 import { categoryObjects, type HallObject } from "@/lib/trophy-room/hall-cases";
 import {
   CATEGORY_NOTES,
+  formatMarkValue,
   LEAGUE_TROPHY_KEY,
   TROPHY_RING_KEY,
   type CaseViewGeometry,
@@ -65,7 +66,7 @@ function LiveRecordDetail({ o, receipt }: { o: HallObject; receipt: Receipt | un
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {receipt.history.map((h, i) => (
               <li key={i} className="font-ui" style={{ fontSize: "0.8rem", color: "var(--vault-text2, #B8B2A8)", padding: "3px 0", borderTop: i === 0 ? "none" : "1px solid var(--vault-border)" }}>
-                <span className="font-mono" style={{ color: "var(--vault-text3)" }}>{h.season}</span>  {h.valueText}
+                <span className="font-mono" style={{ color: "var(--vault-text3)" }}>{h.season}</span>  {formatMarkValue(h.valueText)}
               </li>
             ))}
           </ul>
@@ -192,8 +193,9 @@ export function TrophyHallInteractive({ cases, objects, receiptsByKey, imageWidt
 
   return (
     <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {/* Case click zones over the painted cases; the runtime label sits on the painted
-          header plaque (CO-R4 — the plaques are blank in the art). */}
+      {/* Case click zones over the painted cases. The runtime label anchors to the BASE of
+          its case (a nameplate at the cabinet, N3) — the master has no header plaque up top,
+          so a top-anchored label floated into the ceiling beams. CO-R4: nothing baked. */}
       {cases.map((c) => (
         <button
           key={c.id}
@@ -202,7 +204,7 @@ export function TrophyHallInteractive({ cases, objects, receiptsByKey, imageWidt
           onClick={() => setOpenCategory(c.category)}
           style={{ position: "absolute", left: pct(c.zone.x, imageWidth), top: pct(c.zone.y, imageHeight), width: pct(c.zone.width, imageWidth), height: pct(c.zone.height, imageHeight), background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto", padding: 0 }}
         >
-          <span className="font-mono" style={{ position: "absolute", top: "1.5%", left: "50%", transform: "translateX(-50%)", fontSize: "clamp(0.4rem, 0.75vw, 0.65rem)", letterSpacing: "0.12em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 2px rgba(0,0,0,0.8)", whiteSpace: "nowrap" }}>{c.label}</span>
+          <span className="font-mono" style={{ position: "absolute", bottom: "3%", left: "50%", transform: "translateX(-50%)", fontSize: "clamp(0.4rem, 0.75vw, 0.65rem)", letterSpacing: "0.12em", textTransform: "uppercase", color: "#E8D9A8", textShadow: "0 1px 2px rgba(0,0,0,0.8)", whiteSpace: "nowrap" }}>{c.label}</span>
         </button>
       ))}
 
@@ -213,7 +215,7 @@ export function TrophyHallInteractive({ cases, objects, receiptsByKey, imageWidt
           type="button"
           aria-label="League Trophy — the champions' perpetual; open the roll"
           onClick={() => openDetail(leagueTrophy, "room")}
-          style={{ position: "absolute", left: pct(plinthZone.x, imageWidth), top: pct(plinthZone.y, imageHeight), width: pct(plinthZone.width, imageWidth), height: pct(plinthZone.height, imageHeight), background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "1% 0 0" }}
+          style={{ position: "absolute", left: pct(plinthZone.x, imageWidth), top: pct(plinthZone.y, imageHeight), width: pct(plinthZone.width, imageWidth), height: pct(plinthZone.height, imageHeight), background: "transparent", border: "none", cursor: "pointer", pointerEvents: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "17% 0 0" }}
         >
           <span className="font-mono" style={{ fontSize: "clamp(0.4rem, 0.75vw, 0.65rem)", letterSpacing: "0.14em", textTransform: "uppercase", color: GOLD, textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>League Trophy</span>
           <span className="font-ceremonial" style={{ fontSize: "clamp(0.55rem, 1vw, 0.85rem)", color: "var(--vault-text, #E8E2D4)", textShadow: "0 1px 2px rgba(0,0,0,0.8)", marginTop: 2 }}>
